@@ -83,6 +83,24 @@ try {
     await client.query(readFileSync(seedFile, "utf8"));
     await client.query("commit");
   }
+  // ADMIN_EMAILS (comma-separated): accounts the owner wants as admins. Already signed-up
+  // users with these emails get role 'admin' and, if still unconfirmed, a confirmed email.
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (adminEmails.length) {
+    const hasAuth = (await client.query("select to_regclass('auth.users') is not null as ok")).rows[0].ok;
+    if (hasAuth) {
+      const c = await client.query(
+        "update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where lower(email) = any($1::text[]) returning email",
+        [adminEmails],
+      );
+      const r = await client.query(
+        "update public.profiles set role = 'admin' where lower(email) = any($1::text[]) and role <> 'admin' returning email",
+        [adminEmails],
+      );
+      console.log(`[migrate] ADMIN_EMAILS: ${c.rowCount} account(s) found, ${r.rowCount} promoted to admin`);
+    }
+  }
+
   console.log(`[migrate] done (${applied} new migration${applied === 1 ? "" : "s"})`);
 } catch (e) {
   console.error("[migrate] FAILED:", e.message);
