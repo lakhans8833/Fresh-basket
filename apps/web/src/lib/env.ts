@@ -12,7 +12,7 @@ function read(name: string): string | undefined {
   return v && v.trim() !== "" ? v.trim() : undefined;
 }
 
-const supabaseUrl = read("NEXT_PUBLIC_SUPABASE_URL");
+const supabaseUrl = read("NEXT_PUBLIC_SUPABASE_URL") ?? read("SUPABASE_URL");
 const supabaseAnonKey = read("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 const razorpayKeyId = read("RAZORPAY_KEY_ID");
 const razorpayKeySecret = read("RAZORPAY_KEY_SECRET");
@@ -24,7 +24,8 @@ const DEV_APP_SECRET = "dev-only-insecure-secret-change-me-0123456789";
 
 export const env = {
   isProd,
-  databaseUrl: read("DATABASE_URL") ?? "postgres://postgres:postgres@localhost:5432/freshbasket",
+  // DATABASE_URL, or POSTGRES_URL as created by the Vercel ↔ Supabase integration.
+  databaseUrl: read("DATABASE_URL") ?? read("POSTGRES_URL") ?? "postgres://postgres:postgres@localhost:5432/freshbasket",
   appUrl: read("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
   appSecret: read("APP_SECRET") ?? (devFeaturesAllowed ? DEV_APP_SECRET : undefined),
 

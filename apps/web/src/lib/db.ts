@@ -6,9 +6,18 @@ declare global {
   var __fbPool: Pool | undefined;
 }
 
+function stripSslParams(raw: string) {
+  const [base, query = ""] = raw.split("?");
+  const kept = query.split("&").filter((kv) => kv && !/^(sslmode|supa)=/.test(kv));
+  return kept.length ? `${base}?${kept.join("&")}` : base!;
+}
+
 function createPool() {
-  const url = env.databaseUrl;
-  const needsSsl = /supabase\.(co|com)|sslmode=require/.test(url);
+  const raw = env.databaseUrl;
+  const needsSsl = /supabase\.(co|com)|sslmode=require/.test(raw);
+  // Drop sslmode/supa query params: node-postgres would treat sslmode=require as full
+  // certificate verification and override the ssl option below.
+  const url = needsSsl ? stripSslParams(raw) : raw;
   return new Pool({
     connectionString: url,
     max: Number(process.env.DB_POOL_MAX ?? 5),

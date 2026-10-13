@@ -75,9 +75,9 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
    Make yourself admin after signing up once: `update public.profiles set role = 'admin' where email = 'you@example.com';`
 2. **Vercel** (or any Node host): import the repo, root directory `apps/web`, install command `npm install` (run at repo root
    via Vercel's monorepo support). Set the env vars from `apps/web/.env.example` (`DATABASE_URL` = Supabase *transaction pooler*
-   URL, `APP_SECRET`, Supabase keys, Razorpay keys, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`). `apps/web/vercel.json` schedules the
-   reservation clean-up every 10 minutes (Vercel Hobby only allows daily crons — expired holds are also released on every
-   checkout and admin order view, so this is a backstop).
+   URL, `APP_SECRET`, Supabase keys, Razorpay keys, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`). `apps/web/vercel.json` runs the
+   reservation clean-up once a day (02:00 IST; Vercel Hobby allows only daily crons). Expired payment holds are also
+   released on every checkout and admin order view, so the cron is just a backstop — on Pro you can make it `*/10 * * * *`.
 3. **Razorpay**: Dashboard → API keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Webhooks → URL
    `https://<domain>/api/webhooks/razorpay`, events `payment.captured`, `order.paid`, `payment.failed`, secret →
    `RAZORPAY_WEBHOOK_SECRET`. Test with test-mode keys first. The footer and checkout show online payment only when all three are set.
