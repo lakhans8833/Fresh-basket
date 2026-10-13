@@ -13,6 +13,9 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
         action={<Button variant="dark" onClick={reset}><RotateCcw className="size-4" aria-hidden /> Try again</Button>}
       >
         We couldn&apos;t load this page. Please check your connection and try again.
+        <span className="mt-3 block text-xs">
+          Store owner? Open <a href="/api/health" className="underline">/api/health</a> to see what needs setting up.
+        </span>
       </EmptyState>
     </div>
   );

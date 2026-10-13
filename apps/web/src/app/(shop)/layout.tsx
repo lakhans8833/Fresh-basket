@@ -6,7 +6,13 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
-  const [settings, categories] = await Promise.all([getSettings(), listCategories()]);
+  const [settings, categories] = await Promise.all([
+    getSettings(),
+    listCategories().catch((e) => {
+      console.error("[layout] categories unavailable — see /api/health", e);
+      return [];
+    }),
+  ]);
   const devNotes = [
     env.auth.mode === "dev" && "development login",
     env.payments.online === "mock" && "test payments (no real money)",

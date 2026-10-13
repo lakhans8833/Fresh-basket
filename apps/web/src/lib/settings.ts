@@ -29,7 +29,13 @@ export const DEFAULT_SETTINGS: StoreSettings = {
 };
 
 export const getSettings = cache(async (): Promise<StoreSettings> => {
-  const r = await queryOne<Row>("select * from store_settings where id");
+  let r: Row | null = null;
+  try {
+    r = await queryOne<Row>("select * from store_settings where id");
+  } catch (e) {
+    // Database not reachable or not migrated yet: keep the shell rendering with defaults.
+    console.error("[settings] could not load store settings — see /api/health", e);
+  }
   const base = r
     ? {
         storeName: r.store_name,
