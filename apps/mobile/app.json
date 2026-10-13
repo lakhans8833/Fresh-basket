@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Fresh Basket",
+    "slug": "fresh-basket",
+    "version": "1.0.0",
+    "scheme": "freshbasket",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#fbf9f3",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.freshbasket.app",
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "com.freshbasket.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#14301f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image",
+      "expo-web-browser",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#14301f"
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

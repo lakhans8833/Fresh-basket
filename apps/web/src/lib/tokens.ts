@@ -1,0 +1,43 @@
+import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { requireAppSecret } from "./env";
+
+const b64 = (s: string) => Buffer.from(s).toString("base64url");
+const unb64 = (s: string) => Buffer.from(s, "base64url").toString("utf8");
+
+function sign(purpose: string, payload: string) {
+  return createHmac("sha256", requireAppSecret()).update(`${purpose}.${payload}`).digest("base64url");
+}
+
+export function safeEqual(a: string, b: string) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/** Compact signed token: `<purpose>.<payload>.<sig>`; payload = base64url(JSON). */
+export function issueToken(purpose: string, data: Record<string, unknown>, ttlSeconds: number): string {
+  const payload = b64(JSON.stringify({ ...data, exp: Math.floor(Date.now() / 1000) + ttlSeconds }));
+  return `${purpose}.${payload}.${sign(purpose, payload)}`;
+}
+
+export function readToken<T extends Record<string, unknown>>(purpose: string, token: string | null | undefined): T | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== purpose) return null;
+  const [, payload, sig] = parts as [string, string, string];
+  if (!safeEqual(sig, sign(purpose, payload))) return null;
+  try {
+    const data = JSON.parse(unb64(payload)) as T & { exp: number };
+    if (typeof data.exp !== "number" || data.exp < Date.now() / 1000) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** Token that lets a specific order's payment page be opened (e.g. from the mobile app). */
+export const payToken = {
+  issue: (orderId: string) => issueToken("pay", { o: orderId }, 60 * 60),
+  verify: (orderId: string, token: string | null | undefined) => readToken<{ o: string }>("pay", token)?.o === orderId,
+};

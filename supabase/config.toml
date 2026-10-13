@@ -1,0 +1,11 @@
+# Minimal Supabase CLI config. Run `supabase link --project-ref <ref>` then `supabase db push`.
+project_id = "fresh-basket"
+
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
