@@ -131,6 +131,9 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
 - [ ] `APP_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`.
 - [ ] Real catalogue: products, weights, prices, stock, **licensed photos** (current images in `apps/web/public/images/dev`
       were cropped from the design concept and are development placeholders — see the README there).
+      Hero/banner photos now come from `apps/web/public/images/site` (CC0 — sources in `LICENSES.md` there). They are
+      downloaded by `apps/web/scripts/site-images.mjs` before every build if missing; run `npm run images -w apps/web`
+      once and commit the `.webp` files so builds don't depend on the source site.
 - [ ] Delivery PIN codes, fees, minimum order, slots/capacity; coupons (seed values are samples).
 - [ ] Store name, logo, support phone/email/WhatsApp/address/hours, social links (Admin → Settings). Nothing is shown until set.
 - [ ] Review the Returns, Privacy and Terms templates with a legal adviser and fill in the bracketed business details.

@@ -15,7 +15,7 @@ export default async function CartPage() {
         title="Your Shopping Cart"
         subtitle="Fresh vegetables, better health!"
         icon={<ShoppingCart className="size-14" strokeWidth={2.2} />}
-        image="/images/dev/banner-basket.jpg"
+        image="/images/site/banner-market.webp"
         script={storeConfig.secondaryTagline}
       />
       <CartView whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />

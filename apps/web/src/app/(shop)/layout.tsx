@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { WhatsAppFloat } from "@/components/layout/whatsapp-float";
 import { storeBenefits } from "@/components/layout/benefits";
+import { InstallBanner } from "@/components/layout/install-app";
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const [settings, categories] = await Promise.all([
@@ -30,6 +31,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       ) : null}
       <TopBar announcement={settings.announcement} serviceArea={storeConfig.serviceArea} />
       <SiteHeader settings={settings} />
+      <InstallBanner storeName={settings.storeName} />
       <main id="main" className="flex-1">
         {children}
       </main>

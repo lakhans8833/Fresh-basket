@@ -11,8 +11,8 @@ export async function generateMetadata({ searchParams }: { searchParams: SP }): 
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.slice(0, 60) : null;
   return {
-    title: q ? `Search: ${q}` : "Shop fresh vegetables online",
-    description: `Buy fresh vegetables online — leafy greens, daily vegetables and seasonal picks with home delivery in ${storeConfig.serviceArea}.`,
+    title: q ? `Search: ${q}` : "Shop fresh fruits & vegetables online",
+    description: `Buy fresh fruits and vegetables online — leafy greens, daily vegetables, fruits and seasonal picks with home delivery in ${storeConfig.serviceArea}.`,
     alternates: { canonical: "/shop" },
     robots: q ? { index: false, follow: true } : undefined,
   };

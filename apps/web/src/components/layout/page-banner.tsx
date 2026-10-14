@@ -4,7 +4,7 @@ import { cn } from "../ui/cn";
 
 /** Green-tinted page header with vegetable photography on the right (mockup style). */
 export function PageBanner({
-  title, subtitle, icon, image = "/images/dev/banner-basket.jpg", script, children, className, as: Heading = "h1",
+  title, subtitle, icon, image = "/images/site/banner-market.webp", script, children, className, as: Heading = "h1",
 }: {
   title: ReactNode;
   subtitle?: ReactNode;

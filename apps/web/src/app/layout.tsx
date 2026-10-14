@@ -19,10 +19,10 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();
-  const description = `${s.tagline ? `${s.tagline}. ` : ""}Order fresh vegetables online for home delivery in ${storeConfig.serviceArea}.`;
+  const description = `${s.tagline ? `${s.tagline}. ` : ""}Order fresh fruits and vegetables online for home delivery in ${storeConfig.serviceArea}.`;
   return {
     metadataBase: new URL(storeConfig.siteUrl),
-    title: { default: `${s.storeName} — Fresh vegetables delivered in ${storeConfig.defaultCity}`, template: `%s | ${s.storeName}` },
+    title: { default: `${s.storeName} — Fresh fruits & vegetables delivered in ${storeConfig.defaultCity}`, template: `%s | ${s.storeName}` },
     description,
     applicationName: s.storeName,
     openGraph: {

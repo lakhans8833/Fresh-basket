@@ -177,8 +177,8 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
   if (lines.length === 0) {
     return (
       <div className="container-page py-10">
-        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Shop fresh vegetables</ButtonLink>}>
-          Add vegetables to your cart before ordering on WhatsApp.
+        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Start shopping</ButtonLink>}>
+          Add items to your cart before ordering on WhatsApp.
         </EmptyState>
       </div>
     );

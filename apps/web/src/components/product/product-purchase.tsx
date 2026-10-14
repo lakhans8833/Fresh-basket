@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
-import { formatINR, type ProductDetail } from "@freshbasket/shared";
+import { formatINR, MAX_QTY_PER_LINE, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
+import { DiscountBadge } from "../ui/price";
 
 export function ProductPurchase({ product }: { product: ProductDetail }) {
   const first = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
@@ -20,15 +21,19 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
   const out = variant.stock <= 0;
   const inCart = hydrated ? quantityOf(variant.id) : 0;
-  const maxAddable = Math.max(0, Math.min(20, variant.stock) - inCart);
+  const maxAddable = Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart);
 
   return (
     <div className="mt-6">
-      <p className="flex items-baseline gap-2">
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-display text-4xl font-semibold tabular-nums text-forest-900">{formatINR(variant.price)}</span>
         <span className="text-muted">/ {variant.label}</span>
-        {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">{formatINR(variant.mrp)}</s> : null}
+        {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">MRP {formatINR(variant.mrp)}</s> : null}
+        <DiscountBadge price={variant.price} mrp={variant.mrp} className="self-center" />
       </p>
+      {variant.mrp && variant.mrp > variant.price ? (
+        <p className="mt-1 text-sm font-medium text-leaf-600">You save {formatINR(variant.mrp - variant.price)} on this pack</p>
+      ) : null}
 
       <fieldset className="mt-6">
         <legend className="text-sm font-semibold text-ink-soft">Choose weight</legend>

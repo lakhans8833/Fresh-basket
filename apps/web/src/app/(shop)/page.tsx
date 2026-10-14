@@ -23,7 +23,14 @@ export default async function HomePage() {
     safe(listActiveSlots(), []),
   ]);
   const leafy = categories.find((c) => /leaf|green/.test(c.slug));
-  const leafyProducts = leafy ? await safe(listProducts({ category: leafy.slug, limit: 4 }), []) : [];
+  // Extra rails appear only when the store actually has these categories with products in them.
+  const fruits = categories.find((c) => /fruit/.test(c.slug) && !/exotic/.test(c.slug) && (c.productCount ?? 0) > 0);
+  const combos = categories.find((c) => /combo|value|pack/.test(c.slug) && (c.productCount ?? 0) > 0);
+  const [leafyProducts, fruitProducts, comboProducts] = await Promise.all([
+    leafy ? safe(listProducts({ category: leafy.slug, limit: 4 }), []) : Promise.resolve([]),
+    fruits ? safe(listProducts({ category: fruits.slug, limit: 4 }), []) : Promise.resolve([]),
+    combos ? safe(listProducts({ category: combos.slug, limit: 4 }), []) : Promise.resolve([]),
+  ]);
   const seasonalCount = seasonal.length ? (await safe(listProducts({ seasonal: true }), [])).length : 0;
   const whatsapp = resolveWhatsAppNumber(settings.whatsapp);
   const area = storeConfig.serviceArea;
@@ -36,8 +43,8 @@ export default async function HomePage() {
       subtitle: settings.tagline || "Fresh Vegetables, Healthy Life",
       cta: { href: "/shop", label: "Shop Now" },
       secondary: leafy ? { href: `/category/${leafy.slug}`, label: leafy.name } : undefined,
-      image: "/images/dev/hero-basket-wide.jpg",
-      imageAlt: "A wicker basket full of fresh vegetables — tomatoes, peppers, carrots, broccoli and greens",
+      image: "/images/site/hero-veg-basket.webp",
+      imageAlt: "A basket of fresh vegetables — limes, spring onions, ginger, chillies and greens",
       script: storeConfig.secondaryTagline,
     },
     whatsapp
@@ -48,8 +55,8 @@ export default async function HomePage() {
           subtitle: "Fill your cart, add your address and send the order to us on WhatsApp.",
           cta: { href: "/shop", label: "Start shopping" },
           secondary: { href: "/help", label: "How it works" },
-          image: "/images/dev/hero-basket.jpg",
-          imageAlt: "A paper bag of fresh vegetables",
+          image: "/images/site/hero-shopping-basket.webp",
+          imageAlt: "A shopping basket filled with fresh vegetables",
         }
       : {
           id: "weights",
@@ -57,8 +64,8 @@ export default async function HomePage() {
           title: ["Pick Your Pack Size", "& Delivery Slot"],
           subtitle: "Buy just what you need — 250 g, 500 g, 1 kg and more.",
           cta: { href: "/shop", label: "Start shopping" },
-          image: "/images/dev/hero-basket.jpg",
-          imageAlt: "A paper bag of fresh vegetables",
+          image: "/images/site/hero-shopping-basket.webp",
+          imageAlt: "A shopping basket filled with fresh vegetables",
         },
   ];
 
@@ -73,15 +80,17 @@ export default async function HomePage() {
       </div>
       <CategoryGrid categories={categories} seasonalCount={seasonalCount} />
       {bestSellers.length ? (
-        <ProductRail id="best" title="Best Selling Vegetables" href="/shop" products={bestSellers} layout="compact" />
+        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} layout="compact" />
       ) : (
         <ProductRail id="favourites" title="Fresh Favourites" href="/shop" products={featured} layout="compact" />
       )}
+      {combos ? <ProductRail id="combos" eyebrow="Save more" title={combos.name} href={`/category/${combos.slug}`} products={comboProducts} /> : null}
+      {fruits ? <ProductRail id="fruits" eyebrow="Fresh & juicy" title={fruits.name} href={`/category/${fruits.slug}`} products={fruitProducts} /> : null}
       {leafy ? <ProductRail id="leafy" eyebrow="Greens for every kitchen" title={leafy.name} href={`/category/${leafy.slug}`} products={leafyProducts} /> : null}
       <ProductRail id="seasonal" eyebrow="Seasonal picks" title="In Season Now" href="/shop?seasonal=1" products={seasonal} />
       <DeliveryInfo serviceArea={area} areas={areas} slots={slots} codEnabled={settings.codEnabled} whatsapp={Boolean(whatsapp)} />
       <HowItWorks whatsapp={Boolean(whatsapp)} />
-      {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to order fresh vegetables.`)} /> : null}
+      {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to place an order.`)} /> : null}
     </>
   );
 }

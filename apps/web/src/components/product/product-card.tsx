@@ -10,6 +10,7 @@ import { ProductImage } from "./product-image";
 import { FavouriteButton } from "./favourite-button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
+import { DiscountBadge, percentOff } from "../ui/price";
 
 function useCardState(product: ProductSummary) {
   const firstAvailable = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
@@ -97,12 +98,19 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
   if (layout === "compact") {
     return (
       <article className="group relative flex gap-3 rounded-[var(--radius-card)] border border-line bg-white p-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
-        <ProductImage src={product.imageUrl} alt={product.name} sizes="96px" className="size-20 shrink-0 rounded-xl bg-white sm:size-24" />
+        <div className="relative shrink-0">
+          <ProductImage src={product.imageUrl} alt={product.name} sizes="96px" className="size-20 rounded-xl bg-white sm:size-24" />
+          {out ? <span className="absolute inset-0 grid place-items-center rounded-xl bg-white/70 text-[0.6875rem] font-semibold text-danger">Sold out</span> : null}
+        </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="truncate font-sans text-[0.9375rem] font-semibold text-ink">
             <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
           </h3>
-          <p className="text-sm text-muted"><span className="font-bold text-forest-800">{formatINR(v.price)}</span> / {v.label}</p>
+          <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm text-muted">
+            <span className="font-bold tabular-nums text-forest-800">{formatINR(v.price)}</span> / {v.label}
+            {v.mrp && v.mrp > v.price ? <s className="text-xs">{formatINR(v.mrp)}</s> : null}
+            {percentOff(v.price, v.mrp) ? <span className="text-xs font-semibold text-offer">{percentOff(v.price, v.mrp)}% off</span> : null}
+          </p>
           {out ? <p className="text-xs font-medium text-danger">Out of stock</p> : null}
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
             {stepper}
@@ -119,24 +127,27 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
         <ProductImage
           src={product.imageUrl}
           alt={product.name}
-          className="aspect-[4/3] w-full bg-white transition-transform duration-500 group-hover:scale-[1.03]"
+          className={cn("aspect-[4/3] w-full bg-white transition-transform duration-500 group-hover:scale-[1.03]", out && "opacity-60 grayscale-[40%]")}
           sizes="(min-width: 1280px) 18vw, (min-width: 768px) 30vw, 50vw"
           priority={priority}
         />
-        {product.seasonal ? (
-          <span className="absolute left-2.5 top-2.5 rounded-md bg-forest-800 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">In season</span>
-        ) : null}
+        <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
+          <DiscountBadge price={v.price} mrp={v.mrp} />
+          {product.seasonal ? (
+            <span className="rounded-md bg-forest-800 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">In season</span>
+          ) : null}
+        </div>
         <FavouriteButton productId={product.id} name={product.name} className="absolute right-2.5 top-2.5 z-10 size-8 bg-white shadow" />
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-4">
         <h3 className="font-sans text-[0.9375rem] font-semibold leading-snug text-ink sm:text-base">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
-        {product.variants.length > 1 ? <VariantPills product={product} variantId={v.id} onChange={s.setVariantId} /> : <p className="text-sm text-muted">{v.label}</p>}
+        {product.variants.length > 1 ? <VariantPills product={product} variantId={v.id} onChange={s.setVariantId} /> : null}
         <p className="flex flex-wrap items-baseline gap-x-1.5">
           <span className="text-lg font-bold tabular-nums text-forest-800 sm:text-xl">{formatINR(v.price)}</span>
           <span className="text-sm text-muted">/ {v.label}</span>
-          {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted">{formatINR(v.mrp)}</s> : null}
+          {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted">MRP {formatINR(v.mrp)}</s> : null}
         </p>
         <p className="min-h-4 text-xs font-medium" aria-live="polite">
           {out ? <span className="text-danger">Out of stock</span> : v.stock <= 5 ? <span className="text-amber">Only {v.stock} left</span> : s.inCart > 0 ? <span className="text-leaf-600">{s.inCart} in cart</span> : null}

@@ -12,7 +12,7 @@ export default async function WhatsAppOrderPage() {
   const settings = await getSettings();
   return (
     <>
-      <PageBanner title="Order on WhatsApp" as="h1" image="/images/dev/banner-veg.jpg" script={storeConfig.secondaryTagline} className="[&_h1]:sr-only">
+      <PageBanner title="Order on WhatsApp" as="h1" image="/images/site/banner-roots.webp" script={storeConfig.secondaryTagline} className="[&_h1]:sr-only">
         <CheckoutSteps current={2} />
       </PageBanner>
       <WhatsAppOrderView

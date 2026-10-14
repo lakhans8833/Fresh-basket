@@ -26,7 +26,7 @@ function SectionHeader({ id, title, href, eyebrow, linkLabel = "View all" }: { i
 export function CategoryGrid({ categories, seasonalCount }: { categories: Category[]; seasonalCount: number }) {
   const tiles = [
     ...categories.map((c) => ({ key: c.slug, href: `/category/${c.slug}`, name: c.name, count: c.productCount ?? 0, image: c.imageUrl })),
-    ...(seasonalCount > 0 ? [{ key: "seasonal", href: "/shop?seasonal=1", name: "In Season Now", count: seasonalCount, image: "/images/dev/seasonal-mix.jpg" }] : []),
+    ...(seasonalCount > 0 ? [{ key: "seasonal", href: "/shop?seasonal=1", name: "In Season Now", count: seasonalCount, image: "/images/site/tile-seasonal.webp" }] : []),
   ];
   if (tiles.length === 0) return null;
   return (
@@ -38,7 +38,7 @@ export function CategoryGrid({ categories, seasonalCount }: { categories: Catego
             <Link href={t.href} className="group flex h-full flex-col items-center rounded-[var(--radius-card)] border border-line bg-white p-3 text-center shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:border-forest-700/30 hover:shadow-[var(--shadow-lift)]">
               <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
                 {t.image ? (
-                  <Image src={t.image} alt="" fill sizes="(min-width: 1024px) 15vw, 40vw" className="object-contain transition-transform duration-500 group-hover:scale-105" />
+                  <Image src={t.image} alt="" fill sizes="(min-width: 1024px) 15vw, 40vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
                 ) : (
                   <span className="grid h-full place-items-center bg-lime-50 text-forest-700"><Leaf className="size-10" aria-hidden /></span>
                 )}
@@ -80,7 +80,7 @@ export function WhatsAppBand({ whatsappUrl }: { whatsappUrl: string }) {
         <WhatsAppIcon className="size-10 shrink-0 text-white" />
         <p className="text-xl font-semibold">Order on WhatsApp</p>
         <span aria-hidden className="hidden h-6 w-px bg-white/30 sm:block" />
-        <p className="text-white/85">Add vegetables to your cart, then send the order to us on WhatsApp.</p>
+        <p className="text-white/85">Add items to your cart, then send the order to us on WhatsApp.</p>
         <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-forest-800 hover:bg-lime-100">
           <WhatsAppIcon className="size-5 text-whatsapp-dark" /> Chat now
         </a>

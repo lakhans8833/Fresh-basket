@@ -29,7 +29,7 @@ export function OrderHistory({ orders }: { orders: Order[] }) {
   if (!orders.length) {
     return (
       <div className="mt-5">
-        <EmptyState icon={<Package className="size-7" />} title="No orders yet" action={<ButtonLink href="/shop" variant="dark">Browse vegetables</ButtonLink>}>
+        <EmptyState icon={<Package className="size-7" />} title="No orders yet" action={<ButtonLink href="/shop" variant="dark">Start shopping</ButtonLink>}>
           When you place an order it will show up here, so you can track it and reorder in a tap.
         </EmptyState>
       </div>

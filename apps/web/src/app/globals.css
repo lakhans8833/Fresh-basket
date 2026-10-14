@@ -30,6 +30,8 @@
   --color-muted: #5f6d62;
   --color-line: #e2e9dd;
   --color-tomato: #e4452e;
+  /* Offer/discount tags: white text on this passes WCAG AA (5.2:1). */
+  --color-offer: #c2410c;
   --color-amber: #b26b00;
   --color-danger: #b42318;
   --color-danger-bg: #fdf0ee;
@@ -138,3 +140,10 @@
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* The search inputs draw their own clear (✕) button — hide the browser's built-in one so only one shows. */
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}

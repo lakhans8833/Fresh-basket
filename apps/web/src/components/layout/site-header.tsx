@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useId, useState, type FormEvent } from "react";
 import { ChevronDown, LayoutDashboard, MapPin, Search, ShoppingCart, Sprout, Truck, UserRound, X } from "lucide-react";
 import type { StoreSettings } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
@@ -130,6 +130,8 @@ function SearchBox() {
   const params = useSearchParams();
   const pathname = usePathname();
   const [q, setQ] = useState(pathname === "/shop" ? params.get("q") ?? "" : "");
+  // The header renders two search boxes (desktop + phone); each needs its own id for its label.
+  const inputId = useId();
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -139,15 +141,15 @@ function SearchBox() {
 
   return (
     <form role="search" onSubmit={submit} className="relative">
-      <label htmlFor="site-search" className="sr-only">
-        Search vegetables
+      <label htmlFor={inputId} className="sr-only">
+        Search fruits and vegetables
       </label>
       <input
-        id="site-search"
+        id={inputId}
         type="search"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search for vegetables…"
+        placeholder="Search fruits & vegetables…"
         className="h-11 w-full rounded-full border border-line bg-sage-50/60 pl-5 pr-20 text-[0.9375rem] text-ink placeholder:text-muted/80 focus:border-leaf-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-lime-200/70 md:h-12"
         enterKeyHint="search"
         autoComplete="off"

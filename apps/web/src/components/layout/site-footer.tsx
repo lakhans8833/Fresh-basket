@@ -95,7 +95,7 @@ export function SiteFooter({
           <nav aria-labelledby="f-shop">
             <h3 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Shop</h3>
             <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
-              <li><Link className={linkCls} href="/shop">All vegetables</Link></li>
+              <li><Link className={linkCls} href="/shop">All products</Link></li>
               {categories.slice(0, 5).map((c) => (
                 <li key={c.id}><Link className={linkCls} href={`/category/${c.slug}`}>{c.name}</Link></li>
               ))}

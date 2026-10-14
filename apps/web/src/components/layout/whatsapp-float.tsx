@@ -8,7 +8,7 @@ import { WhatsAppIcon } from "../ui/whatsapp-icon";
 export function WhatsAppFloat({ number, storeName }: { number: string; storeName: string }) {
   const pathname = usePathname();
   if (/^\/(order|checkout|pay)/.test(pathname)) return null;
-  const href = buildWhatsAppUrl(number, `Hi ${storeName}, I have a question about ordering vegetables.`);
+  const href = buildWhatsAppUrl(number, `Hi ${storeName}, I have a question about my order.`);
   return (
     <a
       href={href}

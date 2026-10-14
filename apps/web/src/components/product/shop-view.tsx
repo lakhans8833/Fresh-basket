@@ -65,8 +65,8 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
   const products = await listProducts({
     q: f.q, category: f.category?.slug, seasonal: f.seasonal, inStockOnly: f.inStock, sort: f.sort, prices: f.prices,
   });
-  const title = f.q ? `Results for “${f.q}”` : f.seasonal ? "In season now" : f.category?.name ?? "All vegetables";
-  const description = f.q ? null : f.seasonal ? "Vegetables that are in season right now." : f.category?.description ?? "Everything fresh in stock today.";
+  const title = f.q ? `Results for “${f.q}”` : f.seasonal ? "In season now" : f.category?.name ?? "All products";
+  const description = f.q ? null : f.seasonal ? "Fruits and vegetables that are in season right now." : f.category?.description ?? "Everything fresh in stock today.";
   const total = categories.reduce((s, c) => s + (c.productCount ?? 0), 0);
 
   const togglePrice = (key: string) => (f.prices.includes(key) ? f.prices.filter((p) => p !== key) : [...f.prices, key]);
@@ -101,7 +101,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
       <PageBanner
         title={<>Fresh Vegetables<span className="block text-[0.72em] font-semibold text-forest-900">Delivered to your home</span></>}
         subtitle={<span className="font-medium">{storeConfig.serviceArea}</span>}
-        image="/images/dev/hero-basket-wide.jpg"
+        image="/images/site/banner-market.webp"
         script={storeConfig.secondaryTagline}
       />
 
@@ -143,7 +143,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
             <div className="hidden rounded-[var(--radius-card)] border border-line bg-white p-4 shadow-[var(--shadow-card)] lg:block">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-forest-800"><Leaf className="size-5" aria-hidden /> Categories</h2>
               <ul className="mt-3 space-y-1">
-                {[{ id: "all", slug: null as string | null, name: "All vegetables", productCount: total }, ...categories].map((c) => {
+                {[{ id: "all", slug: null as string | null, name: "All products", productCount: total }, ...categories].map((c) => {
                   const on = c.slug === null ? !f.category && !f.seasonal : f.category?.slug === c.slug;
                   return (
                     <li key={c.id}>
@@ -196,7 +196,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
             </div>
 
             {products.length === 0 ? (
-              <EmptyState icon={<SearchX className="size-7" />} title="No vegetables found" action={<ButtonLink href="/shop" variant="dark">See all vegetables</ButtonLink>}>
+              <EmptyState icon={<SearchX className="size-7" />} title="No products found" action={<ButtonLink href="/shop" variant="dark">See all products</ButtonLink>}>
                 {f.q ? <>We couldn&apos;t find anything matching “{f.q}”. Try a different spelling, e.g. “palak” or “spinach”.</> : "Nothing matches these filters right now. Try removing a filter."}
               </EmptyState>
             ) : (
@@ -219,7 +219,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
             {whatsapp ? (
               <div className="overflow-hidden rounded-[var(--radius-card)] bg-forest-800 p-5 text-white">
                 <p className="font-script text-[2rem] font-bold leading-[0.95]">Eat Fresh,<br />Stay Healthy</p>
-                <p className="mt-2 text-sm text-white/80">Add vegetables to your cart and send the order on WhatsApp in one tap.</p>
+                <p className="mt-2 text-sm text-white/80">Add items to your cart and send the order on WhatsApp in one tap.</p>
                 <Link href="/cart" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-forest-800 hover:bg-lime-100">
                   <WhatsAppIcon className="size-4 text-whatsapp-dark" /> Order on WhatsApp
                 </Link>

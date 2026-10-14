@@ -23,7 +23,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
       { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
-      { name: "Shop vegetables", url: "/shop", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Shop now", url: "/shop", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "My cart", url: "/cart", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
   };

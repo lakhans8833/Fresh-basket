@@ -20,7 +20,7 @@ import { LocationDialog } from "../layout/location-dialog";
 const BLOCKING: QuoteIssue["code"][] = ["OUT_OF_STOCK", "UNAVAILABLE", "INVALID_QUANTITY", "EMPTY_CART", "TOO_MANY_LINES", "BELOW_MIN_ORDER"];
 
 export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
-  const { lines, hydrated, setQuantity, remove, location, clear } = useCart();
+  const { lines, count, hydrated, setQuantity, remove, location, clear } = useCart();
   const { data, error, loading, retry } = useQuote(location?.pincode);
   const [locOpen, setLocOpen] = useState(false);
   const [saved, setSaved] = useState<Partial<WhatsAppCustomerInput> | null>(null);
@@ -43,8 +43,8 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
   if (lines.length === 0) {
     return (
       <div className="container-page py-10">
-        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Shop fresh vegetables</ButtonLink>}>
-          Add some vegetables and they&apos;ll appear here.
+        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Start shopping</ButtonLink>}>
+          Add fresh fruits and vegetables and they&apos;ll appear here.
         </EmptyState>
       </div>
     );
@@ -62,7 +62,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
         <section aria-labelledby="cart-items" className="min-w-0 rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
             <h2 id="cart-items" className="flex items-center gap-2.5 text-xl font-bold text-ink">
-              <ShoppingBasket className="size-6 text-forest-800" aria-hidden /> Cart Items ({lines.length})
+              <ShoppingBasket className="size-6 text-forest-800" aria-hidden /> Cart Items ({count})
             </h2>
             <button type="button" onClick={() => confirm("Remove all items from your cart?") && clear()} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-danger hover:bg-danger-bg">
               <Trash2 className="size-4" aria-hidden /> Clear Cart

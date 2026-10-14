@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Categories" };
 export default async function CategoriesPage() {
   const categories = await listCategories();
   const tiles = [
-    { href: "/shop", name: "All vegetables", sub: "Everything in stock today", image: "/images/dev/all-basket.jpg" },
+    { href: "/shop", name: "All products", sub: "Everything in stock today", image: "/images/site/tile-all.webp" },
     ...categories.map((c) => ({ href: `/category/${c.slug}`, name: c.name, sub: `${c.productCount ?? 0} products`, image: c.imageUrl })),
-    { href: "/shop?seasonal=1", name: "In season now", sub: "Seasonal picks", image: "/images/dev/seasonal-mix.jpg" },
+    { href: "/shop?seasonal=1", name: "In season now", sub: "Seasonal picks", image: "/images/site/tile-seasonal.webp" },
   ];
   return (
     <div className="container-page pt-8 md:pt-12">

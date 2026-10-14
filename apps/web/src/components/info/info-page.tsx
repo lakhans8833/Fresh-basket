@@ -21,7 +21,7 @@ export function InfoPage({
     <div className="pb-16">
       <header className="relative overflow-hidden border-b border-line bg-gradient-to-r from-lime-50 via-[#eef6e4] to-[#e3f0d6]">
         <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 lg:block">
-          <Image src="/images/dev/banner-veg.jpg" alt="" fill sizes="50vw" className="object-cover [mask-image:linear-gradient(to_right,transparent,black_35%)]" />
+          <Image src="/images/site/banner-roots.webp" alt="" fill sizes="50vw" className="object-cover [mask-image:linear-gradient(to_right,transparent,black_35%)]" />
         </div>
         <div className="container-page relative pb-8 pt-8 md:pb-12 md:pt-12">
           <p className="eyebrow text-leaf-600">{eyebrow}</p>
