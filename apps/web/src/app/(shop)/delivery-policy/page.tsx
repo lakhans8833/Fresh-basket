@@ -34,7 +34,7 @@ export default async function DeliveryPolicyPage() {
     >
       <section aria-labelledby="areas-h">
         <h2 id="areas-h" className="text-[1.375rem] font-semibold text-forest-900">Delivery areas</h2>
-        <p className="mt-1 text-[0.9375rem] text-ink-soft">We currently deliver to these PIN codes. Delivery is free when your basket (after any discount) reaches the “free above” amount.</p>
+        <p className="mt-1 text-[0.9375rem] text-ink-soft">We currently deliver to these PIN codes. Delivery is free when your cart (after any discount) reaches the “free above” amount.</p>
         {areas.length ? (
           <>
           <ul className="mt-4 space-y-3 sm:hidden">

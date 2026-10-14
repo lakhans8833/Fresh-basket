@@ -60,7 +60,7 @@ export function ContactForm({ initial }: { initial: Omit<Draft, "message"> }) {
 
   return (
     <form ref={formRef} onSubmit={submit} noValidate className="mt-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Your name" htmlFor="contact-name" error={errors.name}>
           <Input id="contact-name" autoComplete="name" value={d.name} onChange={set("name")} invalid={!!errors.name} aria-describedby={described("name")} maxLength={80} required />
         </Field>

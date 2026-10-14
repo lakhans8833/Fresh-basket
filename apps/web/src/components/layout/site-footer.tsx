@@ -3,6 +3,8 @@ import { Banknote, CreditCard, Landmark, Mail, MapPin, Phone, Clock, MessageCirc
 import type { Category, StoreSettings } from "@freshbasket/shared";
 import { Logo } from "./logo";
 import { NewsletterForm } from "./newsletter-form";
+import { BenefitsStrip, type Benefit } from "./benefits";
+import { InstallAppButton } from "./install-app";
 
 function SocialIcon({ kind }: { kind: "instagram" | "facebook" | "youtube" | "x" }) {
   const paths: Record<typeof kind, React.ReactNode> = {
@@ -33,41 +35,45 @@ const SOCIAL_LABEL = { instagram: "Instagram", facebook: "Facebook", youtube: "Y
 
 function PaymentChip({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <li className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/12 bg-white/[0.06] px-3 text-[0.8125rem] font-medium text-ivory/90">
+    <li className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/15 bg-white/[0.07] px-3 text-[0.8125rem] font-medium text-white/90">
       {icon}
       {label}
     </li>
   );
 }
 
-export function SiteFooter({ settings, categories, paymentMethods }: { settings: StoreSettings; categories: Category[]; paymentMethods: string[] }) {
+export function SiteFooter({
+  settings, categories, paymentMethods, benefits, serviceArea,
+}: { settings: StoreSettings; categories: Category[]; paymentMethods: string[]; benefits: Benefit[]; serviceArea: string }) {
   const socials = (Object.keys(settings.social) as (keyof StoreSettings["social"])[]).filter((k) => settings.social[k]);
   const hasContact = settings.supportPhone || settings.supportEmail || settings.address || settings.whatsapp;
   const year = new Date().getFullYear();
+  const linkCls = "rounded hover:text-white hover:underline underline-offset-4";
 
   return (
-    <footer className="mt-20 text-ivory">
-      {/* Newsletter band */}
-      <div className="container-page">
-        <div className="relative z-10 -mb-14 overflow-hidden rounded-[1.75rem] bg-lime-100 px-6 py-8 shadow-[var(--shadow-card)] sm:px-10 md:flex md:items-center md:justify-between md:gap-10">
-          <div className="max-w-md">
-            <p className="eyebrow text-forest-700">Newsletter</p>
-            <h2 className="mt-1 text-[1.75rem] font-semibold leading-tight text-forest-900">Fresh picks in your inbox</h2>
-            <p className="mt-1.5 text-[0.9375rem] text-ink-soft">Seasonal arrivals and offers. No spam — unsubscribe any time.</p>
-          </div>
-          <div className="mt-5 w-full md:mt-0 md:max-w-md">
-            <NewsletterForm />
-          </div>
+    <footer className="mt-16 md:mt-20">
+      <div className="border-t border-line bg-sage-50">
+        <div className="container-page flex flex-col items-center gap-6 py-7 lg:flex-row">
+          <BenefitsStrip benefits={benefits} tone="plain" className="w-full flex-1" />
+          <p className="hidden shrink-0 -rotate-6 text-center font-script text-[2rem] font-bold leading-[0.9] text-forest-800 xl:block">
+            Eat Fresh
+            <br />
+            Stay Healthy
+          </p>
         </div>
       </div>
 
-      <div className="bg-forest-900 pt-24">
-        <div className="container-page grid gap-10 pb-12 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1.3fr]">
+      <div className="bg-forest-800 text-white">
+        <div className="container-page grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr]">
           <div>
-            <Logo name={settings.storeName} logoUrl={settings.logoUrl} tone="light" size="lg" />
-            {settings.tagline ? <p className="mt-4 max-w-xs text-[0.9375rem] leading-relaxed text-ivory/70">{settings.tagline}</p> : null}
+            <div className="inline-flex rounded-2xl bg-white px-3 py-2.5">
+              <Logo name={settings.storeName} logoUrl={settings.logoUrl} tagline={settings.tagline} size="md" />
+            </div>
+            <p className="mt-4 max-w-xs text-[0.9375rem] leading-relaxed text-white/80">
+              Fresh vegetables delivered to your home in {serviceArea}.
+            </p>
             {socials.length ? (
-              <ul className="mt-6 flex gap-2" aria-label="Social media">
+              <ul className="mt-5 flex gap-2" aria-label="Social media">
                 {socials.map((k) => (
                   <li key={k}>
                     <a
@@ -75,7 +81,7 @@ export function SiteFooter({ settings, categories, paymentMethods }: { settings:
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={SOCIAL_LABEL[k]}
-                      className="grid size-10 place-items-center rounded-full border border-white/15 text-ivory/85 transition-colors hover:border-lime-300 hover:bg-lime-300 hover:text-forest-900"
+                      className="grid size-10 place-items-center rounded-full border border-white/20 text-white/90 transition-colors hover:border-lime-300 hover:bg-lime-300 hover:text-forest-900"
                     >
                       <SocialIcon kind={k} />
                     </a>
@@ -83,60 +89,63 @@ export function SiteFooter({ settings, categories, paymentMethods }: { settings:
                 ))}
               </ul>
             ) : null}
+            <InstallAppButton storeName={settings.storeName} />
           </div>
 
           <nav aria-labelledby="f-shop">
-            <h3 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">
-              Shop
-            </h3>
-            <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-ivory/75">
-              <li><Link className="hover:text-white" href="/shop">All vegetables</Link></li>
+            <h3 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Shop</h3>
+            <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
+              <li><Link className={linkCls} href="/shop">All vegetables</Link></li>
               {categories.slice(0, 5).map((c) => (
-                <li key={c.id}><Link className="hover:text-white" href={`/shop?category=${c.slug}`}>{c.name}</Link></li>
+                <li key={c.id}><Link className={linkCls} href={`/category/${c.slug}`}>{c.name}</Link></li>
               ))}
-              <li><Link className="hover:text-white" href="/shop?seasonal=1">In season now</Link></li>
+              <li><Link className={linkCls} href="/shop?seasonal=1">In season now</Link></li>
             </ul>
           </nav>
 
           <nav aria-labelledby="f-help">
-            <h3 id="f-help" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">
-              Support
-            </h3>
-            <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-ivory/75">
-              <li><Link className="hover:text-white" href="/account/orders">Track your order</Link></li>
-              <li><Link className="hover:text-white" href="/help">Help &amp; FAQs</Link></li>
-              <li><Link className="hover:text-white" href="/delivery-policy">Delivery policy</Link></li>
-              <li><Link className="hover:text-white" href="/returns">Returns &amp; refunds</Link></li>
-              <li><Link className="hover:text-white" href="/contact">Contact us</Link></li>
-              <li><Link className="hover:text-white" href="/about">About us</Link></li>
+            <h3 id="f-help" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Help</h3>
+            <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
+              <li><Link className={linkCls} href="/about">About us</Link></li>
+              <li><Link className={linkCls} href="/contact">Contact</Link></li>
+              <li><Link className={linkCls} href="/help">FAQs</Link></li>
+              <li><Link className={linkCls} href="/delivery-policy">Delivery areas &amp; charges</Link></li>
+              <li><Link className={linkCls} href="/returns">Returns &amp; refunds</Link></li>
+              <li><Link className={linkCls} href="/account/orders">Track your order</Link></li>
             </ul>
           </nav>
 
-          <div>
-            <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Get in touch</h3>
-            {hasContact ? (
-              <ul className="mt-4 space-y-3 text-[0.9375rem] text-ivory/80">
-                {settings.supportPhone ? (
-                  <li className="flex gap-3"><Phone className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className="hover:text-white" href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a></li>
-                ) : null}
-                {settings.whatsapp ? (
-                  <li className="flex gap-3"><MessageCircle className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className="hover:text-white" href={`https://wa.me/${settings.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">WhatsApp {settings.whatsapp}</a></li>
-                ) : null}
-                {settings.supportEmail ? (
-                  <li className="flex gap-3"><Mail className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className="break-all hover:text-white" href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
-                ) : null}
-                {settings.address ? (
-                  <li className="flex gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span className="whitespace-pre-line">{settings.address}</span></li>
-                ) : null}
-                {settings.supportHours ? (
-                  <li className="flex gap-3"><Clock className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span>{settings.supportHours}</span></li>
-                ) : null}
-              </ul>
-            ) : (
-              <p className="mt-4 text-[0.9375rem] leading-relaxed text-ivory/70">
-                Questions about an order? <Link href="/contact" className="font-medium text-lime-200 underline-offset-4 hover:underline">Send us a message</Link> and we&apos;ll get back to you.
-              </p>
-            )}
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Get in touch</h3>
+              {hasContact ? (
+                <ul className="mt-4 space-y-3 text-[0.9375rem] text-white/85">
+                  {settings.supportPhone ? (
+                    <li className="flex gap-3"><Phone className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a></li>
+                  ) : null}
+                  {settings.whatsapp ? (
+                    <li className="flex gap-3"><MessageCircle className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}`} target="_blank" rel="noopener noreferrer">WhatsApp {settings.whatsapp}</a></li>
+                  ) : null}
+                  {settings.supportEmail ? (
+                    <li className="flex gap-3"><Mail className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={`${linkCls} break-all`} href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
+                  ) : null}
+                  {settings.address ? (
+                    <li className="flex gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span className="whitespace-pre-line">{settings.address}</span></li>
+                  ) : null}
+                  {settings.supportHours ? (
+                    <li className="flex gap-3"><Clock className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span>{settings.supportHours}</span></li>
+                  ) : null}
+                </ul>
+              ) : (
+                <p className="mt-4 text-[0.9375rem] leading-relaxed text-white/80">
+                  Questions about an order? <Link href="/contact" className="font-medium text-lime-200 underline-offset-4 hover:underline">Send us a message</Link>.
+                </p>
+              )}
+            </div>
+            <div>
+              <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Fresh picks in your inbox</h3>
+              <div className="mt-3"><NewsletterForm /></div>
+            </div>
           </div>
         </div>
 
@@ -144,7 +153,7 @@ export function SiteFooter({ settings, categories, paymentMethods }: { settings:
           <div className="container-page flex flex-col gap-5 py-6 lg:flex-row lg:items-center lg:justify-between">
             {paymentMethods.length ? (
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-ivory/55">We accept</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/60">We accept</span>
                 <ul className="flex flex-wrap gap-2" aria-label="Accepted payment methods">
                   {paymentMethods.includes("razorpay") ? (
                     <>
@@ -158,7 +167,7 @@ export function SiteFooter({ settings, categories, paymentMethods }: { settings:
                 </ul>
               </div>
             ) : <span />}
-            <div className="flex flex-col gap-2 text-[0.8125rem] text-ivory/60 sm:flex-row sm:items-center sm:gap-5">
+            <div className="flex flex-col gap-2 text-[0.8125rem] text-white/65 sm:flex-row sm:items-center sm:gap-5">
               <nav aria-label="Legal" className="flex gap-4">
                 <Link href="/privacy" className="hover:text-white">Privacy</Link>
                 <Link href="/terms" className="hover:text-white">Terms</Link>

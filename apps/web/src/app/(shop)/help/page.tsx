@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { formatINR } from "@freshbasket/shared";
 import { getSettings, supportedPaymentMethods } from "@/lib/settings";
 import { env } from "@/lib/env";
+import { resolveWhatsAppNumber } from "@/config/store";
 import { InfoPage } from "@/components/info/info-page";
 import { ButtonLink } from "@/components/ui/button";
 
@@ -26,6 +27,7 @@ export default async function HelpPage() {
   const ahead = s.slotDaysAhead - 1;
   const daysText = ahead <= 0 ? "today only" : `today or up to ${ahead} day${ahead === 1 ? "" : "s"} ahead`;
   const hasOnline = methods.includes("razorpay") || methods.includes("mock");
+  const whatsapp = Boolean(resolveWhatsAppNumber(s.whatsapp));
 
   const sections: { title: string; id: string; faqs: Faq[] }[] = [
     {
@@ -34,19 +36,29 @@ export default async function HelpPage() {
       faqs: [
         {
           q: "How do I place an order?",
-          a: <p>Browse the <A href="/shop">shop</A>, choose a weight for each vegetable and add it to your basket. At checkout you sign in, pick or enter a delivery address, choose a delivery slot and a payment method, then place the order. You can follow it from <A href="/account/orders">your orders</A>.</p>,
+          a: <p>Browse the <A href="/shop">shop</A>, choose a weight for each vegetable and add it to your cart. At checkout you sign in, pick or enter a delivery address, choose a delivery slot and a payment method, then place the order. You can follow it from <A href="/account/orders">your orders</A>.</p>,
         },
+        ...(whatsapp
+          ? [{
+              q: "How does ordering on WhatsApp work?",
+              a: (
+                <p>
+                  Add vegetables to your <A href="/cart">cart</A> and tap <strong>Order on WhatsApp</strong>. Enter your name, mobile number, address and PIN code, then tap <strong>Proceed to WhatsApp</strong>. WhatsApp opens with your order already typed — your order reaches us only when you press <strong>Send</strong>. We reply on WhatsApp to confirm availability, the delivery charge for your area and the delivery time. No account is needed for WhatsApp orders.
+                </p>
+              ),
+            }]
+          : []),
         {
           q: "How do weights and prices work?",
-          a: <p>Each product is sold in fixed weight or pack options (for example 250 g, 500 g or 1 kg), each with its own price. The price shown is today&apos;s price; your basket total, any coupon discount and the delivery fee are confirmed by our server at checkout, so what you see there is what you pay.</p>,
+          a: <p>Each product is sold in fixed weight or pack options (for example 250 g, 500 g or 1 kg), each with its own price. The price shown is today&apos;s price; your cart total, any coupon discount and the delivery fee are confirmed by our server at checkout, so what you see there is what you pay.</p>,
         },
         {
           q: "Is there a minimum order amount?",
-          a: <p>Minimum order amounts and delivery fees depend on your delivery area{s.defaultMinOrder > 0 ? ` (the general minimum is ${formatINR(s.defaultMinOrder)})` : ""}. Some areas offer free delivery above a certain basket value. See the <A href="/delivery-policy">delivery policy</A> for the current figures for each PIN code — checkout will also tell you if you&apos;re short of the minimum.</p>,
+          a: <p>Minimum order amounts and delivery fees depend on your delivery area{s.defaultMinOrder > 0 ? ` (the general minimum is ${formatINR(s.defaultMinOrder)})` : ""}. Some areas offer free delivery above a certain cart value. See the <A href="/delivery-policy">delivery policy</A> for the current figures for each PIN code — checkout will also tell you if you&apos;re short of the minimum.</p>,
         },
         {
           q: "Can I reorder a previous basket?",
-          a: <p>Yes. Open <A href="/account/orders">your orders</A> and choose <strong>Reorder</strong>. Items that are still available are added to your basket at today&apos;s prices; anything out of stock or no longer sold is skipped and we&apos;ll tell you which.</p>,
+          a: <p>Yes. Open <A href="/account/orders">your orders</A> and choose <strong>Reorder</strong>. Items that are still available are added to your cart at today&apos;s prices; anything out of stock or no longer sold is skipped and we&apos;ll tell you which.</p>,
         },
       ],
     },

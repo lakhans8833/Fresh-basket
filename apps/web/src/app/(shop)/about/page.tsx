@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "About us" };
 
 const STEPS = [
   { icon: Search, title: "Browse", body: "Shop vegetables by category or search. Each item lists its available weights and today's price." },
-  { icon: ShoppingBasket, title: "Fill your basket", body: "Pick the weight you want and add it to your basket. Prices and totals are confirmed at checkout." },
+  { icon: ShoppingBasket, title: "Fill your cart", body: "Pick the weight you want and add it to your cart. Prices and totals are confirmed at checkout." },
   { icon: CalendarClock, title: "Choose a slot", body: "Select a delivery date and time slot that suits you from the slots still open for ordering." },
   { icon: Truck, title: "Get it delivered", body: "Track your order from your account as it's packed and sent out for delivery to your door." },
 ];
@@ -30,7 +30,7 @@ export default async function AboutPage() {
       </div>
 
       <h2 className="mt-10 text-[1.375rem] font-semibold text-forest-900">How it works</h2>
-      <ol className="mt-4 grid gap-4 sm:grid-cols-2">
+      <ol className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {STEPS.map(({ icon: Icon, title, body }, i) => (
           <li key={title} className="rounded-[var(--radius-card)] border border-line bg-white p-5">
             <div className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export default async function AboutPage() {
 
       <div className="mt-10 flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] bg-forest-800 p-6 text-white">
         <MapPin className="size-5 text-lime-300" aria-hidden />
-        <p className="flex-1 text-[0.9375rem]">Ready to fill your basket?</p>
+        <p className="flex-1 text-[0.9375rem]">Ready to fill your cart?</p>
         <ButtonLink href="/shop" variant="lime">Shop vegetables</ButtonLink>
       </div>
     </InfoPage>

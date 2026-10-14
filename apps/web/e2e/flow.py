@@ -34,19 +34,19 @@ with sync_playwright() as p:
     page.get_by_text("1 kg").first.click()
     for _ in range(3):
         page.get_by_role("button", name="Increase Tomato").click()
-    page.get_by_role("button", name="Add to basket").click()
-    expect(page.get_by_role("link", name=re.compile(r"Basket, 4 items"))).to_be_visible()
+    page.get_by_role("button", name="Add to Cart").click()
+    expect(page.get_by_role("link", name=re.compile(r"Cart, 4 items"))).to_be_visible()
     shot(page, "1_product")
 
     # Basket
     page.goto(f"{BASE}/cart")
-    expect(page.get_by_role("heading", name="Your basket")).to_be_visible()
-    expect(page.get_by_text("₹240").first).to_be_visible(timeout=10000)
+    expect(page.get_by_role("heading", name="Your Shopping Cart")).to_be_visible()
+    expect(page.get_by_text("₹240").filter(visible=True).first).to_be_visible(timeout=10000)
     page.get_by_label("Coupon code").fill("FRESH10")
     page.get_by_role("button", name="Apply").click()
     expect(page.get_by_text("applied")).to_be_visible(timeout=10000)
     shot(page, "2_cart")
-    page.get_by_role("button", name="Proceed to checkout").click()
+    page.get_by_role("button", name="Proceed to Checkout").click()
     page.wait_for_url(re.compile(r"/checkout"))
 
     # Checkout with a new address (COD)
@@ -64,7 +64,7 @@ with sync_playwright() as p:
     shot(page, "3_checkout")
     page.get_by_role("button", name=re.compile("Place order")).click()
     page.wait_for_url(re.compile(r"/orders/[0-9a-f-]+\?placed=1"), timeout=20000)
-    expect(page.get_by_text("Thank you! Your order is confirmed.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Thank you! Your order is confirmed.")).to_be_visible()
     # 4 x ₹60 = ₹240, FRESH10 = ₹24 off, delivery ₹25 -> ₹241
     expect(page.get_by_text("₹241").first).to_be_visible()
     order_url = page.url.split("?")[0]
@@ -73,7 +73,7 @@ with sync_playwright() as p:
     # Second order with the test payment flow
     page.goto(f"{BASE}/product/potato")
     page.get_by_text("2 kg").first.click()
-    page.get_by_role("button", name="Add to basket").click()
+    page.get_by_role("button", name="Add to Cart").click()
     page.goto(f"{BASE}/checkout")
     page.get_by_text("Test payment").first.click()
     page.get_by_role("button", name="Continue to payment").click()

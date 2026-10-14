@@ -1,7 +1,8 @@
 # Fresh Basket — vegetable shop (website, admin panel, mobile app)
 
-"Fresh Basket" is a temporary brand name. The store name, logo, contact details, social links,
-delivery areas, slots, fees, minimum order and Cash-on-Delivery are all editable in **Admin → Settings / Delivery**.
+**Ram Avatar Fresh Basket** — *Fresh Vegetables, Healthy Life* — online vegetable shop for Faridabad & nearby areas.
+The store name, logo, contact details, WhatsApp number, social links, delivery areas, slots, fees, minimum order
+and Cash-on-Delivery are all editable in **Admin → Settings / Delivery**.
 
 ```
 apps/web         Next.js 16 + TypeScript + Tailwind v4 — storefront, admin panel (/admin) and the HTTP API (/api)
@@ -31,6 +32,43 @@ docs/API.md      API reference
 - **Order workflow**: placed → packed → out for delivery → delivered (or cancelled before dispatch). Staff can only make
   valid transitions; nobody can mark an online order paid by hand. COD cash collection and refunds are recorded by staff.
 
+## WhatsApp ordering
+
+Customers can order **without an account**: Cart → **Order on WhatsApp** → `/order` (name, mobile, address, area,
+city, PIN code, notes) → **Proceed to WhatsApp**. The site opens `https://wa.me/<number>?text=<encoded order>`; the
+order reaches the seller only when the customer presses **Send** in WhatsApp — nothing is submitted automatically.
+
+- Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (international format, digits only, e.g. `919876543210` — example format)
+  or, if that's empty, the WhatsApp number in **Admin → Settings** (a 10-digit Indian mobile gets `91` added).
+  With no valid number, all WhatsApp buttons are hidden and only the normal checkout is shown.
+- Prices, discount and delivery charge in the message come from the server quote (`/api/quote`, live database prices).
+  If the PIN code isn't in **Admin → Delivery**, the message says "Delivery: to be confirmed" instead of guessing.
+- The message is built in the customer's browser and they can edit it in WhatsApp before sending, so treat it as an
+  order *request*: confirm items and the amount in the chat. It is not a secure payment record — for online payments
+  use the normal checkout (server-side totals + Razorpay verification).
+- Message building/validation: `packages/shared/src/whatsapp.ts` (unit-tested). Customer text is cleaned of WhatsApp
+  formatting/control characters and URL-encoded.
+- The account checkout (`/checkout`, sign-in, slots, COD/Razorpay, order tracking) still works alongside it.
+
+## PWA (install on phone)
+
+- `app/manifest.ts` → `/manifest.webmanifest` (name, short_name, `start_url`, `display: standalone`, theme/background
+  colours, 192/512 icons + 512 maskable icon). Icons live in `public/icons/` (generated from the logo mark).
+- `public/sw.js` (registered in production only): caches static files and shows `/offline.html` when there's no
+  connection. Pages, prices, cart API, checkout and admin are **never** cached — ordering needs internet. This is an
+  offline fallback, not full offline shopping.
+- Install testing needs **HTTPS** (Vercel URLs are HTTPS; `localhost` also counts as secure). Android Chrome:
+  menu → *Install app* (or the footer **Install app** button). iPhone Safari: Share → *Add to Home Screen*.
+  Check in Chrome DevTools → Application → Manifest / Service workers. Bump `VERSION` in `sw.js` when you change it.
+
+## SEO
+
+Per-page titles/descriptions, Open Graph + Twitter cards (`public/og-image.jpg`), canonical URLs (from
+`NEXT_PUBLIC_SITE_URL` or `NEXT_PUBLIC_APP_URL`), `/sitemap.xml` (categories + products from the database),
+`/robots.txt` (blocks admin, account, cart and checkout pages), clean category URLs (`/category/leafy-greens`; old
+`/shop?category=` links 308-redirect) and Product structured data built only from real catalogue prices/stock
+(no ratings or reviews). Submit the sitemap in Google Search Console once you have your final domain.
+
 ## Run locally
 
 Requirements: Node 20+ (tested on 22), PostgreSQL 15+ (or a Supabase project).
@@ -59,10 +97,11 @@ EXPO_PUBLIC_API_URL=http://<your-computer-LAN-IP>:3000 npx expo start   # Androi
 
 ```bash
 npm run typecheck                 # shared + web
-npm test                          # 10 unit tests (pricing, coupons, slots, statuses) + 21 integration tests on a real Postgres
+npm test                          # 18 unit tests (pricing, coupons, slots, statuses, WhatsApp message/URL) + 21 integration tests on a real Postgres
                                   # (creates throwaway DB "freshbasket_test"; set TEST_DATABASE_URL to change)
 npm run build                     # production build of the web app
 cd apps/web && npx eslint src
+python3 apps/web/e2e/whatsapp.py http://localhost:3000 <number>   # browser E2E of WhatsApp checkout (window.open intercepted)
 python3 apps/web/e2e/flow.py http://localhost:3000   # browser E2E: search → product → basket+coupon → checkout (COD) → test payment → reorder (needs Playwright + Chromium)
 cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
 ```

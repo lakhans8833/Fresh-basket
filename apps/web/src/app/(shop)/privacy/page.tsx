@@ -44,7 +44,7 @@ export default async function PrivacyPage() {
         <h2>4. Cookies and browser storage</h2>
         <ul>
           <li><strong>Sign-in cookies</strong>: we use essential cookies to keep you signed in securely. The site can&apos;t work properly without them.</li>
-          <li><strong>Your basket</strong>: the contents of your basket, your chosen delivery location and items you mark as favourites are stored in your own browser (local storage), not on our servers, until you place an order.</li>
+          <li><strong>Your cart</strong>: the contents of your cart, your chosen delivery location and items you mark as favourites are stored in your own browser (local storage), not on our servers, until you place an order.</li>
           <li>[If you add analytics or marketing tools, describe them and how to opt out here.]</li>
         </ul>
 

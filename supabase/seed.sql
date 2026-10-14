@@ -4,13 +4,13 @@
 -- Review everything in the admin panel before going live.
 
 insert into public.store_settings (id, store_name, tagline, cod_enabled, default_min_order, slot_days_ahead)
-values (true, 'Fresh Basket', 'Your everyday vegetables, just a tap away.', true, 9900, 3)
+values (true, 'Ram Avatar Fresh Basket', 'Fresh Vegetables, Healthy Life', true, 9900, 3)
 on conflict (id) do nothing;
 
 insert into public.categories (slug, name, description, image_url, sort_order) values
-  ('everyday', 'Everyday vegetables', 'Kitchen staples', '/images/dev/cat-all.jpg', 1),
-  ('leafy-greens', 'Leafy greens', 'Greens and herbs', '/images/dev/cat-leafy.jpg', 2),
-  ('roots', 'Roots & tubers', 'Carrots, potatoes and more', '/images/dev/cat-roots.jpg', 3),
+  ('everyday', 'Daily Vegetables', 'Everyday kitchen staples', '/images/dev/cat-daily.jpg', 1),
+  ('leafy-greens', 'Leafy Greens', 'Fresh greens and herbs', '/images/dev/cat-leafy.jpg', 2),
+  ('roots', 'Root Vegetables', 'Carrots, potatoes, beetroot and more', '/images/dev/cat-roots.jpg', 3),
   ('gourds', 'Gourds & squashes', 'Pumpkin, cucumber and gourds', '/images/dev/cat-seasonal.jpg', 4)
 on conflict (slug) do nothing;
 
@@ -50,11 +50,14 @@ on conflict (slug) do nothing;
 insert into public.product_images (product_id, url, alt, sort_order)
 select p.id, i.url, i.alt, i.sort_order
 from (values
-  ('tomato', '/images/dev/tomato-closeup.jpg', 'Red tomatoes, one cut in half', 0),
-  ('tomato', '/images/dev/tomato.jpg', 'Tomatoes on a pink background', 1),
-  ('carrot', '/images/dev/carrot.jpg', 'Carrots with green tops', 0),
+  ('tomato', '/images/dev/tomato-white.jpg', 'Fresh red tomatoes', 0),
+  ('tomato', '/images/dev/tomato-closeup.jpg', 'Tomatoes, one cut in half', 1),
+  ('carrot', '/images/dev/carrot-white.jpg', 'Orange carrots with green tops', 0),
   ('broccoli', '/images/dev/broccoli.jpg', 'A head of broccoli', 0),
-  ('potato', '/images/dev/potato.jpg', 'Three potatoes', 0)
+  ('potato', '/images/dev/potato-white.jpg', 'Potatoes', 0),
+  ('onion', '/images/dev/onion.jpg', 'Red onions, one cut in half', 0),
+  ('spinach', '/images/dev/spinach.jpg', 'A bunch of fresh spinach (palak)', 0),
+  ('coriander', '/images/dev/coriander.jpg', 'A bunch of fresh coriander (dhaniya)', 0)
 ) as i(slug, url, alt, sort_order)
 join public.products p on p.slug = i.slug
 where not exists (select 1 from public.product_images x where x.product_id = p.id);

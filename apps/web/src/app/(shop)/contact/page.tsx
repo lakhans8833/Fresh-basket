@@ -26,7 +26,7 @@ export default async function ContactPage({ searchParams }: { searchParams: Prom
       title="We're here to help"
       intro={<>Send us a message about an order, a delivery or anything else. Many questions are already answered on our <Link href="/help" className="font-medium text-leaf-600 underline underline-offset-4 hover:text-forest-800">help page</Link>.</>}
     >
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-10">
         <section aria-labelledby="form-heading" className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-7">
           <h2 id="form-heading" className="text-2xl font-semibold text-forest-900">Send a message</h2>
           <p className="mt-1 text-sm text-muted">We reply by email. Fields marked optional can be left blank.</p>

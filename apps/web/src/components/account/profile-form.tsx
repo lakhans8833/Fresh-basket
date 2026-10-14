@@ -52,7 +52,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
 
   return (
     <form onSubmit={submit} noValidate className="mt-5">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Full name" htmlFor="profile-name" error={errors.fullName}>
           <Input
             id="profile-name"

@@ -3,35 +3,40 @@
 /* Fresh Basket design tokens — forest green, ivory, light sage and lime accents. */
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: "Poppins", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-brand: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --font-script: "Caveat Variable", "Segoe Script", cursive;
 
-  --color-forest-950: #0f2618;
-  --color-forest-900: #14301f;
-  --color-forest-800: #1b3d28;
-  --color-forest-700: #24502f;
-  --color-forest-600: #2f6a37;
-  --color-leaf-600: #3d7f34;
-  --color-leaf-500: #4f9440;
-  --color-leaf-400: #6cad55;
-  --color-lime-300: #bfe08f;
-  --color-lime-200: #d3eab2;
-  --color-lime-100: #e7f4d6;
-  --color-lime-50: #f3f9ea;
-  --color-ivory: #fbf9f3;
-  --color-ivory-dark: #f4f1e7;
-  --color-sage-50: #f4f6ef;
-  --color-sage-100: #ebefe3;
-  --color-sage-200: #dde4d2;
-  --color-ink: #17271b;
-  --color-ink-soft: #3c4a3f;
-  --color-muted: #66715f;
-  --color-line: #e3e6da;
-  --color-tomato: #e4572e;
-  --color-amber: #b7791f;
+  /* Ram Avatar Fresh Basket brand: deep green #0B6623, fresh green #16A34A, light green #A7D769 */
+  --color-forest-950: #052e14;
+  --color-forest-900: #0a4a1c;
+  --color-forest-800: #0b6623;
+  --color-forest-700: #0d7a2b;
+  --color-forest-600: #118a33;
+  --color-leaf-600: #16a34a;
+  --color-leaf-500: #22b455;
+  --color-leaf-400: #4cc36e;
+  --color-lime-300: #a7d769;
+  --color-lime-200: #c8e79e;
+  --color-lime-100: #e5f3d2;
+  --color-lime-50: #f2f9e9;
+  --color-ivory: #fcfbf7;
+  --color-ivory-dark: #f5f2e8;
+  --color-sage-50: #f4f8f1;
+  --color-sage-100: #e9f1e4;
+  --color-sage-200: #d6e5ce;
+  --color-ink: #13231a;
+  --color-ink-soft: #3a4b40;
+  --color-muted: #5f6d62;
+  --color-line: #e2e9dd;
+  --color-tomato: #e4452e;
+  --color-amber: #b26b00;
   --color-danger: #b42318;
   --color-danger-bg: #fdf0ee;
+  --color-whatsapp: #25d366;
+  --color-whatsapp-dark: #128c4b;
 
-  --radius-card: 1.25rem;
+  --radius-card: 1rem;
   --shadow-card: 0 1px 2px rgb(20 48 31 / 0.04), 0 8px 24px -12px rgb(20 48 31 / 0.12);
   --shadow-lift: 0 2px 4px rgb(20 48 31 / 0.05), 0 18px 40px -18px rgb(20 48 31 / 0.25);
 
@@ -56,13 +61,23 @@
   }
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .font-brand {
+    font-family: var(--font-brand);
     font-optical-sizing: auto;
-    letter-spacing: -0.015em;
+  }
+  .font-script {
+    font-family: var(--font-script);
+    letter-spacing: 0;
   }
   :focus-visible {
     outline: 2.5px solid var(--color-leaf-500);
     outline-offset: 2px;
     border-radius: 6px;
+  }
+  img {
+    -webkit-user-drag: none;
   }
   ::selection {
     background: var(--color-lime-200);

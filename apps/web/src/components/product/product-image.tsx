@@ -6,10 +6,10 @@ import { cn } from "../ui/cn";
 export function ProductImage({ src, alt, className, sizes, priority }: { src: string | null; alt: string; className?: string; sizes: string; priority?: boolean }) {
   if (!src) {
     return (
-      <div className={cn("relative grid place-items-center bg-gradient-to-br from-sage-100 to-lime-50", className)} role="img" aria-label={`${alt} — photo coming soon`}>
+      <div className={cn("@container relative grid place-items-center bg-gradient-to-br from-sage-100 to-lime-50", className)} role="img" aria-label={`${alt} — photo coming soon`}>
         <div className="flex flex-col items-center gap-1.5 text-forest-700/45">
-          <LeafMark className="size-10" />
-          <span className="text-[0.6875rem] font-medium uppercase tracking-[0.14em]">Photo soon</span>
+          <LeafMark className="size-6 @[8rem]:size-10" />
+          <span className="hidden text-[0.6875rem] font-medium uppercase tracking-[0.14em] @[8rem]:block">Photo soon</span>
         </div>
       </div>
     );

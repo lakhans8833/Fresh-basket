@@ -46,11 +46,13 @@ try {
   await client.query(`alter table public._fb_migrations enable row level security`);
   const done = new Set((await client.query("select name from public._fb_migrations")).rows.map((r) => r.name));
 
-  // A database migrated by hand (SQL editor) before this script existed: record, don't re-run.
+  // A database migrated by hand (SQL editor, all-migrations.sql) before this script existed:
+  // record the baseline migrations as applied instead of re-running them. Later files still run.
+  const BASELINE = "20261014000004_storage.sql";
   if (done.size === 0) {
     const { rows } = await client.query("select to_regclass('public.orders') is not null as exists");
     if (rows[0].exists) {
-      for (const f of readdirSync(migrationsDir).filter((f) => f.endsWith(".sql"))) {
+      for (const f of readdirSync(migrationsDir).filter((f) => f.endsWith(".sql") && f <= BASELINE)) {
         await client.query("insert into public._fb_migrations (name) values ($1) on conflict do nothing", [f]);
         done.add(f);
       }

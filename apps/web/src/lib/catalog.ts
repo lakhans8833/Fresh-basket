@@ -54,7 +54,16 @@ export interface ProductFilters {
   inStockOnly?: boolean;
   sort?: SortKey;
   limit?: number;
+  /** Price buckets in rupees, e.g. ["lt20", "20-40", "60+"]; matched against the lowest variant price. */
+  prices?: string[];
 }
+
+export const PRICE_BUCKETS: { key: string; label: string; min: number; max: number | null }[] = [
+  { key: "lt20", label: "Under ₹20", min: 0, max: 1999 },
+  { key: "20-40", label: "₹20 – ₹40", min: 2000, max: 4000 },
+  { key: "40-60", label: "₹40 – ₹60", min: 4001, max: 6000 },
+  { key: "60+", label: "₹60 and above", min: 6001, max: null },
+];
 
 export async function listProducts(f: ProductFilters = {}): Promise<ProductSummary[]> {
   const where: string[] = ["p.active", "c.active"];
@@ -72,6 +81,8 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
   const rows = await query<ProductRow>(`${PRODUCT_SELECT} where ${where.join(" and ")} order by p.name`, params);
   let items = rows.map(toSummary).filter((p) => p.variants.length > 0);
   if (f.inStockOnly) items = items.filter((p) => p.inStock);
+  const buckets = PRICE_BUCKETS.filter((b) => f.prices?.includes(b.key));
+  if (buckets.length) items = items.filter((p) => buckets.some((b) => p.fromPrice >= b.min && (b.max === null || p.fromPrice <= b.max)));
   const sort = f.sort ?? "featured";
   items.sort((a, b) => {
     if (sort === "price_asc") return a.fromPrice - b.fromPrice;
@@ -107,4 +118,21 @@ export async function getVariantsForCart(ids: string[]) {
       where v.id = any($1::uuid[])`,
     [ids],
   );
+}
+
+/**
+ * Best sellers by units sold in the last 30 days (excluding cancelled orders).
+ * Returns an empty list when there isn't enough sales history yet.
+ */
+export async function listBestSellers(limit = 8): Promise<ProductSummary[]> {
+  const rows = await query<{ product_id: string }>(
+    `select oi.product_id from order_items oi join orders o on o.id = oi.order_id
+      where o.status <> 'cancelled' and o.created_at > now() - interval '30 days' and oi.product_id is not null
+      group by oi.product_id having sum(oi.quantity) >= 3 order by sum(oi.quantity) desc limit $1`,
+    [limit],
+  );
+  if (rows.length < 4) return [];
+  const all = await listProducts({});
+  const byId = new Map(all.map((p) => [p.id, p]));
+  return rows.map((r) => byId.get(r.product_id)).filter((p): p is ProductSummary => Boolean(p));
 }

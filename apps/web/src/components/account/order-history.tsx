@@ -54,7 +54,7 @@ export function OrderHistory({ orders }: { orders: Order[] }) {
           add({ variantId: it.variantId, productName: src.productName, productSlug: it.productSlug, variantLabel: src.variantLabel, imageUrl: src.imageUrl, priceHint: src.unitPrice }, it.quantity - existing);
         }
       }
-      toast(r.skipped.length ? `Added ${r.items.length} item${r.items.length === 1 ? "" : "s"}. Not available: ${r.skipped.join(", ")}` : "Items added to your basket");
+      toast(r.skipped.length ? `Added ${r.items.length} item${r.items.length === 1 ? "" : "s"}. Not available: ${r.skipped.join(", ")}` : "Items added to your cart");
       router.push("/cart");
     } catch (e) {
       setError((e as Error).message);

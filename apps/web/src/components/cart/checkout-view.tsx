@@ -103,8 +103,8 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   if (lines.length === 0) {
     return (
       <div className="container-page py-12">
-        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your basket is empty" action={<ButtonLink href="/shop">Shop fresh</ButtonLink>}>
-          Add items to your basket before checking out.
+        <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Shop fresh</ButtonLink>}>
+          Add items to your cart before checking out.
         </EmptyState>
       </div>
     );
@@ -173,12 +173,12 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   return (
     <div className="container-page pt-6 md:pt-10">
       <h1 className="text-[2.2rem] font-semibold text-forest-900 md:text-5xl">Checkout</h1>
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_24rem] lg:items-start lg:gap-8">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_24rem] lg:items-start lg:gap-8">
         <div className="space-y-5">
           {step(1, "Delivery address", <MapPin className="size-[1.1rem]" />, (
             <div className="space-y-4">
               {addresses && addresses.length > 0 ? (
-                <div role="radiogroup" aria-label="Saved addresses" className="grid gap-3 sm:grid-cols-2">
+                <div role="radiogroup" aria-label="Saved addresses" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {addresses.map((a) => (
                     <label key={a.id} className={cn("cursor-pointer rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === a.id ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
                       <input type="radio" name="address" className="sr-only" checked={addressId === a.id} onChange={() => setAddressId(a.id)} />
@@ -281,7 +281,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-28">
-          <OrderSummary quote={quote} pincodeKnown={Boolean(data?.area)} loading={loading}>
+          <OrderSummary quote={quote} delivery={data?.area ? "known" : "unknown"} freeAbove={data?.area?.freeAbove} loading={loading}>
             <div className="space-y-4">
               <ul className="max-h-48 space-y-2 overflow-auto pr-1 text-sm" aria-label="Items">
                 {lines.map((l) => (

@@ -63,7 +63,7 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
         ) : (
           <span className="font-medium text-leaf-600">In stock</span>
         )}
-        {inCart > 0 ? <span className="text-muted"> · {inCart} already in your basket</span> : null}
+        {inCart > 0 ? <span className="text-muted"> · {inCart} already in your cart</span> : null}
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -75,15 +75,15 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           disabled={out || maxAddable === 0}
           onClick={() => {
             add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, qty);
-            toast(`${qty} × ${product.name} (${variant.label}) added to basket`);
+            toast(`${qty} × ${product.name} (${variant.label}) added to cart`);
             setQty(1);
           }}
         >
-          <ShoppingBasket className="size-5" aria-hidden /> {out ? "Out of stock" : maxAddable === 0 ? "Maximum in basket" : "Add to basket"}
+          <ShoppingBasket className="size-5" aria-hidden /> {out ? "Out of stock" : maxAddable === 0 ? "Maximum in cart" : "Add to Cart"}
         </Button>
         {inCart > 0 ? (
           <ButtonLink href="/cart" variant="outline" size="lg">
-            View basket
+            View cart
           </ButtonLink>
         ) : null}
       </div>

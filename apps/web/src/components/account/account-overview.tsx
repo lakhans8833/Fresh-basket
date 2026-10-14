@@ -9,7 +9,7 @@ import { cn } from "../ui/cn";
 /** Quick cards on the profile page: latest order and default address. */
 export function AccountOverview({ recent, defaultAddress }: { recent: Order | null; defaultAddress: Address | null }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <section aria-labelledby="recent-heading" className="flex flex-col rounded-[var(--radius-card)] border border-line bg-white p-5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-full bg-lime-100 text-forest-700"><Package className="size-4" aria-hidden /></span>

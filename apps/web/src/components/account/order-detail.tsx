@@ -69,7 +69,7 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
         const existing = lines.find((l) => l.variantId === it.variantId)?.quantity ?? 0;
         if (it.quantity > existing) add({ variantId: it.variantId, productName: src.productName, productSlug: it.productSlug, variantLabel: src.variantLabel, imageUrl: src.imageUrl, priceHint: src.unitPrice }, it.quantity - existing);
       }
-      toast(r.skipped.length ? `Added ${r.items.length} items. Not available: ${r.skipped.join(", ")}` : "Items added to your basket");
+      toast(r.skipped.length ? `Added ${r.items.length} items. Not available: ${r.skipped.join(", ")}` : "Items added to your cart");
       router.push("/cart");
     } catch (e) {
       setError((e as Error).message);
@@ -122,7 +122,7 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
         </Notice>
       ) : null}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
         <div className="space-y-6">
           <section aria-labelledby="track" className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-6">
             <h3 id="track" className="text-xl font-semibold text-forest-900">Tracking</h3>
@@ -137,7 +137,7 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
                 </div>
               </div>
             ) : (
-              <ol className="mt-5 grid gap-4 sm:grid-cols-4 sm:gap-2">
+              <ol className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:gap-2">
                 {TRACKING_STEPS.map((s, i) => {
                   const Icon = STEP_ICON[s];
                   const done = currentIdx >= i;

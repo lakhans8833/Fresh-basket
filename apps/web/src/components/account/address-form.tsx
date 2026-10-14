@@ -57,7 +57,7 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
   const described = (k: string) => (errors[k] ? `${id(k)}-error` : undefined);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Field label="Full name" htmlFor={id("fullName")} error={err("fullName")}>
         <Input id={id("fullName")} autoComplete="name" value={value.fullName} onChange={set("fullName")} invalid={!!errors.fullName} aria-describedby={described("fullName")} />
       </Field>

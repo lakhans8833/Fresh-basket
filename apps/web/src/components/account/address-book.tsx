@@ -126,7 +126,7 @@ export function AddressBook({ initial }: { initial: Address[] }) {
       ) : null}
 
       {addresses.length ? (
-        <ul className="mt-5 grid gap-4 lg:grid-cols-2">
+        <ul className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {addresses.map((a) => (
             <li key={a.id}>
               <article
