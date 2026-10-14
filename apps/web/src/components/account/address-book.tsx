@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { Check, MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
-import type { Address } from "@freshbasket/shared";
+import { AlertTriangle, Check, MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { pincodeStateMessage, stateMatchesPincode, type Address } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { AddressFields, emptyAddress, validateAddress, type AddressDraft } from "./address-form";
 import { useToast } from "../ui/toast";
@@ -149,6 +149,11 @@ export function AddressBook({ initial }: { initial: Address[] }) {
                 <p className="mt-0.5 text-sm text-muted">
                   {[a.line1, a.line2, a.landmark, a.city, a.state, a.pincode].filter(Boolean).join(", ")}
                 </p>
+                {!stateMatchesPincode(a.state, a.pincode) ? (
+                  <p className="mt-2 flex items-start gap-1.5 text-sm text-amber">
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {pincodeStateMessage(a.pincode)} Tap Edit to fix it.
+                  </p>
+                ) : null}
                 <div className="mt-auto flex flex-wrap gap-2 pt-4">
                   <Button size="sm" variant="outline" disabled={!!busy || saving} onClick={() => open({ id: a.id, draft: toDraft(a) })} aria-label={`Edit address ${a.label}`}>
                     <Pencil className="size-3.5" aria-hidden /> Edit

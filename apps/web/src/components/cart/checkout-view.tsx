@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, CreditCard, FlaskConical, Lock, MapPin, Plus, ShoppingBasket, CalendarClock } from "lucide-react";
-import { formatINR, formatSlotTime, type Address, type PlaceOrderResponse, type SlotOption } from "@freshbasket/shared";
+import { formatINR, formatSlotTime, pincodeStateMessage, stateMatchesPincode, type Address, type PlaceOrderResponse, type SlotOption } from "@freshbasket/shared";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { useCart } from "./cart-context";
 import { useQuote } from "./use-quote";
@@ -187,7 +187,12 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                         {a.isDefault ? <span className="rounded-full bg-sage-100 px-2 py-0.5 text-[0.6875rem] font-medium text-muted">Default</span> : null}
                       </span>
                       <span className="mt-1 block text-ink-soft">{a.fullName} · {a.phone}</span>
-                      <span className="block text-muted">{[a.line1, a.line2, a.landmark, a.city, a.pincode].filter(Boolean).join(", ")}</span>
+                      <span className="block text-muted">{[a.line1, a.line2, a.landmark, a.city, a.state, a.pincode].filter(Boolean).join(", ")}</span>
+                      {!stateMatchesPincode(a.state, a.pincode) ? (
+                        <span className="mt-1.5 block font-medium text-amber">
+                          {pincodeStateMessage(a.pincode)} <Link href="/account/addresses" className="underline">Edit address</Link>
+                        </span>
+                      ) : null}
                     </label>
                   ))}
                   <label className={cn("flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 text-sm font-semibold transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === "new" ? "border-leaf-500 bg-lime-50 text-forest-900" : "border-line text-forest-800 hover:border-forest-700/30")}>

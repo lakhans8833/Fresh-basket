@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
-import { addressInputSchema, isValidPincode, type AddressInput, type DeliveryArea } from "@freshbasket/shared";
+import { addressInputSchema, isValidPincode, stateForPincode, stateMatchesPincode, type AddressInput, type DeliveryArea } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { Field, Input } from "../ui/form";
 import { Spinner } from "../ui/feedback";
@@ -46,10 +46,17 @@ export function usePincodeCheck(pincode: string) {
 
 export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { value: AddressDraft; onChange: (a: AddressDraft) => void; errors: Record<string, string>; idPrefix?: string }) {
   const pin = usePincodeCheck(value.pincode);
+  // Fill empty City / State from the PIN (city from our delivery areas, state from the PIN's first digits).
   useEffect(() => {
-    if (pin.status === "ok" && pin.area && !value.city) onChange({ ...value, city: pin.area.city });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only autofill once when the PIN resolves
-  }, [pin.status]);
+    const city = pin.status === "ok" && pin.area && !value.city.trim() ? pin.area.city : null;
+    const st = !value.state.trim() ? stateForPincode(value.pincode) : null;
+    if (city || st) onChange({ ...value, ...(city ? { city } : {}), ...(st ? { state: st } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only autofill when the PIN resolves
+  }, [pin.status, value.pincode]);
+  const areaCity = pin.status === "ok" ? pin.area?.city ?? null : null;
+  const cityMismatch = !!areaCity && !!value.city.trim() && !value.city.toLowerCase().includes(areaCity.toLowerCase());
+  const pinState = stateForPincode(value.pincode);
+  const stateMismatch = !!value.state.trim() && !stateMatchesPincode(value.state, value.pincode);
 
   // Errors come from the last submit. Once the customer edits a field, hide that field's old
   // error (e.g. "Enter a valid 6-digit PIN code" while they were still typing) until the next submit.
@@ -102,10 +109,22 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
       <Field label="Landmark (optional)" htmlFor={id("landmark")} error={err("landmark")}>
         <Input id={id("landmark")} value={value.landmark ?? ""} onChange={set("landmark")} />
       </Field>
-      <Field label="City" htmlFor={id("city")} error={err("city")}>
+      <Field label="City" htmlFor={id("city")} error={err("city")}
+        hint={cityMismatch ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-amber">
+            <AlertTriangle className="size-3.5" aria-hidden /> PIN {value.pincode} is in {areaCity}.
+            <button type="button" onClick={() => change("city", { ...value, city: areaCity! })} className="font-semibold underline">Use {areaCity}</button>
+          </span>
+        ) : undefined}>
         <Input id={id("city")} autoComplete="address-level2" value={value.city} onChange={set("city")} invalid={!!err("city")} aria-describedby={described("city")} />
       </Field>
-      <Field label="State" htmlFor={id("state")} error={err("state")}>
+      <Field label="State" htmlFor={id("state")} error={err("state")}
+        hint={stateMismatch && !err("state") ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-amber">
+            <AlertTriangle className="size-3.5" aria-hidden /> PIN {value.pincode} is in {pinState}.
+            <button type="button" onClick={() => change("state", { ...value, state: pinState! })} className="font-semibold underline">Use {pinState}</button>
+          </span>
+        ) : undefined}>
         <Input id={id("state")} autoComplete="address-level1" value={value.state} onChange={set("state")} invalid={!!err("state")} aria-describedby={described("state")} />
       </Field>
     </div>

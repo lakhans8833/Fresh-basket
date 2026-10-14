@@ -8,6 +8,8 @@ import { cn } from "../ui/cn";
 
 /** Quick cards on the profile page: latest order and default address. */
 export function AccountOverview({ recent, defaultAddress }: { recent: Order | null; defaultAddress: Address | null }) {
+  // Count packs the same way as the "My orders" list (2 × Broccoli + 1 × Cabbage = 3 items).
+  const recentCount = recent ? recent.items.reduce((s, i) => s + i.quantity, 0) : 0;
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <section aria-labelledby="recent-heading" className="flex flex-col rounded-[var(--radius-card)] border border-line bg-white p-5">
@@ -22,7 +24,7 @@ export function AccountOverview({ recent, defaultAddress }: { recent: Order | nu
               <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", statusTone(recent.status))}>{ORDER_STATUS_LABEL[recent.status]}</span>
             </div>
             <p className="mt-1 text-sm text-muted">
-              {recent.items.length} item{recent.items.length === 1 ? "" : "s"} · {formatINR(recent.total)} · delivery {formatDeliveryDate(recent.deliveryDate)}
+              {recentCount} item{recentCount === 1 ? "" : "s"} · {formatINR(recent.total)} · delivery {formatDeliveryDate(recent.deliveryDate)}
             </p>
             <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 text-sm font-semibold">
               <Link href={`/orders/${recent.id}`} className="inline-flex items-center gap-1 text-leaf-600 hover:text-forest-800">View / track <ArrowRight className="size-3.5" aria-hidden /></Link>

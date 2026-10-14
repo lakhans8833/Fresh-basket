@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MAX_LINES, MAX_QTY_PER_LINE } from "./pricing";
-import { isValidIndianMobile, normalizePhone, PINCODE_REGEX } from "./pincode";
+import { isValidIndianMobile, normalizePhone, pincodeStateMessage, PINCODE_REGEX, stateMatchesPincode } from "./pincode";
 import { ORDER_STATUSES } from "./orderStatus";
 
 const uuid = z.uuid();
@@ -39,6 +39,9 @@ export const addressInputSchema = z.object({
   state: trimmed(60).min(2, "Enter state"),
   pincode: pincodeSchema,
   isDefault: z.boolean().optional().default(false),
+}).superRefine((a, ctx) => {
+  // e.g. "New Delhi, Delhi" with PIN 121006 (Faridabad, Haryana) — the delivery partner would go to the wrong place.
+  if (!stateMatchesPincode(a.state, a.pincode)) ctx.addIssue({ code: "custom", path: ["state"], message: pincodeStateMessage(a.pincode) });
 });
 export type AddressInput = z.infer<typeof addressInputSchema>;
 

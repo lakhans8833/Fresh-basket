@@ -112,6 +112,7 @@ export function SiteFooter({
               <li><Link className={linkCls} href="/delivery-policy">Delivery areas &amp; charges</Link></li>
               <li><Link className={linkCls} href="/returns">Returns &amp; refunds</Link></li>
               <li><Link className={linkCls} href="/account/orders">Track your order</Link></li>
+              <li><Link className={linkCls} href="/wishlist">Saved items</Link></li>
             </ul>
           </nav>
 

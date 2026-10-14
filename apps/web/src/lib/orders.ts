@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import {
-  addDays, canCustomerCancel, istDateString,
+  addDays, canCustomerCancel, istDateString, pincodeStateMessage, stateMatchesPincode,
   type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput,
 } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
@@ -146,6 +146,9 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
         );
         const a = rows[0];
         if (!a) throw badRequest("Saved address not found.");
+        if (!stateMatchesPincode(a.state, a.pincode)) {
+          throw badRequest(`Your saved address "${a.label}" says ${a.state}, but ${pincodeStateMessage(a.pincode)} Edit the address in My addresses and try again.`);
+        }
         address = { label: a.label, fullName: a.full_name, phone: a.phone, line1: a.line1, line2: a.line2, landmark: a.landmark, city: a.city, state: a.state, pincode: a.pincode };
       } else {
         const a = input.address!;
@@ -214,6 +217,12 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
         await c.query("insert into coupon_redemptions (coupon_id, order_id, user_id) values ($1,$2,$3)", [ctx.couponId, id, userId]);
         await c.query("update coupons set used_count = used_count + 1 where id = $1", [ctx.couponId]);
       }
+
+      // Fill the customer's profile name / mobile from their first order if they haven't set them yet.
+      await c.query(
+        "update profiles set full_name = coalesce(nullif(trim(full_name), ''), $2), phone = coalesce(nullif(trim(phone), ''), $3) where id = $1",
+        [userId, address.fullName, address.phone],
+      );
 
       await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,'customer')", [
         id,
