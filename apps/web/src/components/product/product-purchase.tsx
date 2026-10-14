@@ -9,10 +9,11 @@ import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
+import { defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
 
 export function ProductPurchase({ product }: { product: ProductDetail }) {
-  const first = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
+  const first = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(first?.id);
   const [qty, setQty] = useState(1);
   const { add, quantityOf, hydrated } = useCart();

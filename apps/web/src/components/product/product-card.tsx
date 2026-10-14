@@ -10,11 +10,12 @@ import { ProductImage } from "./product-image";
 import { FavouriteButton } from "./favourite-button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
+import { defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
 import { PackSizeSelect } from "./pack-size-select";
 
 function useCardState(product: ProductSummary) {
-  const firstAvailable = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
+  const firstAvailable = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(firstAvailable?.id);
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);

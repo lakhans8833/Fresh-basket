@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, ArrowRight, ImagePlus, Plus, Trash2, X, Archive, Save, ExternalLink } from "lucide-react";
+import { ArrowLeft, ArrowRight, ImagePlus, Plus, Trash2, X, Archive, Save, ExternalLink, Scale } from "lucide-react";
 import { adminProductSchema, type AdminProductInput } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
 import { Button } from "../ui/button";
@@ -46,6 +46,44 @@ export function slugify(s: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
+}
+
+/** "500 g" -> 500, "1 kg" -> 1000; null for "1 bunch". Mirrors public.pack_label_grams in SQL. */
+export function labelGrams(label: string): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*(kg|kgs|kilo|kilograms?|g|gm|gms|grams?|gr)$/.exec(label.trim().toLowerCase());
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Math.round(m[2]!.startsWith("k") ? n * 1000 : n);
+}
+
+const STANDARD_GRAMS = [100, 250, 500, 1000];
+
+/**
+ * Adds rows for any missing 100 g / 250 g / 500 g / 1 kg size. When a row with a weight and price
+ * exists, the new row's price/MRP are scaled from the nearest one (rounded up to the next rupee) and
+ * its stock is copied; otherwise the price is left blank for the owner to fill in.
+ */
+function withStandardSizes(rows: VariantRow[]): VariantRow[] {
+  const blank = (r: VariantRow) => !r.id && !r.label.trim() && !r.price.trim() && !r.mrp.trim();
+  const kept = rows.filter((r) => !blank(r));
+  const priced = kept
+    .map((r) => ({ r, g: labelGrams(r.label), price: Number(r.price), mrp: r.mrp.trim() ? Number(r.mrp) : null }))
+    .filter((x): x is { r: VariantRow; g: number; price: number; mrp: number | null } => !!x.g && x.r.price.trim() !== "" && Number.isFinite(x.price));
+  const have = new Set(kept.map((r) => labelGrams(r.label)).filter(Boolean));
+  const scale = (v: number, from: number, to: number) => String(Math.ceil((v * to) / from));
+  const added = STANDARD_GRAMS.filter((g) => !have.has(g)).map((g): VariantRow => {
+    const src = [...priced].sort((a, b) => Math.abs(a.g - g) - Math.abs(b.g - g) || a.g - b.g)[0];
+    return {
+      ...emptyVariant(),
+      label: g >= 1000 ? `${g / 1000} kg` : `${g} g`,
+      price: src ? scale(src.price, src.g, g) : "",
+      mrp: src && src.mrp !== null && Number.isFinite(src.mrp) ? scale(src.mrp, src.g, g) : "",
+      stock: src ? src.r.stock : "0",
+    };
+  });
+  return [...kept, ...added]
+    .sort((a, b) => (labelGrams(a.label) ?? Infinity) - (labelGrams(b.label) ?? Infinity))
+    .slice(0, 10);
 }
 
 const emptyVariant = (): VariantRow => ({ key: k(), label: "", price: "", mrp: "", stock: "0", active: true, hasOrders: false });
@@ -445,6 +483,10 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
               <Button type="button" variant="outline" size="sm" className="mt-4" disabled={variants.length >= 10} onClick={() => { setVariants([...variants, emptyVariant()]); touch(); }}>
                 <Plus className="size-4" aria-hidden /> Add weight option
               </Button>
+              <Button type="button" variant="outline" size="sm" className="ml-2 mt-4" onClick={() => { setVariants(withStandardSizes(variants)); touch(); }}>
+                <Scale className="size-4" aria-hidden /> Add 100 g, 250 g, 500 g, 1 kg
+              </Button>
+              <p className="mt-2 text-xs text-muted">New sizes are priced from your nearest existing size (per-gram rate, rounded up to the next rupee). Check prices and stock before saving.</p>
             </div>
           </Card>
         </div>

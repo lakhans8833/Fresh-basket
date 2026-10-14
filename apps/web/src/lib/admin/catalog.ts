@@ -148,3 +148,12 @@ export async function adminPatchInventory(updates: { variantId: string; price?: 
     return { updated: updates.length };
   });
 }
+
+/**
+ * Adds any missing 100 g / 250 g / 500 g / 1 kg sizes (one product, or all when null).
+ * Prices are scaled from the product's own nearest existing size — see migration 20261015000006.
+ */
+export async function adminAddStandardSizes(productId: string | null) {
+  const r = await queryOne<{ added: number }>("select public.add_standard_pack_sizes($1::uuid) as added", [productId]);
+  return { added: r?.added ?? 0 };
+}

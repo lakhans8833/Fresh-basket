@@ -102,3 +102,6 @@ insert into public.coupons (code, description, kind, value, min_order, max_disco
   ('WELCOME50', '₹50 off your first order above ₹299', 'flat', 5000, 29900, null, 1),
   ('FRESH10', '10% off orders above ₹199, up to ₹75', 'percent', 10, 19900, 7500, null)
 on conflict (code) do nothing;
+
+-- Standard pack sizes (100 g, 250 g, 500 g, 1 kg), priced from each sample product's own sizes.
+select public.add_standard_pack_sizes(null);

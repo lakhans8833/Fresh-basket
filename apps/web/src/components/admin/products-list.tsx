@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Package, Plus, Search, ChevronRight } from "lucide-react";
+import { Package, Plus, Search, ChevronRight, Scale } from "lucide-react";
+import { api } from "@/lib/client/api";
+import { useToast } from "../ui/toast";
 import { formatINR } from "@freshbasket/shared";
-import { ButtonLink } from "../ui/button";
+import { Button, ButtonLink } from "../ui/button";
 import { Input } from "../ui/form";
 import { EmptyState } from "../ui/feedback";
 import { cn } from "../ui/cn";
-import { useAdminData } from "./use-admin-data";
+import { errorMessage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
 import { Badge, Card, LoadError, LoadingRows, PageHeader, Thumb } from "./ui";
 
@@ -71,13 +73,34 @@ function ProductsListInner() {
   }, [q]);
   const { data, error, loading, reload } = useAdminData<{ products: Row[] }>(`/api/admin/products${dq ? `?q=${encodeURIComponent(dq)}` : ""}`);
   const products = data?.products ?? [];
+  const toast = useToast();
+  const [sizing, setSizing] = useState(false);
+
+  async function addStandardSizes() {
+    if (!confirm("Add 100 g, 250 g, 500 g and 1 kg sizes to every product sold by weight?\n\nNew sizes are priced in proportion to each product's existing price (rounded up to the next rupee) and copy its stock. Products sold per bunch/piece are skipped. Please review prices and stock afterwards.")) return;
+    setSizing(true);
+    try {
+      const r = await api<{ added: number }>("/api/admin/products/standard-sizes", { method: "POST", json: {} });
+      toast(r.added ? `${r.added} pack size${r.added === 1 ? "" : "s"} added — please review prices and stock` : "All weight-based products already have these sizes");
+      reload();
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setSizing(false);
+    }
+  }
 
   return (
     <>
       <PageHeader
         title="Products"
         description="Your catalogue: photos, descriptions and weight options with prices."
-        actions={<ButtonLink href="/admin/products/new"><Plus className="size-4" aria-hidden /> Add product</ButtonLink>}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={addStandardSizes} loading={sizing}><Scale className="size-4" aria-hidden /> Add 100 g – 1 kg sizes</Button>
+            <ButtonLink href="/admin/products/new"><Plus className="size-4" aria-hidden /> Add product</ButtonLink>
+          </div>
+        }
       />
       <div className="relative mb-5 max-w-md">
         <label htmlFor="product-search" className="sr-only">Search products</label>
