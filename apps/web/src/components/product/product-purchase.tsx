@@ -9,7 +9,7 @@ import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
-import { DiscountBadge } from "../ui/price";
+import { DiscountBadge, percentOff } from "../ui/price";
 
 export function ProductPurchase({ product }: { product: ProductDetail }) {
   const first = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
@@ -51,7 +51,9 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
               >
                 <input type="radio" name="variant" value={v.id} checked={on} onChange={() => { setVariantId(v.id); setQty(1); }} className="sr-only" />
                 <span className="font-semibold text-ink">{v.label}</span>
-                <span className="text-sm tabular-nums text-ink-soft">{formatINR(v.price)}</span>
+                <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
+                {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
+                {percentOff(v.price, v.mrp) ? <span className="mt-1 rounded bg-lime-200/70 px-1.5 py-px text-[0.6875rem] font-semibold text-forest-800">{percentOff(v.price, v.mrp)}% OFF</span> : null}
                 {v.stock <= 0 ? <span className="text-[0.6875rem] font-medium text-danger">Out of stock</span> : null}
                 {on ? <Check className="absolute right-2 top-2 size-4 text-leaf-600" aria-hidden /> : null}
               </label>

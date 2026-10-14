@@ -11,6 +11,7 @@ import { FavouriteButton } from "./favourite-button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
 import { DiscountBadge, percentOff } from "../ui/price";
+import { PackSizeSelect } from "./pack-size-select";
 
 function useCardState(product: ProductSummary) {
   const firstAvailable = product.variants.find((v) => v.stock > 0) ?? product.variants[0];
@@ -33,29 +34,6 @@ function useCardState(product: ProductSummary) {
     setTimeout(() => setJustAdded(false), 1600);
   }
   return { variant, setVariantId, qty, setQty, inCart, maxAddable, addToCart, justAdded };
-}
-
-function VariantPills({ product, variantId, onChange }: { product: ProductSummary; variantId: string; onChange: (id: string) => void }) {
-  return (
-    <div className="relative z-10 flex flex-wrap gap-1" role="radiogroup" aria-label={`Pack size for ${product.name}`}>
-      {product.variants.map((v) => (
-        <button
-          key={v.id}
-          type="button"
-          role="radio"
-          aria-checked={v.id === variantId}
-          onClick={() => onChange(v.id)}
-          className={cn(
-            "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-            v.id === variantId ? "border-forest-800 bg-forest-800 text-white" : "border-line text-ink-soft hover:border-forest-700/40",
-            v.stock <= 0 && "line-through decoration-1 opacity-70",
-          )}
-        >
-          {v.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 /** Product card: white photo panel, pack size, price per pack, quantity and Add to Cart. */
@@ -111,6 +89,7 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
             {v.mrp && v.mrp > v.price ? <s className="text-xs">{formatINR(v.mrp)}</s> : null}
             {percentOff(v.price, v.mrp) ? <span className="text-xs font-semibold text-offer">{percentOff(v.price, v.mrp)}% off</span> : null}
           </p>
+          {product.variants.length > 1 ? <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} className="mt-1.5 max-w-[12rem]" /> : null}
           {out ? <p className="text-xs font-medium text-danger">Out of stock</p> : null}
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
             {stepper}
@@ -122,8 +101,8 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
   }
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
-      <div className="relative overflow-hidden">
+    <article className="group relative flex flex-col rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
+      <div className="relative overflow-hidden rounded-t-[var(--radius-card)]">
         <ProductImage
           src={product.imageUrl}
           alt={product.name}
@@ -143,10 +122,9 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
         <h3 className="font-sans text-[0.9375rem] font-semibold leading-snug text-ink sm:text-base">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
-        {product.variants.length > 1 ? <VariantPills product={product} variantId={v.id} onChange={s.setVariantId} /> : null}
+        <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} />
         <p className="flex flex-wrap items-baseline gap-x-1.5">
           <span className="text-lg font-bold tabular-nums text-forest-800 sm:text-xl">{formatINR(v.price)}</span>
-          <span className="text-sm text-muted">/ {v.label}</span>
           {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted">MRP {formatINR(v.mrp)}</s> : null}
         </p>
         <p className="min-h-4 text-xs font-medium" aria-live="polite">
