@@ -77,6 +77,15 @@ export interface Address {
   isDefault: boolean;
 }
 
+export interface PromoBanner {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  imageUrl: string | null;
+  linkUrl: string;
+  theme: "green" | "lime" | "amber" | "ivory";
+}
+
 export interface DeliveryArea {
   id: string;
   pincode: string;

@@ -99,6 +99,27 @@ export const adminCategorySchema = z.object({
   active: z.boolean().default(true),
 });
 
+/** Offer banner (Admin → Banners). Links are internal paths only, e.g. "/deals". */
+export const BANNER_THEMES = ["green", "lime", "amber", "ivory"] as const;
+export const adminBannerSchema = z
+  .object({
+    title: trimmed(60).min(2),
+    subtitle: trimmed(120).optional().nullable(),
+    imageUrl: z.string().max(500).optional().nullable(),
+    linkUrl: z
+      .string()
+      .trim()
+      .max(200)
+      .regex(/^\/(?![\/\\])\S*$/, "Use a page on this website, starting with / (e.g. /deals)"),
+    theme: z.enum(BANNER_THEMES).default("green"),
+    active: z.boolean().default(true),
+    sortOrder: z.number().int().min(0).max(999).default(0),
+    startsAt: z.string().datetime({ offset: true }).optional().nullable(),
+    endsAt: z.string().datetime({ offset: true }).optional().nullable(),
+  })
+  .refine((b) => !b.startsAt || !b.endsAt || new Date(b.endsAt) > new Date(b.startsAt), { path: ["endsAt"], message: "End must be after start" });
+export type AdminBannerInput = z.infer<typeof adminBannerSchema>;
+
 export const adminVariantSchema = z.object({
   id: uuid.optional(),
   label: trimmed(30).min(1),

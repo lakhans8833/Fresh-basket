@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X,
-} from "lucide-react";
+  LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd } from "lucide-react";
 import { useSession } from "../account/session-context";
 import { LeafMark } from "../layout/logo";
 import { DevBadge } from "../ui/feedback";
@@ -17,6 +16,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; adminOnl
   { href: "/admin/orders", label: "Orders", icon: ClipboardList },
   { href: "/admin/products", label: "Products", icon: Package, adminOnly: true },
   { href: "/admin/categories", label: "Categories", icon: FolderTree, adminOnly: true },
+  { href: "/admin/banners", label: "Banners", icon: GalleryHorizontalEnd, adminOnly: true },
   { href: "/admin/inventory", label: "Inventory", icon: Boxes },
   { href: "/admin/delivery", label: "Delivery", icon: Truck, adminOnly: true },
   { href: "/admin/coupons", label: "Coupons", icon: TicketPercent, adminOnly: true },

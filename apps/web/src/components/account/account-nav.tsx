@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Heart, LayoutDashboard, LogOut, MapPin, Package, UserRound } from "lucide-react";
+import { Heart, LayoutDashboard, LogOut, MapPin, Package, RotateCcw, UserRound } from "lucide-react";
 import { useSession } from "./session-context";
 import { Spinner } from "../ui/feedback";
 import { cn } from "../ui/cn";
@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/account", label: "Profile", icon: UserRound, match: (p: string) => p === "/account" },
   { href: "/account/orders", label: "Orders", icon: Package, match: (p: string) => p.startsWith("/account/orders") },
   { href: "/account/addresses", label: "Addresses", icon: MapPin, match: (p: string) => p.startsWith("/account/addresses") },
+  { href: "/buy-again", label: "Buy again", icon: RotateCcw, match: (p: string) => p === "/buy-again" },
   { href: "/wishlist", label: "Saved items", icon: Heart, match: (p: string) => p === "/wishlist" },
 ];
 

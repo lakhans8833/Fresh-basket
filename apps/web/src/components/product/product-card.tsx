@@ -14,9 +14,11 @@ import { bestDealVariant, defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
 import { PackSizeSelect } from "./pack-size-select";
 
-function useCardState(product: ProductSummary, preferDeal = false) {
-  // On Deals, open the card on the pack with the biggest saving so its "% off" matches why it's listed.
-  const firstAvailable = (preferDeal ? bestDealVariant(product.variants) : undefined) ?? defaultVariant(product.variants);
+function useCardState(product: ProductSummary, preferDeal = false, preferVariantId?: string) {
+  // "Buy again" opens on the pack bought last time (if it's still in stock); Deals open on the
+  // pack with the biggest saving so its "% off" matches why it's listed.
+  const lastBought = preferVariantId ? product.variants.find((v) => v.id === preferVariantId && v.stock > 0) : undefined;
+  const firstAvailable = lastBought ?? (preferDeal ? bestDealVariant(product.variants) : undefined) ?? defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(firstAvailable?.id);
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
@@ -44,8 +46,8 @@ function useCardState(product: ProductSummary, preferDeal = false) {
 }
 
 /** Product card: white photo panel, pack size, price per pack, quantity and Add to Cart. */
-export function ProductCard({ product, priority, variant: layout = "grid", preferDeal }: { product: ProductSummary; index?: number; priority?: boolean; variant?: "grid" | "compact"; preferDeal?: boolean }) {
-  const s = useCardState(product, preferDeal);
+export function ProductCard({ product, priority, variant: layout = "grid", preferDeal, preferVariantId }: { product: ProductSummary; index?: number; priority?: boolean; variant?: "grid" | "compact"; preferDeal?: boolean; preferVariantId?: string }) {
+  const s = useCardState(product, preferDeal, preferVariantId);
   const v = s.variant;
   if (!v) return null;
   const out = v.stock <= 0;

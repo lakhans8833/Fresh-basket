@@ -2,6 +2,18 @@ import "server-only";
 import type { Category, ProductDetail, ProductSummary, Variant } from "@freshbasket/shared";
 import { expandSearchTerms } from "@freshbasket/shared";
 import { query, queryOne } from "./db";
+import { defaultVariant } from "@/components/product/default-variant";
+
+/**
+ * The price a customer sees first on a product card (the 500 g pack when in stock, else the
+ * first in-stock pack). Price filters and price sorting use this — not the smallest pack, which
+ * since 100 g packs would put almost everything "Under ₹20".
+ */
+export const shownPrice = (p: ProductSummary) => defaultVariant(p.variants)?.price ?? p.fromPrice;
+const inBucket = (p: ProductSummary, b: { min: number; max: number | null }) => {
+  const price = shownPrice(p);
+  return price >= b.min && (b.max === null || price <= b.max);
+};
 
 type ProductRow = {
   id: string; slug: string; name: string; category_id: string; category_name: string; category_slug: string;
@@ -57,6 +69,8 @@ export interface ProductFilters {
   limit?: number;
   /** Price buckets in rupees, e.g. ["lt20", "20-40", "60+"]; matched against the lowest variant price. */
   prices?: string[];
+  /** Only these product ids (order of the result still follows `sort`). */
+  ids?: string[];
 }
 
 export const PRICE_BUCKETS: { key: string; label: string; min: number; max: number | null }[] = [
@@ -83,17 +97,22 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
     params.push(f.category);
     where.push(`c.slug = $${params.length}`);
   }
+  if (f.ids) {
+    if (f.ids.length === 0) return [];
+    params.push(f.ids);
+    where.push(`p.id = any($${params.length}::uuid[])`);
+  }
   if (f.seasonal) where.push("p.seasonal");
   if (f.featured) where.push("p.featured");
   const rows = await query<ProductRow>(`${PRODUCT_SELECT} where ${where.join(" and ")} order by p.name`, params);
   let items = rows.map(toSummary).filter((p) => p.variants.length > 0);
   if (f.inStockOnly) items = items.filter((p) => p.inStock);
   const buckets = PRICE_BUCKETS.filter((b) => f.prices?.includes(b.key));
-  if (buckets.length) items = items.filter((p) => buckets.some((b) => p.fromPrice >= b.min && (b.max === null || p.fromPrice <= b.max)));
+  if (buckets.length) items = items.filter((p) => buckets.some((b) => inBucket(p, b)));
   const sort = f.sort ?? "featured";
   items.sort((a, b) => {
-    if (sort === "price_asc") return a.fromPrice - b.fromPrice;
-    if (sort === "price_desc") return b.fromPrice - a.fromPrice;
+    if (sort === "price_asc") return shownPrice(a) - shownPrice(b);
+    if (sort === "price_desc") return shownPrice(b) - shownPrice(a);
     if (sort === "name") return a.name.localeCompare(b.name);
     // featured: in-stock first, featured first, then name
     return Number(b.inStock) - Number(a.inStock) || Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name);
@@ -161,4 +180,37 @@ export async function listDeals(): Promise<ProductSummary[]> {
     .filter((x) => x.pct >= 1)
     .sort((a, b) => b.pct - a.pct || a.p.name.localeCompare(b.p.name))
     .map((x) => x.p);
+}
+
+/** Product counts per price bucket (by each product's lowest price), for the home page tiles. */
+export async function priceBucketCounts(): Promise<{ key: string; label: string; count: number }[]> {
+  const items = await listProducts({});
+  return PRICE_BUCKETS.map((b) => ({
+    key: b.key,
+    label: b.label,
+    count: items.filter((p) => inBucket(p, b)).length,
+  }));
+}
+
+/**
+ * "Buy again": products from the customer's past orders (not cancelled), most recently ordered
+ * first, with the pack size they bought last time. Only products still on sale are returned.
+ */
+export async function listBuyAgain(userId: string, limit = 12): Promise<{ products: ProductSummary[]; lastVariant: Record<string, string> }> {
+  const rows = await query<{ product_id: string; variant_id: string | null; created_at: Date }>(
+    `select distinct on (oi.product_id) oi.product_id, oi.variant_id, o.created_at
+       from order_items oi
+       join orders o on o.id = oi.order_id
+      where o.user_id = $1 and o.status <> 'cancelled' and oi.product_id is not null
+      order by oi.product_id, o.created_at desc`,
+    [userId],
+  );
+  if (!rows.length) return { products: [], lastVariant: {} };
+  const recency = new Map(rows.map((r) => [r.product_id, new Date(r.created_at).getTime()]));
+  const products = (await listProducts({ ids: rows.map((r) => r.product_id) }))
+    .sort((a, b) => (recency.get(b.id) ?? 0) - (recency.get(a.id) ?? 0))
+    .slice(0, limit);
+  const lastVariant: Record<string, string> = {};
+  for (const r of rows) if (r.variant_id) lastVariant[r.product_id] = r.variant_id;
+  return { products, lastVariant };
 }
