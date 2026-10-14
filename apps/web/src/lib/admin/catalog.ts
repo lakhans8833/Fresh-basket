@@ -48,7 +48,8 @@ export async function adminListProducts(q?: string | null) {
 
 export async function adminGetProduct(id: string) {
   const p = await queryOne(
-    `select id, slug, name, category_id as "categoryId", description, highlights, seasonal, featured, active from products where id = $1`,
+    `select id, slug, name, category_id as "categoryId", description, highlights, storage_tips as "storageTips", shelf_life as "shelfLife", origin,
+            seasonal, featured, active from products where id = $1`,
     [id],
   );
   if (!p) throw notFound();
@@ -82,6 +83,13 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
         fields,
       );
       productId = r.rows[0]!.id;
+    }
+
+    // Product information: only touch a field when the request includes it (older clients don't send these).
+    const info: [string, string | null | undefined][] = [["storage_tips", d.storageTips], ["shelf_life", d.shelfLife], ["origin", d.origin]];
+    for (const [col, val] of info) {
+      if (val === undefined) continue;
+      await c.query(`update products set ${col} = $1 where id = $2`, [val?.trim() ? val.trim() : null, productId]);
     }
 
     await c.query("delete from product_images where product_id = $1", [productId]);

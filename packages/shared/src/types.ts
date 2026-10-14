@@ -59,6 +59,10 @@ export interface ProductSummary {
 export interface ProductDetail extends ProductSummary {
   description: string | null;
   highlights: string[];
+  /** Owner-entered product information; null when not filled in. */
+  storageTips: string | null;
+  shelfLife: string | null;
+  origin: string | null;
   images: { id: string; url: string; alt: string | null }[];
   categorySlug: string;
 }

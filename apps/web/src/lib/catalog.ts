@@ -18,12 +18,13 @@ const inBucket = (p: ProductSummary, b: { min: number; max: number | null }) => 
 type ProductRow = {
   id: string; slug: string; name: string; category_id: string; category_name: string; category_slug: string;
   description: string | null; highlights: string[]; seasonal: boolean; featured: boolean;
+  storage_tips?: string | null; shelf_life?: string | null; origin?: string | null;
   image_url: string | null; variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean }[] | null;
 };
 
 const PRODUCT_SELECT = `
   select p.id, p.slug, p.name, p.category_id, c.name as category_name, c.slug as category_slug,
-         p.description, p.highlights, p.seasonal, p.featured,
+         p.description, p.highlights, p.seasonal, p.featured, p.storage_tips, p.shelf_life, p.origin,
          (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image_url,
          (select json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'mrp', v.mrp, 'stock', v.stock, 'active', v.active) order by v.sort_order, v.price)
             from product_variants v where v.product_id = p.id and v.active) as variants
@@ -67,10 +68,30 @@ export interface ProductFilters {
   inStockOnly?: boolean;
   sort?: SortKey;
   limit?: number;
-  /** Price buckets in rupees, e.g. ["lt20", "20-40", "60+"]; matched against the lowest variant price. */
+  /** Price buckets in rupees, e.g. ["lt20", "20-40", "60+"]; matched against the price of the pack shown on the card (see shownPrice). */
   prices?: string[];
   /** Only these product ids (order of the result still follows `sort`). */
   ids?: string[];
+  /** Discount buckets, e.g. ["10+", "25+"]; matched against the product's best % off (in-stock packs). */
+  discounts?: string[];
+}
+
+/** % off filter like big grocery apps. Uses only the MRP the admin entered — nothing is made up. */
+export const DISCOUNT_BUCKETS: { key: string; label: string; min: number; max: number | null }[] = [
+  { key: "upto10", label: "Up to 10% off", min: 1, max: 9 },
+  { key: "10-25", label: "10% – 24% off", min: 10, max: 24 },
+  { key: "25+", label: "25% off or more", min: 25, max: null },
+];
+
+/** Biggest whole-number % off among a product's in-stock packs (all packs if none are in stock). */
+export function bestPercentOff(variants: { price: number; mrp: number | null; stock: number }[]): number {
+  const pool = variants.some((v) => v.stock > 0) ? variants.filter((v) => v.stock > 0) : variants;
+  let best = 0;
+  for (const v of pool) {
+    if (!v.mrp || v.mrp <= v.price) continue;
+    best = Math.max(best, Math.floor(((v.mrp - v.price) / v.mrp) * 100));
+  }
+  return best;
 }
 
 export const PRICE_BUCKETS: { key: string; label: string; min: number; max: number | null }[] = [
@@ -109,6 +130,13 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
   if (f.inStockOnly) items = items.filter((p) => p.inStock);
   const buckets = PRICE_BUCKETS.filter((b) => f.prices?.includes(b.key));
   if (buckets.length) items = items.filter((p) => buckets.some((b) => inBucket(p, b)));
+  const off = DISCOUNT_BUCKETS.filter((b) => f.discounts?.includes(b.key));
+  if (off.length) {
+    items = items.filter((p) => {
+      const pct = bestPercentOff(p.variants);
+      return off.some((b) => pct >= b.min && (b.max === null || pct <= b.max));
+    });
+  }
   const sort = f.sort ?? "featured";
   items.sort((a, b) => {
     if (sort === "price_asc") return shownPrice(a) - shownPrice(b);
@@ -127,7 +155,8 @@ export async function getProduct(slug: string): Promise<ProductDetail | null> {
     "select id, url, alt from product_images where product_id = $1 order by sort_order",
     [r.id],
   );
-  return { ...toSummary(r), description: r.description, highlights: r.highlights ?? [], images, categorySlug: r.category_slug };
+  return { ...toSummary(r), description: r.description, highlights: r.highlights ?? [],
+    storageTips: r.storage_tips ?? null, shelfLife: r.shelf_life ?? null, origin: r.origin ?? null, images, categorySlug: r.category_slug };
 }
 
 /** Variants for cart display; includes inactive ones so the cart can explain why they're unavailable. */

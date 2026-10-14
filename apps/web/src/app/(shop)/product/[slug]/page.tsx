@@ -54,6 +54,11 @@ export default async function ProductPage({ params }: { params: Params }) {
 
   // "Sold by weight" is derived from the pack labels; other notes are the highlights set in Admin.
   const byWeight = product.variants.length > 0 && product.variants.every((v) => packGrams(v.label) !== null);
+  // Product information rows — only the ones the owner filled in under Admin → Products.
+  const info: [string, string][] = [];
+  for (const [k, v] of [["Storage", product.storageTips], ["Shelf life", product.shelfLife], ["Origin", product.origin]] as const) {
+    if (v) info.push([k, v]);
+  }
   const notes = [...(byWeight ? ["Sold by weight"] : []), ...product.highlights.filter((h) => h.toLowerCase() !== "sold by weight")];
   return (
     <>
@@ -88,6 +93,19 @@ export default async function ProductPage({ params }: { params: Params }) {
               <section aria-labelledby="about" className="mt-10 border-t border-line pt-6">
                 <h2 id="about" className="font-sans text-base font-semibold text-ink">About this product</h2>
                 <p className="mt-2 leading-relaxed text-ink-soft">{product.description}</p>
+              </section>
+            ) : null}
+            {info.length ? (
+              <section aria-labelledby="info" className="mt-8 border-t border-line pt-6">
+                <h2 id="info" className="font-sans text-base font-semibold text-ink">Product information</h2>
+                <dl className="mt-3 divide-y divide-line rounded-xl border border-line bg-white text-sm">
+                  {info.map(([k, v]) => (
+                    <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3">
+                      <dt className="font-medium text-muted">{k}</dt>
+                      <dd className="text-ink-soft">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
               </section>
             ) : null}
           </div>

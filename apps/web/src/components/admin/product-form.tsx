@@ -24,6 +24,9 @@ interface LoadedProduct {
   categoryId: string;
   description: string | null;
   highlights: string[];
+  storageTips?: string | null;
+  shelfLife?: string | null;
+  origin?: string | null;
   seasonal: boolean;
   featured: boolean;
   active: boolean;
@@ -133,6 +136,9 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [description, setDescription] = useState(initial?.description ?? "");
   const [highlights, setHighlights] = useState<string[]>(initial?.highlights ?? []);
   const [chip, setChip] = useState("");
+  const [storageTips, setStorageTips] = useState(initial?.storageTips ?? "");
+  const [shelfLife, setShelfLife] = useState(initial?.shelfLife ?? "");
+  const [origin, setOrigin] = useState(initial?.origin ?? "");
   const [seasonal, setSeasonal] = useState(initial?.seasonal ?? false);
   const [featured, setFeatured] = useState(initial?.featured ?? false);
   const [active, setActive] = useState(initial?.active ?? true);
@@ -241,6 +247,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,
+      storageTips: storageTips.trim() || null, shelfLife: shelfLife.trim() || null, origin: origin.trim() || null,
       images: images.map((i) => ({ url: i.url, alt: i.alt.trim() || null })),
       variants: vs,
     };
@@ -372,6 +379,18 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                 </div>
                 <p className="mt-1.5 text-[0.8125rem] text-muted">{err("highlights") ?? "Short points shown on the product page. Press Enter to add."}</p>
               </div>
+              <p className="text-sm font-medium text-ink-soft sm:col-span-2">
+                Product information <span className="font-normal text-muted">— optional; shown on the product page only when filled in</span>
+              </p>
+              <Field label="Storage" htmlFor="p-storage" error={err("storageTips")} hint={`${storageTips.length}/200`} className="sm:col-span-2">
+                <Input id="p-storage" value={storageTips} onChange={(e) => { setStorageTips(e.target.value); touch(); }} maxLength={200} placeholder="e.g. Keep in the fridge in a paper bag" />
+              </Field>
+              <Field label="Shelf life" htmlFor="p-shelf" error={err("shelfLife")}>
+                <Input id="p-shelf" value={shelfLife} onChange={(e) => { setShelfLife(e.target.value); touch(); }} maxLength={60} placeholder="e.g. Best within 3 days" />
+              </Field>
+              <Field label="Origin" htmlFor="p-origin" error={err("origin")}>
+                <Input id="p-origin" value={origin} onChange={(e) => { setOrigin(e.target.value); touch(); }} maxLength={60} placeholder="e.g. Local farms, Haryana" />
+              </Field>
             </div>
           </Card>
 

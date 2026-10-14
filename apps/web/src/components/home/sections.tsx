@@ -104,7 +104,7 @@ export function PriceTiles({ buckets }: { buckets: { key: string; label: string;
 }
 
 /** Signed-in customers: products from their past orders, opening on the pack they bought last. */
-export function BuyAgainRail({ products, lastVariant, href = "/buy-again" }: { products: ProductSummary[]; lastVariant: Record<string, string>; href?: string }) {
+export function BuyAgainRail({ products, lastVariant, href = "/account/buy-again" }: { products: ProductSummary[]; lastVariant: Record<string, string>; href?: string }) {
   if (products.length === 0) return null;
   return (
     <section aria-labelledby="buy-again" className="container-page mt-10 md:mt-12">

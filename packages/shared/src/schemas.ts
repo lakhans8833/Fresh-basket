@@ -136,6 +136,10 @@ export const adminProductSchema = z.object({
   categoryId: uuid,
   description: trimmed(2000).optional().nullable(),
   highlights: z.array(trimmed(40).min(1)).max(6).default([]),
+  /** Optional product information. Leave out to keep what's saved; send null or "" to clear. */
+  storageTips: trimmed(200).nullable().optional(),
+  shelfLife: trimmed(60).nullable().optional(),
+  origin: trimmed(60).nullable().optional(),
   seasonal: z.boolean().default(false),
   featured: z.boolean().default(false),
   active: z.boolean().default(true),

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Apple, Carrot, Check, ChevronRight, Home, Leaf, LeafyGreen, SearchX, Sprout, Truck, Banknote, ShieldCheck } from "lucide-react";
 import type { Category, StoreSettings } from "@freshbasket/shared";
-import { listProducts, PRICE_BUCKETS, type SortKey } from "@/lib/catalog";
+import { DISCOUNT_BUCKETS, listProducts, PRICE_BUCKETS, type SortKey } from "@/lib/catalog";
 import { storeConfig } from "@/config/store";
 import { ProductCard } from "./product-card";
 import { SortSelect } from "./shop-controls";
@@ -30,6 +30,7 @@ export interface ShopFilters {
   inStock: boolean;
   sort: SortKey;
   prices: string[];
+  discounts: string[];
 }
 
 export function parseShopFilters(sp: Record<string, string | string[] | undefined>, category: Category | null): ShopFilters {
@@ -42,10 +43,11 @@ export function parseShopFilters(sp: Record<string, string | string[] | undefine
     inStock: one("inStock") === "1",
     sort: sortParam && SORTS.includes(sortParam) ? sortParam : "featured",
     prices: (one("price") ?? "").split(",").filter((p) => PRICE_BUCKETS.some((b) => b.key === p)),
+    discounts: (one("off") ?? "").split(",").filter((p) => DISCOUNT_BUCKETS.some((b) => b.key === p)),
   };
 }
 
-function hrefFor(f: ShopFilters, patch: Partial<{ category: string | null; q: string | null; seasonal: boolean; inStock: boolean; sort: SortKey; prices: string[] }>) {
+function hrefFor(f: ShopFilters, patch: Partial<{ category: string | null; q: string | null; seasonal: boolean; inStock: boolean; sort: SortKey; prices: string[]; discounts: string[] }>) {
   const category = patch.category !== undefined ? patch.category : f.category?.slug ?? null;
   const next = new URLSearchParams();
   const q = patch.q !== undefined ? patch.q : f.q;
@@ -56,6 +58,8 @@ function hrefFor(f: ShopFilters, patch: Partial<{ category: string | null; q: st
   if (sort !== "featured") next.set("sort", sort);
   const prices = patch.prices ?? f.prices;
   if (prices.length) next.set("price", prices.join(","));
+  const discounts = patch.discounts ?? f.discounts;
+  if (discounts.length) next.set("off", discounts.join(","));
   const base = category ? `/category/${category}` : "/shop";
   const s = next.toString();
   return `${base}${s ? `?${s}` : ""}`;
@@ -63,13 +67,14 @@ function hrefFor(f: ShopFilters, patch: Partial<{ category: string | null; q: st
 
 export async function ShopView({ filters: f, categories, settings, whatsapp }: { filters: ShopFilters; categories: Category[]; settings: StoreSettings; whatsapp: string | null }) {
   const products = await listProducts({
-    q: f.q, category: f.category?.slug, seasonal: f.seasonal, inStockOnly: f.inStock, sort: f.sort, prices: f.prices,
+    q: f.q, category: f.category?.slug, seasonal: f.seasonal, inStockOnly: f.inStock, sort: f.sort, prices: f.prices, discounts: f.discounts,
   });
   const title = f.q ? `Results for “${f.q}”` : f.seasonal ? "In season now" : f.category?.name ?? "All products";
   const description = f.q ? null : f.seasonal ? "Fruits and vegetables that are in season right now." : f.category?.description ?? "Everything fresh in stock today.";
   const total = categories.reduce((s, c) => s + (c.productCount ?? 0), 0);
 
   const togglePrice = (key: string) => (f.prices.includes(key) ? f.prices.filter((p) => p !== key) : [...f.prices, key]);
+  const toggleOff = (key: string) => (f.discounts.includes(key) ? f.discounts.filter((p) => p !== key) : [...f.discounts, key]);
 
   const chip = (label: string, link: string, on: boolean) => (
     <Link
@@ -95,6 +100,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
       {label}
     </Link>
   );
+  const discountLinks = DISCOUNT_BUCKETS.map((b) => <div key={b.key}>{checkboxLink(b.label, f.discounts.includes(b.key), hrefFor(f, { discounts: toggleOff(b.key) }))}</div>);
 
   return (
     <>
@@ -139,6 +145,10 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
                 {PRICE_BUCKETS.map((b) => <div key={b.key}>{checkboxLink(b.label, f.prices.includes(b.key), hrefFor(f, { prices: togglePrice(b.key) }))}</div>)}
               </div>
             </details>
+            <details className="mt-2 rounded-xl border border-line bg-white lg:hidden">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-forest-800">Discount{f.discounts.length ? ` (${f.discounts.length})` : ""}</summary>
+              <div className="px-2 pb-2">{discountLinks}</div>
+            </details>
 
             <div className="hidden rounded-[var(--radius-card)] border border-line bg-white p-4 shadow-[var(--shadow-card)] lg:block">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-forest-800"><Leaf className="size-5" aria-hidden /> Categories</h2>
@@ -173,9 +183,12 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
                 {PRICE_BUCKETS.map((b) => <div key={b.key}>{checkboxLink(b.label, f.prices.includes(b.key), hrefFor(f, { prices: togglePrice(b.key) }))}</div>)}
               </div>
               <hr className="my-4 border-line" />
+              <h2 className="text-base font-semibold text-forest-800">Discount</h2>
+              <div className="mt-2">{discountLinks}</div>
+              <hr className="my-4 border-line" />
               <h2 className="text-base font-semibold text-forest-800">Availability</h2>
               <div className="mt-2">{checkboxLink("In stock only", f.inStock, hrefFor(f, { inStock: !f.inStock }))}</div>
-              {f.prices.length || f.inStock || f.seasonal || f.q ? (
+              {f.prices.length || f.discounts.length || f.inStock || f.seasonal || f.q ? (
                 <Link href={f.category ? `/category/${f.category.slug}` : "/shop"} className="mt-3 inline-block text-sm font-semibold text-forest-800 underline-offset-4 hover:underline">Clear filters</Link>
               ) : null}
             </div>

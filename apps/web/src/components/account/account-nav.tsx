@@ -11,8 +11,8 @@ import { cn } from "../ui/cn";
 const LINKS = [
   { href: "/account", label: "Profile", icon: UserRound, match: (p: string) => p === "/account" },
   { href: "/account/orders", label: "Orders", icon: Package, match: (p: string) => p.startsWith("/account/orders") },
+  { href: "/account/buy-again", label: "Buy again", icon: RotateCcw, match: (p: string) => p.startsWith("/account/buy-again") },
   { href: "/account/addresses", label: "Addresses", icon: MapPin, match: (p: string) => p.startsWith("/account/addresses") },
-  { href: "/buy-again", label: "Buy again", icon: RotateCcw, match: (p: string) => p === "/buy-again" },
   { href: "/wishlist", label: "Saved items", icon: Heart, match: (p: string) => p === "/wishlist" },
 ];
 
