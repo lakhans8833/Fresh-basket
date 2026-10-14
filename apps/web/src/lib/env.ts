@@ -1,4 +1,6 @@
 import "server-only";
+import { createHmac } from "node:crypto";
+import { envAlias } from "./env-alias";
 
 /**
  * Central place for server configuration. Nothing in this file is sent to the browser.
@@ -12,8 +14,20 @@ function read(name: string): string | undefined {
   return v && v.trim() !== "" ? v.trim() : undefined;
 }
 
-const supabaseUrl = read("NEXT_PUBLIC_SUPABASE_URL") ?? read("SUPABASE_URL");
-const supabaseAnonKey = read("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+// Supabase settings may carry a prefix from the Vercel integration (e.g. STORAGE_POSTGRES_URL).
+const supabaseUrl = envAlias("NEXT_PUBLIC_SUPABASE_URL") ?? envAlias("SUPABASE_URL");
+const supabaseAnonKey = envAlias("NEXT_PUBLIC_SUPABASE_ANON_KEY") ?? envAlias("SUPABASE_ANON_KEY");
+const serviceRoleKey = envAlias("SUPABASE_SERVICE_ROLE_KEY");
+
+/**
+ * APP_SECRET signs the app's own tokens. If it isn't set, derive one from a server-only Supabase
+ * secret (never sent to the browser) so a fresh Vercel project with only the Supabase integration
+ * still works. Setting APP_SECRET explicitly is still recommended.
+ */
+function derivedSecret(): string | undefined {
+  const base = envAlias("SUPABASE_JWT_SECRET") ?? serviceRoleKey;
+  return base ? createHmac("sha256", base).update("fresh-basket:app-secret:v1").digest("hex") : undefined;
+}
 const razorpayKeyId = read("RAZORPAY_KEY_ID");
 const razorpayKeySecret = read("RAZORPAY_KEY_SECRET");
 const razorpayWebhookSecret = read("RAZORPAY_WEBHOOK_SECRET");
@@ -25,9 +39,9 @@ const DEV_APP_SECRET = "dev-only-insecure-secret-change-me-0123456789";
 export const env = {
   isProd,
   // DATABASE_URL, or POSTGRES_URL as created by the Vercel ↔ Supabase integration.
-  databaseUrl: read("DATABASE_URL") ?? read("POSTGRES_URL") ?? "postgres://postgres:postgres@localhost:5432/freshbasket",
+  databaseUrl: read("DATABASE_URL") ?? envAlias("POSTGRES_URL") ?? "postgres://postgres:postgres@localhost:5432/freshbasket",
   appUrl: read("NEXT_PUBLIC_APP_URL") ?? (read("VERCEL_PROJECT_PRODUCTION_URL") ? `https://${read("VERCEL_PROJECT_PRODUCTION_URL")}` : "http://localhost:3000"),
-  appSecret: read("APP_SECRET") ?? (devFeaturesAllowed ? DEV_APP_SECRET : undefined),
+  appSecret: read("APP_SECRET") ?? derivedSecret() ?? (devFeaturesAllowed ? DEV_APP_SECRET : undefined),
 
   auth: {
     mode: (supabaseUrl && supabaseAnonKey ? "supabase" : devFeaturesAllowed ? "dev" : "unconfigured") as
@@ -39,11 +53,11 @@ export const env = {
   },
 
   storage: {
-    mode: (supabaseUrl && read("SUPABASE_SERVICE_ROLE_KEY") ? "supabase" : devFeaturesAllowed ? "local" : "none") as
+    mode: (supabaseUrl && serviceRoleKey ? "supabase" : devFeaturesAllowed ? "local" : "none") as
       | "supabase"
       | "local"
       | "none",
-    serviceRoleKey: read("SUPABASE_SERVICE_ROLE_KEY"),
+    serviceRoleKey,
     bucket: read("SUPABASE_STORAGE_BUCKET") ?? "product-images",
   },
 

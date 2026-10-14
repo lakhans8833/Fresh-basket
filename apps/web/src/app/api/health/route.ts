@@ -8,7 +8,8 @@ import { env } from "@/lib/env";
  */
 export async function GET() {
   let database: { ok: boolean; message: string; source: string };
-  const source = process.env.DATABASE_URL ? "DATABASE_URL" : process.env.POSTGRES_URL ? "POSTGRES_URL" : "not set (using localhost default)";
+  const prefixed = Object.keys(process.env).find((k) => k !== "POSTGRES_URL" && k.endsWith("_POSTGRES_URL") && process.env[k]);
+  const source = process.env.DATABASE_URL ? "DATABASE_URL" : process.env.POSTGRES_URL ? "POSTGRES_URL" : prefixed ?? "not set (using localhost default)";
   try {
     const r = await pool.query("select (select count(*) from public.products)::int as products, (select count(*) from public.store_settings)::int as settings");
     const row = r.rows[0] as { products: number; settings: number };
@@ -33,6 +34,7 @@ export async function GET() {
       storage: env.storage.mode,
       onlinePayments: env.payments.online ?? "off (Cash on delivery only)",
       appSecretSet: Boolean(process.env.APP_SECRET),
+      appSecretDerived: !process.env.APP_SECRET && Boolean(env.appSecret),
       appUrl: env.appUrl,
       cronSecretSet: Boolean(env.cronSecret),
     },

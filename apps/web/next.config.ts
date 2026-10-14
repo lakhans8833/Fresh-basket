@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
+import { envAlias } from "./src/lib/env-alias";
 
-const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname : null;
+// Public Supabase settings (safe for the browser by design). They may arrive with an integration
+// prefix (e.g. NEXT_PUBLIC_STORAGE_SUPABASE_URL); expose them under the standard names the
+// browser code and proxy read.
+const publicSupabaseUrl = envAlias("NEXT_PUBLIC_SUPABASE_URL") ?? envAlias("SUPABASE_URL");
+const publicSupabaseAnonKey = envAlias("NEXT_PUBLIC_SUPABASE_ANON_KEY") ?? envAlias("SUPABASE_ANON_KEY");
+const supabaseHost = publicSupabaseUrl ? new URL(publicSupabaseUrl).hostname : null;
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -11,6 +17,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@freshbasket/shared"],
+  env: {
+    ...(publicSupabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl } : {}),
+    ...(publicSupabaseAnonKey ? { NEXT_PUBLIC_SUPABASE_ANON_KEY: publicSupabaseAnonKey } : {}),
+  },
   poweredByHeader: false,
   images: {
     remotePatterns: supabaseHost ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }] : [],

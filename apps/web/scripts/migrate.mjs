@@ -18,11 +18,22 @@ const root = path.resolve(here, "../../..");
 const migrationsDir = path.join(root, "supabase/migrations");
 const seedFile = path.join(root, "supabase/seed.sql");
 
+/** Standard name, or the same name with a Vercel ↔ Supabase "Custom Prefix" (e.g. STORAGE_POSTGRES_URL). Mirrors src/lib/env-alias.ts. */
+function envAlias(name) {
+  const clean = (v) => (v && v.trim() !== "" ? v.trim() : undefined);
+  if (clean(process.env[name])) return clean(process.env[name]);
+  const key = Object.keys(process.env)
+    .filter((k) => k !== name && !k.includes("NEXT_PUBLIC") && k.endsWith(`_${name}`) && /^[A-Z0-9_]+$/.test(k) && clean(process.env[k]))
+    .sort()[0];
+  return key ? clean(process.env[key]) : undefined;
+}
+
+const nonPooling = envAlias("POSTGRES_URL_NON_POOLING");
 const raw =
   process.env.MIGRATIONS_DATABASE_URL ||
   process.env.DATABASE_URL ||
-  (process.env.POSTGRES_URL_NON_POOLING?.includes("pooler") ? process.env.POSTGRES_URL_NON_POOLING : undefined) ||
-  process.env.POSTGRES_URL;
+  (nonPooling?.includes("pooler") ? nonPooling : undefined) ||
+  envAlias("POSTGRES_URL");
 
 if (process.env.SKIP_DB_MIGRATIONS === "true" || !raw) {
   console.log(`[migrate] skipped (${raw ? "SKIP_DB_MIGRATIONS=true" : "no database URL configured"})`);
@@ -68,6 +79,13 @@ try {
     console.log(`[migrate] applying ${f}`);
     await client.query("begin");
     try {
+      // Two deployments building at once against the same database must not apply the same file twice.
+      // A transaction-level lock is released at commit, so it is safe behind Supabase's pooler.
+      await client.query("select pg_advisory_xact_lock(727274001)");
+      if ((await client.query("select 1 from public._fb_migrations where name = $1", [f])).rowCount) {
+        await client.query("commit");
+        continue;
+      }
       await client.query(sql);
       await client.query("insert into public._fb_migrations (name) values ($1)", [f]);
       await client.query("commit");
