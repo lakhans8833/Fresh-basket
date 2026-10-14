@@ -195,7 +195,11 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
               <div className="flex justify-between"><dt className="text-ink-soft">Delivery</dt><dd className="tabular-nums">{order.deliveryFee ? formatINR(order.deliveryFee) : "Free"}</dd></div>
               <div className="flex justify-between border-t border-dashed border-line pt-2 font-semibold"><dt>Total</dt><dd className="tabular-nums">{formatINR(order.total)}</dd></div>
             </dl>
-            <p className="mt-3 text-sm text-muted">{order.paymentMethod === "cod" ? "Cash on delivery" : order.paymentMethod === "mock" ? "Test payment (development)" : "Paid online via Razorpay"} · {PAYMENT_STATUS_LABEL[order.paymentStatus]}</p>
+            <p className="mt-3 text-sm text-muted">{order.paymentMethod === "cod"
+                ? order.paymentStatus === "cod_pending"
+                  ? `Cash on delivery · pay ${formatINR(order.total)} when it arrives`
+                  : `Cash on delivery · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`
+                : `${order.paymentMethod === "mock" ? "Test payment (development)" : "Online payment via Razorpay"} · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`}</p>
           </section>
           <div className="flex flex-col gap-2.5">
             <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Reorder these items</Button>
