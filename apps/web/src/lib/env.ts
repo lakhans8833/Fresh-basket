@@ -26,7 +26,7 @@ export const env = {
   isProd,
   // DATABASE_URL, or POSTGRES_URL as created by the Vercel ↔ Supabase integration.
   databaseUrl: read("DATABASE_URL") ?? read("POSTGRES_URL") ?? "postgres://postgres:postgres@localhost:5432/freshbasket",
-  appUrl: read("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
+  appUrl: read("NEXT_PUBLIC_APP_URL") ?? (read("VERCEL_PROJECT_PRODUCTION_URL") ? `https://${read("VERCEL_PROJECT_PRODUCTION_URL")}` : "http://localhost:3000"),
   appSecret: read("APP_SECRET") ?? (devFeaturesAllowed ? DEV_APP_SECRET : undefined),
 
   auth: {

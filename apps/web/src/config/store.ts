@@ -12,7 +12,15 @@ export const storeConfig = {
   serviceArea: process.env.NEXT_PUBLIC_SERVICE_AREA?.trim() || "Faridabad & nearby areas",
   defaultCity: process.env.NEXT_PUBLIC_DEFAULT_CITY?.trim() || "Faridabad",
   defaultState: process.env.NEXT_PUBLIC_DEFAULT_STATE?.trim() || "Haryana",
-  siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, ""),
+  // Falls back to the Vercel production domain (a Vercel system variable) before localhost, so a deployment
+  // without NEXT_PUBLIC_SITE_URL doesn't publish canonical links, sitemap and robots.txt pointing at localhost.
+  siteUrl: (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+    "http://localhost:3000"
+  ).replace(/\/+$/, ""),
   secondaryTagline: "Fresh From Farm To Your Home",
   themeColor: "#0b6623",
   backgroundColor: "#fcfbf7",

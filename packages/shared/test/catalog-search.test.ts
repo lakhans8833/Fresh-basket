@@ -31,3 +31,16 @@ describe("packGrams / unitPriceLabel", () => {
     expect(unitPriceLabel(1500, "1 bunch")).toBeNull();
   });
 });
+
+describe("expandSearchTerms — English names and Devanagari", () => {
+  it("doesn't turn 'sweet lime' into lemon", () => {
+    expect(expandSearchTerms("sweet lime")).toEqual(["sweet lime"]);
+    expect(englishNameFor("sweet lime")).toBeNull();
+  });
+  it("still maps Hindi words inside a phrase", () => {
+    expect(expandSearchTerms("fresh tamatar")).toContain("tomato");
+  });
+  it("keeps Devanagari text", () => {
+    expect(expandSearchTerms("टमाटर tomato")[0]).toBe("टमाटर tomato");
+  });
+});

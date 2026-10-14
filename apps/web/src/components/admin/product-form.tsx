@@ -59,31 +59,31 @@ export function labelGrams(label: string): number | null {
 const STANDARD_GRAMS = [100, 250, 500, 1000];
 
 /**
- * Adds rows for any missing 100 g / 250 g / 500 g / 1 kg size. When a row with a weight and price
- * exists, the new row's price/MRP are scaled from the nearest one (rounded up to the next rupee) and
- * its stock is copied; otherwise the price is left blank for the owner to fill in.
+ * Adds rows for any missing 100 g / 250 g / 500 g / 1 kg size. When an active row with a weight and price
+ * exists, the new row's price/MRP are scaled from the nearest one (rounded up to the next rupee); otherwise
+ * the price is left blank. New rows start with stock 0 — stock is never copied, because the same kilos
+ * can't be sold once per pack size. Existing rows are never removed (max 10 rows per product).
  */
 function withStandardSizes(rows: VariantRow[]): VariantRow[] {
   const blank = (r: VariantRow) => !r.id && !r.label.trim() && !r.price.trim() && !r.mrp.trim();
   const kept = rows.filter((r) => !blank(r));
   const priced = kept
     .map((r) => ({ r, g: labelGrams(r.label), price: Number(r.price), mrp: r.mrp.trim() ? Number(r.mrp) : null }))
-    .filter((x): x is { r: VariantRow; g: number; price: number; mrp: number | null } => !!x.g && x.r.price.trim() !== "" && Number.isFinite(x.price));
+    .filter((x): x is { r: VariantRow; g: number; price: number; mrp: number | null } => !!x.g && x.r.active && x.r.price.trim() !== "" && Number.isFinite(x.price));
   const have = new Set(kept.map((r) => labelGrams(r.label)).filter(Boolean));
   const scale = (v: number, from: number, to: number) => String(Math.ceil((v * to) / from));
-  const added = STANDARD_GRAMS.filter((g) => !have.has(g)).map((g): VariantRow => {
+  const room = Math.max(0, 10 - kept.length);
+  const added = STANDARD_GRAMS.filter((g) => !have.has(g)).slice(0, room).map((g): VariantRow => {
     const src = [...priced].sort((a, b) => Math.abs(a.g - g) - Math.abs(b.g - g) || a.g - b.g)[0];
     return {
       ...emptyVariant(),
       label: g >= 1000 ? `${g / 1000} kg` : `${g} g`,
       price: src ? scale(src.price, src.g, g) : "",
       mrp: src && src.mrp !== null && Number.isFinite(src.mrp) ? scale(src.mrp, src.g, g) : "",
-      stock: src ? src.r.stock : "0",
+      stock: "0",
     };
   });
-  return [...kept, ...added]
-    .sort((a, b) => (labelGrams(a.label) ?? Infinity) - (labelGrams(b.label) ?? Infinity))
-    .slice(0, 10);
+  return [...kept, ...added].sort((a, b) => (labelGrams(a.label) ?? Infinity) - (labelGrams(b.label) ?? Infinity));
 }
 
 const emptyVariant = (): VariantRow => ({ key: k(), label: "", price: "", mrp: "", stock: "0", active: true, hasOrders: false });
@@ -486,7 +486,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
               <Button type="button" variant="outline" size="sm" className="ml-2 mt-4" onClick={() => { setVariants(withStandardSizes(variants)); touch(); }}>
                 <Scale className="size-4" aria-hidden /> Add 100 g, 250 g, 500 g, 1 kg
               </Button>
-              <p className="mt-2 text-xs text-muted">New sizes are priced from your nearest existing size (per-gram rate, rounded up to the next rupee). Check prices and stock before saving.</p>
+              <p className="mt-2 text-xs text-muted">New sizes are priced from your nearest existing size (per-gram rate, rounded up to the next rupee) and start with stock 0. Enter real stock for each size — the same kilos can&apos;t be sold once per size.</p>
             </div>
           </Card>
         </div>

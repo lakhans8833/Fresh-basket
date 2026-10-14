@@ -10,12 +10,13 @@ import { ProductImage } from "./product-image";
 import { FavouriteButton } from "./favourite-button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
-import { defaultVariant } from "./default-variant";
+import { bestDealVariant, defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
 import { PackSizeSelect } from "./pack-size-select";
 
-function useCardState(product: ProductSummary) {
-  const firstAvailable = defaultVariant(product.variants);
+function useCardState(product: ProductSummary, preferDeal = false) {
+  // On Deals, open the card on the pack with the biggest saving so its "% off" matches why it's listed.
+  const firstAvailable = (preferDeal ? bestDealVariant(product.variants) : undefined) ?? defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(firstAvailable?.id);
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
@@ -34,12 +35,17 @@ function useCardState(product: ProductSummary) {
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1600);
   }
-  return { variant, setVariantId, qty, setQty, inCart, maxAddable, addToCart, justAdded };
+  // Changing the pack resets the quantity, so the stepper never shows more than the new pack allows.
+  const choosePack = (id: string) => {
+    setVariantId(id);
+    setQty(1);
+  };
+  return { variant, setVariantId: choosePack, qty, setQty, inCart, maxAddable, addToCart, justAdded };
 }
 
 /** Product card: white photo panel, pack size, price per pack, quantity and Add to Cart. */
-export function ProductCard({ product, priority, variant: layout = "grid" }: { product: ProductSummary; index?: number; priority?: boolean; variant?: "grid" | "compact" }) {
-  const s = useCardState(product);
+export function ProductCard({ product, priority, variant: layout = "grid", preferDeal }: { product: ProductSummary; index?: number; priority?: boolean; variant?: "grid" | "compact"; preferDeal?: boolean }) {
+  const s = useCardState(product, preferDeal);
   const v = s.variant;
   if (!v) return null;
   const out = v.stock <= 0;

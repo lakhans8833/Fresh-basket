@@ -84,8 +84,10 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           className="min-w-56 flex-1 sm:flex-none"
           disabled={out || maxAddable === 0}
           onClick={() => {
-            add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, qty);
-            toast(`${qty} × ${product.name} (${variant.label}) added to cart`);
+            const n = Math.min(qty, maxAddable); // the cart may have changed since the quantity was picked
+            if (n <= 0) return;
+            add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+            toast(`${n} × ${product.name} (${variant.label}) added to cart`);
             setQty(1);
           }}
         >

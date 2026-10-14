@@ -12,7 +12,7 @@ import { defaultVariant } from "../product/default-variant";
 import { percentOff } from "../ui/price";
 import { cn } from "../ui/cn";
 
-type Suggest = { products: ProductSummary[]; matchedName: string | null };
+type Suggest = { products: ProductSummary[]; matchedName: string | null; term: string };
 
 /** Header search with type-ahead suggestions (understands Hindi names like "tamatar"). */
 export function SearchBox() {
@@ -39,7 +39,7 @@ export function SearchBox() {
       try {
         const r = await fetch(`/api/search/suggest?q=${encodeURIComponent(term)}`, { signal: ctrl.signal });
         if (r.ok) {
-          setData((await r.json()) as Suggest);
+          setData({ ...((await r.json()) as Omit<Suggest, "term">), term });
           setActive(-1);
         }
       } catch {
@@ -71,7 +71,9 @@ export function SearchBox() {
     setOpen(false);
   }
 
-  const products = term.length >= 2 ? data?.products ?? [] : [];
+  // Only show (and allow Enter / Add on) suggestions that belong to what's typed now — never older ones.
+  const fresh = data !== null && data.term === term;
+  const products = term.length >= 2 && fresh ? data.products : [];
   const showPanel = open && term.length >= 2 && (data !== null || loading);
 
   function submit(e: FormEvent) {
@@ -105,7 +107,7 @@ export function SearchBox() {
         aria-controls={listId}
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
         value={q}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+        onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKey}
         placeholder="Search fruits & vegetables…"
@@ -129,7 +131,7 @@ export function SearchBox() {
             {loading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
             <span>
               Showing results for “{term}”
-              {data?.matchedName ? <> · <span className="font-medium capitalize text-ink-soft">{data.matchedName}</span></> : null}
+              {fresh && data?.matchedName ? <> · <span className="font-medium capitalize text-ink-soft">{data.matchedName}</span></> : null}
             </span>
           </p>
           <ul id={listId} role="listbox" aria-label="Suggestions" className="max-h-[22rem] overflow-y-auto">
@@ -137,7 +139,7 @@ export function SearchBox() {
               <SuggestionRow key={p.id} id={`${listId}-${i}`} product={p} active={i === active} onHover={() => setActive(i)} />
             ))}
           </ul>
-          {!loading && products.length === 0 ? (
+          {!loading && fresh && products.length === 0 ? (
             <p className="px-4 py-4 text-sm text-muted">No matches yet. Try another name, e.g. “palak”, “aloo” or “bhindi”.</p>
           ) : null}
           <Link href={`/shop?q=${encodeURIComponent(term)}`} className="flex items-center justify-center gap-1.5 border-t border-line px-4 py-3 text-sm font-semibold text-forest-800 hover:bg-lime-50">

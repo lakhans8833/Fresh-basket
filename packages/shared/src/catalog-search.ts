@@ -35,7 +35,7 @@ const NAMES: Record<string, string[]> = {
   "french beans": ["beans", "sem", "phali", "frans bean"],
   "spring onion": ["hara pyaz", "hari pyaz", "green onion", "scallion"],
   "curry leaves": ["kadi patta", "kari patta", "curry patta", "meetha neem"],
-  lemon: ["nimbu", "nimboo", "lime"],
+  lemon: ["nimbu", "nimboo"],
   corn: ["bhutta", "makka", "makki", "sweet corn"],
   mushroom: ["khumb", "khumbi"],
   jackfruit: ["kathal", "katahal"],
@@ -60,7 +60,8 @@ const NAMES: Record<string, string[]> = {
   "raw mango": ["kacha aam", "kairi", "keri"],
 };
 
-const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+// Keeps Latin letters, digits and Devanagari (so "टमाटर tomato" keeps both words).
+const norm = (s: string) => s.toLowerCase().normalize("NFC").replace(/[^a-z0-9\u0900-\u097f ]+/g, " ").replace(/\s+/g, " ").trim();
 
 const ALIAS_TO_NAME = new Map<string, string>();
 for (const [name, aliases] of Object.entries(NAMES)) {
@@ -76,8 +77,11 @@ export function expandSearchTerms(query: string): string[] {
   if (!q) return [];
   const out = new Set<string>([q]);
   const whole = ALIAS_TO_NAME.get(q);
+  // An English product name ("sweet lime", "green chilli") is searched as-is; splitting it into words
+  // would turn "lime" or "chilli" into other products.
+  const isEnglishName = Object.prototype.hasOwnProperty.call(NAMES, q);
   if (whole) out.add(whole);
-  else {
+  else if (!isEnglishName) {
     const words = q.split(" ");
     // two-word names first ("shimla mirch"), then single words
     for (let i = 0; i < words.length - 1; i++) {

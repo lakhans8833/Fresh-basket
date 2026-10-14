@@ -15,7 +15,8 @@ export const metadata: Metadata = {
 
 /** Products with a pack priced below the MRP set in Admin — nothing here is made up. */
 export default async function DealsPage() {
-  const deals = await listDeals();
+  // Like the home page, show an empty state instead of an error page if the catalogue can't be read.
+  const deals = await listDeals().catch((e) => (console.error("[deals]", e), []));
   return (
     <>
       <PageBanner title="Deals & offers" subtitle="Products priced below MRP right now — biggest savings first." icon={<BadgePercent className="size-7" aria-hidden />} script={storeConfig.secondaryTagline} />
@@ -30,7 +31,7 @@ export default async function DealsPage() {
               <Tag className="size-4" aria-hidden /> {deals.length} {deals.length === 1 ? "item" : "items"}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {deals.map((p, i) => <ProductCard key={p.id} product={p} priority={i < 4} />)}
+              {deals.map((p, i) => <ProductCard key={p.id} product={p} priority={i < 4} preferDeal />)}
             </div>
           </>
         )}

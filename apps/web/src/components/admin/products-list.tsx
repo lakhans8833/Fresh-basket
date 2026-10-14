@@ -77,11 +77,11 @@ function ProductsListInner() {
   const [sizing, setSizing] = useState(false);
 
   async function addStandardSizes() {
-    if (!confirm("Add 100 g, 250 g, 500 g and 1 kg sizes to every product sold by weight?\n\nNew sizes are priced in proportion to each product's existing price (rounded up to the next rupee) and copy its stock. Products sold per bunch/piece are skipped. Please review prices and stock afterwards.")) return;
+    if (!confirm("Add 100 g, 250 g, 500 g and 1 kg sizes to every product sold by weight?\n\nNew sizes are priced in proportion to each product's existing price (rounded up to the next rupee). New sizes start with stock 0 — set real stock in Inventory before they can be ordered. Products sold per bunch/piece are skipped.")) return;
     setSizing(true);
     try {
       const r = await api<{ added: number }>("/api/admin/products/standard-sizes", { method: "POST", json: {} });
-      toast(r.added ? `${r.added} pack size${r.added === 1 ? "" : "s"} added — please review prices and stock` : "All weight-based products already have these sizes");
+      toast(r.added ? `${r.added} pack size${r.added === 1 ? "" : "s"} added with stock 0 — set their stock in Inventory` : "All weight-based products already have these sizes");
       reload();
     } catch (e) {
       toast(errorMessage(e));
