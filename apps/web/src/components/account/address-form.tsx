@@ -51,18 +51,26 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only autofill once when the PIN resolves
   }, [pin.status]);
 
-  const set = (k: keyof AddressDraft) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [k]: e.target.value });
+  // Errors come from the last submit. Once the customer edits a field, hide that field's old
+  // error (e.g. "Enter a valid 6-digit PIN code" while they were still typing) until the next submit.
+  const [edited, setEdited] = useState<{ errors: Record<string, string>; keys: Set<string> }>(() => ({ errors, keys: new Set() }));
+  const editedKeys = edited.errors === errors ? edited.keys : new Set<string>();
+  const change = (k: keyof AddressDraft, next: AddressDraft) => {
+    if (errors[k] && !editedKeys.has(k)) setEdited({ errors, keys: new Set(editedKeys).add(k) });
+    onChange(next);
+  };
+  const set = (k: keyof AddressDraft) => (e: React.ChangeEvent<HTMLInputElement>) => change(k, { ...value, [k]: e.target.value });
   const id = (k: string) => `${idPrefix}-${k}`;
-  const err = (k: string) => errors[k] ?? null;
-  const described = (k: string) => (errors[k] ? `${id(k)}-error` : undefined);
+  const err = (k: string) => (editedKeys.has(k) ? null : errors[k] ?? null);
+  const described = (k: string) => (err(k) ? `${id(k)}-error` : undefined);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <Field label="Full name" htmlFor={id("fullName")} error={err("fullName")}>
-        <Input id={id("fullName")} autoComplete="name" value={value.fullName} onChange={set("fullName")} invalid={!!errors.fullName} aria-describedby={described("fullName")} />
+        <Input id={id("fullName")} autoComplete="name" value={value.fullName} onChange={set("fullName")} invalid={!!err("fullName")} aria-describedby={described("fullName")} />
       </Field>
       <Field label="Mobile number" htmlFor={id("phone")} error={err("phone")} hint="For delivery updates">
-        <Input id={id("phone")} type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit mobile" value={value.phone} onChange={set("phone")} invalid={!!errors.phone} aria-describedby={described("phone")} />
+        <Input id={id("phone")} type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit mobile" value={value.phone} onChange={set("phone")} invalid={!!err("phone")} aria-describedby={described("phone")} />
       </Field>
       <Field label="PIN code" htmlFor={id("pincode")} error={err("pincode")}
         hint={
@@ -77,8 +85,8 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
           autoComplete="postal-code"
           maxLength={6}
           value={value.pincode}
-          onChange={(e) => onChange({ ...value, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-          invalid={!!errors.pincode || pin.status === "no"}
+          onChange={(e) => change("pincode", { ...value, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+          invalid={!!err("pincode") || pin.status === "no"}
           aria-describedby={described("pincode")}
         />
       </Field>
@@ -86,7 +94,7 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
         <Input id={id("label")} value={value.label} onChange={set("label")} maxLength={30} />
       </Field>
       <Field label="Flat / house no., building, street" htmlFor={id("line1")} error={err("line1")} className="sm:col-span-2">
-        <Input id={id("line1")} autoComplete="address-line1" value={value.line1} onChange={set("line1")} invalid={!!errors.line1} aria-describedby={described("line1")} />
+        <Input id={id("line1")} autoComplete="address-line1" value={value.line1} onChange={set("line1")} invalid={!!err("line1")} aria-describedby={described("line1")} />
       </Field>
       <Field label="Area / locality (optional)" htmlFor={id("line2")} error={err("line2")}>
         <Input id={id("line2")} autoComplete="address-line2" value={value.line2 ?? ""} onChange={set("line2")} />
@@ -95,10 +103,10 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
         <Input id={id("landmark")} value={value.landmark ?? ""} onChange={set("landmark")} />
       </Field>
       <Field label="City" htmlFor={id("city")} error={err("city")}>
-        <Input id={id("city")} autoComplete="address-level2" value={value.city} onChange={set("city")} invalid={!!errors.city} aria-describedby={described("city")} />
+        <Input id={id("city")} autoComplete="address-level2" value={value.city} onChange={set("city")} invalid={!!err("city")} aria-describedby={described("city")} />
       </Field>
       <Field label="State" htmlFor={id("state")} error={err("state")}>
-        <Input id={id("state")} autoComplete="address-level1" value={value.state} onChange={set("state")} invalid={!!errors.state} aria-describedby={described("state")} />
+        <Input id={id("state")} autoComplete="address-level1" value={value.state} onChange={set("state")} invalid={!!err("state")} aria-describedby={described("state")} />
       </Field>
     </div>
   );
