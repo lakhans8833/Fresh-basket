@@ -153,9 +153,16 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
         if (input.saveAddress) {
           const { rows: cnt } = await c.query<{ n: string }>("select count(*) as n from addresses where user_id = $1", [userId]);
           const first = Number(cnt[0]?.n ?? 0) === 0;
+          // Don't save the same address twice (repeat orders to the same place).
           await c.query(
             `insert into addresses (user_id, label, full_name, phone, line1, line2, landmark, city, state, pincode, is_default)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+             select $1::uuid, $2::text, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text, $9::text, $10::text, $11::boolean
+             where not exists (
+               select 1 from addresses x
+               where x.user_id = $1 and x.pincode = $10
+                 and lower(btrim(x.line1)) = lower(btrim($5)) and lower(btrim(coalesce(x.line2, ''))) = lower(btrim(coalesce($6, '')))
+                 and lower(btrim(x.full_name)) = lower(btrim($3)) and x.phone = $4
+             )`,
             [userId, a.label, a.fullName, a.phone, a.line1, a.line2 ?? null, a.landmark ?? null, a.city, a.state, a.pincode, first],
           );
         }

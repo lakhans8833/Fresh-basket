@@ -10,6 +10,7 @@ import { getSettings } from "@/lib/settings";
 import { getSession } from "@/lib/auth";
 import { CartProvider } from "@/components/cart/cart-context";
 import { SessionProvider } from "@/components/account/session-context";
+import { AutoLocation } from "@/components/layout/auto-location";
 import { ToastProvider } from "@/components/ui/toast";
 import { PwaRegister } from "@/components/layout/pwa-register";
 import { storeConfig } from "@/config/store";
@@ -60,7 +61,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </a>
         <SessionProvider initial={session?.profile ?? null}>
           <CartProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              {children}
+              <AutoLocation />
+            </ToastProvider>
           </CartProvider>
         </SessionProvider>
         <PwaRegister />
