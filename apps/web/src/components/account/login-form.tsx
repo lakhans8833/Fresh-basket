@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { ShieldCheck, UserRound, Store } from "lucide-react";
+import { KeyRound, Mail, ShieldCheck, UserRound, Store } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { useSession } from "./session-context";
+import { OtpLogin } from "./otp-login";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { DevBadge, Notice } from "../ui/feedback";
@@ -15,6 +16,7 @@ import { cn } from "../ui/cn";
 export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: boolean }) {
   const router = useRouter();
   const { refresh } = useSession();
+  const [method, setMethod] = useState<"code" | "password">("code");
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -72,7 +74,7 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
       const raw = (err as Error).message || "";
       if (/invalid login credentials/i.test(raw)) {
         setLastError("credentials");
-        setError("Email or password is incorrect. Use “Forgot password?” below to set a new one, or create an account if you haven't signed up on this website yet.");
+        setError("Email or password is incorrect. Use “Forgot password?” below, or sign in with an email code instead — no password needed.");
       } else if (/email not confirmed/i.test(raw)) {
         setLastError("unconfirmed");
         setError("Please confirm your email first — open the link we emailed you (check spam too).");
@@ -127,13 +129,13 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
       <div className="flex items-center gap-3">
         <span className="grid size-12 place-items-center rounded-full bg-lime-100"><LeafMark className="size-7 text-leaf-500" /></span>
         <div>
-          <h1 className="text-[1.75rem] font-semibold leading-tight text-forest-900">{tab === "signin" ? "Welcome back" : "Create your account"}</h1>
+          <h1 className="text-[1.75rem] font-semibold leading-tight text-forest-900">{mode === "supabase" && method === "password" && tab === "signup" ? "Create your account" : "Welcome back"}</h1>
           <p className="text-sm text-muted">Sign in to check out and track your orders.</p>
         </div>
       </div>
 
-      {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
-      {info ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
+      {error && !(mode === "supabase" && method === "code" && !linkError) ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {info && !(mode === "supabase" && method === "code") ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
 
       {mode === "dev" ? (
         <div className="mt-6 space-y-5">
@@ -162,7 +164,18 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         </div>
       ) : mode === "supabase" ? (
         <>
-          <div role="tablist" className="mt-6 grid grid-cols-2 rounded-full bg-sage-100 p-1 text-sm font-semibold">
+          <div role="tablist" aria-label="How to sign in" className="mt-6 grid grid-cols-2 rounded-full bg-sage-100 p-1 text-sm font-semibold">
+            {([["code", "Email code", Mail], ["password", "Password", KeyRound]] as const).map(([m, label, Icon]) => (
+              <button key={m} role="tab" type="button" aria-selected={method === m} onClick={() => { setMethod(m); setError(null); setInfo(null); }} className={cn("inline-flex h-10 items-center justify-center gap-1.5 rounded-full", method === m ? "bg-white text-forest-900 shadow-sm" : "text-muted")}>
+                <Icon className="size-4" aria-hidden /> {label}
+              </button>
+            ))}
+          </div>
+          {method === "code" ? (
+            <OtpLogin next={next} onSignedIn={done} />
+          ) : (
+          <>
+          <div role="tablist" className="mt-4 grid grid-cols-2 rounded-full border border-line p-1 text-sm font-semibold">
             {(["signin", "signup"] as const).map((t) => (
               <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)} className={cn("h-10 rounded-full", tab === t ? "bg-white text-forest-900 shadow-sm" : "text-muted")}>
                 {t === "signin" ? "Sign in" : "Create account"}
@@ -197,6 +210,8 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
               ) : null}
             </div>
           ) : null}
+          </>
+          )}
           <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="size-3.5" aria-hidden /> Secured by Supabase Auth</p>
         </>
       ) : (
