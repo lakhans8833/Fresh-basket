@@ -179,17 +179,22 @@ export async function getVariantsForCart(ids: string[]) {
  * Best sellers by units sold in the last 30 days (excluding cancelled orders).
  * Returns an empty list when there isn't enough sales history yet.
  */
-export async function listBestSellers(limit = 8): Promise<ProductSummary[]> {
+/** Ids of products sold most in the last 30 days (≥3 units), or [] when there are fewer than 4. */
+export async function bestSellerIds(limit = 8): Promise<string[]> {
   const rows = await query<{ product_id: string }>(
     `select oi.product_id from order_items oi join orders o on o.id = oi.order_id
       where o.status <> 'cancelled' and o.created_at > now() - interval '30 days' and oi.product_id is not null
       group by oi.product_id having sum(oi.quantity) >= 3 order by sum(oi.quantity) desc limit $1`,
     [limit],
   );
-  if (rows.length < 4) return [];
-  const all = await listProducts({});
-  const byId = new Map(all.map((p) => [p.id, p]));
-  return rows.map((r) => byId.get(r.product_id)).filter((p): p is ProductSummary => Boolean(p));
+  return rows.length < 4 ? [] : rows.map((r) => r.product_id);
+}
+
+export async function listBestSellers(limit = 8): Promise<ProductSummary[]> {
+  const ids = await bestSellerIds(limit);
+  if (!ids.length) return [];
+  const byId = new Map((await listProducts({ ids })).map((p) => [p.id, p]));
+  return ids.map((id) => byId.get(id)).filter((p): p is ProductSummary => Boolean(p));
 }
 
 /** Best saving (whole %, rounded down) across a product's in-stock packs; 0 when none is below MRP. */
@@ -202,18 +207,21 @@ export function bestSavingPct(p: ProductSummary): number {
 }
 
 /** Products with at least one in-stock pack priced below its MRP (set in Admin) — biggest saving first. */
-export async function listDeals(): Promise<ProductSummary[]> {
-  const items = await listProducts({ inStockOnly: true });
+export function dealsFrom(items: ProductSummary[]): ProductSummary[] {
   return items
+    .filter((p) => p.inStock)
     .map((p) => ({ p, pct: bestSavingPct(p) }))
     .filter((x) => x.pct >= 1)
     .sort((a, b) => b.pct - a.pct || a.p.name.localeCompare(b.p.name))
     .map((x) => x.p);
 }
 
+export async function listDeals(): Promise<ProductSummary[]> {
+  return dealsFrom(await listProducts({ inStockOnly: true }));
+}
+
 /** Product counts per price bucket (by each product's lowest price), for the home page tiles. */
-export async function priceBucketCounts(): Promise<{ key: string; label: string; count: number }[]> {
-  const items = await listProducts({});
+export function priceBucketsFrom(items: ProductSummary[]): { key: string; label: string; count: number }[] {
   return PRICE_BUCKETS.map((b) => ({
     key: b.key,
     label: b.label,

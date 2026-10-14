@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { buildWhatsAppUrl, type PromoBanner } from "@freshbasket/shared";
-import { bestSavingPct, listBestSellers, listBuyAgain, listCategories, listDeals, listProducts, priceBucketCounts } from "@/lib/catalog";
+import { bestSavingPct, bestSellerIds, dealsFrom, listBuyAgain, listCategories, listProducts, priceBucketsFrom } from "@/lib/catalog";
 import { listActiveBanners } from "@/lib/banners";
 import { getSession } from "@/lib/auth";
 import { listActiveDeliveryAreas, listActiveSlots } from "@/lib/delivery";
@@ -18,28 +18,34 @@ const safe = <T,>(p: Promise<T>, fallback: T) => p.catch((e) => (console.error("
 export default async function HomePage() {
   const settings = await getSettings();
   const session = await getSession().catch(() => null);
-  const [categories, featured, bestSellers, seasonal, areas, slots, adminBanners, deals, priceBuckets, buyAgain] = await Promise.all([
+  // One catalogue read for the whole page (deals, price ranges, rails are all derived from it),
+  // so the home page needs only a handful of database round trips.
+  const [categories, all, bestIds, areas, slots, adminBanners, buyAgain] = await Promise.all([
     safe(listCategories(), []),
-    safe(listProducts({ featured: true, limit: 8 }), []),
-    safe(listBestSellers(8), []),
-    safe(listProducts({ seasonal: true, limit: 4 }), []),
+    safe(listProducts({}), []),
+    safe(bestSellerIds(8), []),
     safe(listActiveDeliveryAreas(), []),
     safe(listActiveSlots(), []),
     safe(listActiveBanners(), []),
-    safe(listDeals(), []),
-    safe(priceBucketCounts(), []),
     session ? safe(listBuyAgain(session.userId, 8), { products: [], lastVariant: {} }) : Promise.resolve({ products: [], lastVariant: {} }),
   ]);
+  const byId = new Map(all.map((p) => [p.id, p]));
+  const bestSellers = bestIds.map((id) => byId.get(id)).filter((p): p is (typeof all)[number] => Boolean(p));
+  const featured = all.filter((p) => p.featured).slice(0, 8);
+  const seasonalAll = all.filter((p) => p.seasonal);
+  const seasonal = seasonalAll.slice(0, 4);
+  const seasonalCount = seasonalAll.length;
+  const deals = dealsFrom(all);
+  const priceBuckets = priceBucketsFrom(all);
+  const inCategory = (id: string) => all.filter((p) => p.categoryId === id).slice(0, 4);
+
   const leafy = categories.find((c) => /leaf|green/.test(c.slug));
   // Extra rails appear only when the store actually has these categories with products in them.
   const fruits = categories.find((c) => /fruit/.test(c.slug) && !/exotic/.test(c.slug) && (c.productCount ?? 0) > 0);
   const combos = categories.find((c) => /combo|value|pack/.test(c.slug) && (c.productCount ?? 0) > 0);
-  const [leafyProducts, fruitProducts, comboProducts] = await Promise.all([
-    leafy ? safe(listProducts({ category: leafy.slug, limit: 4 }), []) : Promise.resolve([]),
-    fruits ? safe(listProducts({ category: fruits.slug, limit: 4 }), []) : Promise.resolve([]),
-    combos ? safe(listProducts({ category: combos.slug, limit: 4 }), []) : Promise.resolve([]),
-  ]);
-  const seasonalCount = seasonal.length ? (await safe(listProducts({ seasonal: true }), [])).length : 0;
+  const leafyProducts = leafy ? inCategory(leafy.id) : [];
+  const fruitProducts = fruits ? inCategory(fruits.id) : [];
+  const comboProducts = combos ? inCategory(combos.id) : [];
   const whatsapp = resolveWhatsAppNumber(settings.whatsapp);
   const area = storeConfig.serviceArea;
 
