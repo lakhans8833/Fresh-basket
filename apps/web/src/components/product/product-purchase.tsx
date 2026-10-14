@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
-import { formatINR, MAX_QTY_PER_LINE, type ProductDetail } from "@freshbasket/shared";
+import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
@@ -32,6 +32,7 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
         {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">MRP {formatINR(variant.mrp)}</s> : null}
         <DiscountBadge price={variant.price} mrp={variant.mrp} className="self-center" />
       </p>
+      {unitPriceLabel(variant.price, variant.label) ? <p className="mt-1 text-sm tabular-nums text-muted">({unitPriceLabel(variant.price, variant.label)})</p> : null}
       {variant.mrp && variant.mrp > variant.price ? (
         <p className="mt-1 text-sm font-medium text-leaf-600">You save {formatINR(variant.mrp - variant.price)} on this pack</p>
       ) : null}
@@ -55,6 +56,7 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
                 <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
                 {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
                 {percentOff(v.price, v.mrp) ? <span className="mt-1 rounded bg-lime-200/70 px-1.5 py-px text-[0.6875rem] font-semibold text-forest-800">{percentOff(v.price, v.mrp)}% OFF</span> : null}
+                {unitPriceLabel(v.price, v.label) ? <span className="mt-0.5 text-[0.6875rem] tabular-nums text-muted">{unitPriceLabel(v.price, v.label)}</span> : null}
                 {v.stock <= 0 ? <span className="text-[0.6875rem] font-medium text-danger">Out of stock</span> : null}
                 {on ? <Check className="absolute right-2 top-2 size-4 text-leaf-600" aria-hidden /> : null}
               </label>

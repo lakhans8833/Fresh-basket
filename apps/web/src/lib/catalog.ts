@@ -1,5 +1,6 @@
 import "server-only";
 import type { Category, ProductDetail, ProductSummary, Variant } from "@freshbasket/shared";
+import { expandSearchTerms } from "@freshbasket/shared";
 import { query, queryOne } from "./db";
 
 type ProductRow = {
@@ -69,8 +70,14 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
   const where: string[] = ["p.active", "c.active"];
   const params: unknown[] = [];
   if (f.q && f.q.trim()) {
-    params.push(`%${f.q.trim().toLowerCase().replace(/[%_\\]/g, (m) => "\\" + m)}%`);
-    where.push(`(lower(p.name) like $${params.length} or lower(c.name) like $${params.length})`);
+    // "tamatar" also searches "tomato" (Hindi/Hinglish names, see packages/shared/src/catalog-search.ts)
+    const terms = expandSearchTerms(f.q);
+    const ors = (terms.length ? terms : [f.q.trim().toLowerCase()]).map((t) => {
+      params.push(`%${t.replace(/[%_\\]/g, (m) => "\\" + m)}%`);
+      const n = params.length;
+      return `lower(p.name) like $${n} or lower(c.name) like $${n} or replace(p.slug, '-', ' ') like $${n}`;
+    });
+    where.push(`(${ors.join(" or ")})`);
   }
   if (f.category) {
     params.push(f.category);
@@ -135,4 +142,23 @@ export async function listBestSellers(limit = 8): Promise<ProductSummary[]> {
   const all = await listProducts({});
   const byId = new Map(all.map((p) => [p.id, p]));
   return rows.map((r) => byId.get(r.product_id)).filter((p): p is ProductSummary => Boolean(p));
+}
+
+/** Best saving (whole %, rounded down) across a product's in-stock packs; 0 when none is below MRP. */
+export function bestSavingPct(p: ProductSummary): number {
+  let best = 0;
+  for (const v of p.variants) {
+    if (v.stock > 0 && v.mrp && v.mrp > v.price) best = Math.max(best, Math.floor(((v.mrp - v.price) / v.mrp) * 100));
+  }
+  return best;
+}
+
+/** Products with at least one in-stock pack priced below its MRP (set in Admin) — biggest saving first. */
+export async function listDeals(): Promise<ProductSummary[]> {
+  const items = await listProducts({ inStockOnly: true });
+  return items
+    .map((p) => ({ p, pct: bestSavingPct(p) }))
+    .filter((x) => x.pct >= 1)
+    .sort((a, b) => b.pct - a.pct || a.p.name.localeCompare(b.p.name))
+    .map((x) => x.p);
 }

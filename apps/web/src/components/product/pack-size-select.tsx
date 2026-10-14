@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { formatINR, type ProductSummary } from "@freshbasket/shared";
+import { formatINR, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
 import { percentOff } from "../ui/price";
 import { cn } from "../ui/cn";
 
@@ -119,6 +119,7 @@ export function PackSizeSelect({
                     <span className="text-[0.9375rem] font-bold tabular-nums text-ink">{formatINR(v.price)}</span>
                     {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted tabular-nums">{formatINR(v.mrp)}</s> : null}
                   </span>
+                  {unitPriceLabel(v.price, v.label) ? <span className="mt-0.5 block text-[0.6875rem] tabular-nums text-muted">{unitPriceLabel(v.price, v.label)}</span> : null}
                   {out ? <span className="mt-0.5 block text-xs font-medium text-danger">Out of stock</span> : null}
                 </span>
                 {isSel ? <Check className="mt-0.5 size-5 shrink-0 text-leaf-600" aria-hidden /> : null}

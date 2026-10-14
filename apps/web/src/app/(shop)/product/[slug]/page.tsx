@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { packGrams } from "@freshbasket/shared";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Home, Tag } from "lucide-react";
@@ -51,6 +52,9 @@ export default async function ProductPage({ params }: { params: Params }) {
     })),
   };
 
+  // "Sold by weight" is derived from the pack labels; other notes are the highlights set in Admin.
+  const byWeight = product.variants.length > 0 && product.variants.every((v) => packGrams(v.label) !== null);
+  const notes = [...(byWeight ? ["Sold by weight"] : []), ...product.highlights.filter((h) => h.toLowerCase() !== "sold by weight")];
   return (
     <>
       <div className="container-page pt-6 md:pt-10">
@@ -70,9 +74,9 @@ export default async function ProductPage({ params }: { params: Params }) {
           <div className="lg:pt-4">
             {product.seasonal ? <p className="eyebrow text-leaf-600">In season now</p> : null}
             <h1 className="mt-1 text-[2.25rem] font-bold leading-tight text-forest-800 md:text-[2.75rem]">{product.name}</h1>
-            {product.highlights.length ? (
+            {notes.length ? (
               <ul className="mt-3 flex flex-wrap gap-2" aria-label="Product notes">
-                {product.highlights.map((h) => (
+                {notes.map((h) => (
                   <li key={h} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1 text-[0.8125rem] text-ink-soft">
                     <Tag className="size-3.5 text-leaf-600" aria-hidden /> {h}
                   </li>

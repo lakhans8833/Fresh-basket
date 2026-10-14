@@ -6,3 +6,4 @@ export * from "./slots";
 export * from "./types";
 export * from "./schemas";
 export * from "./whatsapp";
+export * from "./catalog-search";

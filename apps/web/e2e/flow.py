@@ -25,7 +25,7 @@ with sync_playwright() as p:
 
     # Browse: home -> search -> product
     page.goto(f"{BASE}/")
-    page.get_by_role("searchbox", name=re.compile("Search")).first.fill("tomato")
+    page.get_by_role("combobox", name=re.compile("Search")).first.fill("tomato")
     page.keyboard.press("Enter")
     page.wait_for_url(re.compile(r"/shop\?q=tomato"))
     expect(page.get_by_role("heading", name=re.compile("Results for"))).to_be_visible()

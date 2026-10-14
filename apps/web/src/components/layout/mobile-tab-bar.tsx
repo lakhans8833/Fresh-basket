@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutGrid, ShoppingBag, UserRound } from "lucide-react";
+import { Home, LayoutGrid, ShoppingBag, Tag, UserRound } from "lucide-react";
 import { cn } from "../ui/cn";
 
 const TABS = [
   { href: "/", label: "Home", icon: Home, match: (p: string) => p === "/" },
   { href: "/categories", label: "Categories", icon: LayoutGrid, match: (p: string) => p.startsWith("/categories") || p.startsWith("/shop") },
+  { href: "/deals", label: "Offers", icon: Tag, match: (p: string) => p === "/deals" },
   { href: "/account/orders", label: "Orders", icon: ShoppingBag, match: (p: string) => p.startsWith("/account/orders") || p.startsWith("/orders") },
   { href: "/account", label: "Profile", icon: UserRound, match: (p: string) => p === "/account" || p.startsWith("/account/addresses") || p === "/login" },
 ];
@@ -18,7 +19,7 @@ export function MobileTabBar() {
   if (pathname.startsWith("/checkout") || pathname.startsWith("/pay")) return null;
   return (
     <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {TABS.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
           return (

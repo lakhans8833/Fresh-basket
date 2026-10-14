@@ -8,6 +8,7 @@ const STATIC: { path: string; priority: number; changeFrequency: "daily" | "week
   { path: "/", priority: 1, changeFrequency: "daily" },
   { path: "/shop", priority: 0.9, changeFrequency: "daily" },
   { path: "/categories", priority: 0.7, changeFrequency: "weekly" },
+  { path: "/deals", priority: 0.7, changeFrequency: "daily" },
   { path: "/about", priority: 0.5, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.5, changeFrequency: "monthly" },
   { path: "/help", priority: 0.4, changeFrequency: "monthly" },

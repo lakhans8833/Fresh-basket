@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Check, ShoppingCart } from "lucide-react";
-import { formatINR, MAX_QTY_PER_LINE, type ProductSummary } from "@freshbasket/shared";
+import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "./product-image";
@@ -90,6 +90,7 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
             {v.mrp && v.mrp > v.price ? <s className="text-xs">{formatINR(v.mrp)}</s> : null}
             {percentOff(v.price, v.mrp) ? <span className="text-xs font-semibold text-offer">{percentOff(v.price, v.mrp)}% off</span> : null}
           </p>
+          {unitPriceLabel(v.price, v.label) ? <p className="text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
           {product.variants.length > 1 ? <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} className="mt-1.5 max-w-[12rem]" /> : null}
           {out ? <p className="text-xs font-medium text-danger">Out of stock</p> : null}
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
@@ -128,6 +129,7 @@ export function ProductCard({ product, priority, variant: layout = "grid" }: { p
           <span className="text-lg font-bold tabular-nums text-forest-800 sm:text-xl">{formatINR(v.price)}</span>
           {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted">MRP {formatINR(v.mrp)}</s> : null}
         </p>
+        {unitPriceLabel(v.price, v.label) ? <p className="-mt-1 text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
         <p className="min-h-4 text-xs font-medium" aria-live="polite">
           {out ? <span className="text-danger">Out of stock</span> : v.stock <= 5 ? <span className="text-amber">Only {v.stock} left</span> : s.inCart > 0 ? <span className="text-leaf-600">{s.inCart} in cart</span> : null}
         </p>

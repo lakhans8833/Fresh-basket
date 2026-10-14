@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useId, useState, type FormEvent } from "react";
-import { ChevronDown, LayoutDashboard, MapPin, Search, ShoppingCart, Sprout, Truck, UserRound, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Suspense, useState } from "react";
+import { ChevronDown, LayoutDashboard, MapPin, ShoppingCart, Sprout, Truck, UserRound } from "lucide-react";
 import type { StoreSettings } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useSession } from "../account/session-context";
 import { Logo } from "./logo";
+import { SearchBox } from "./search-box";
 import { LocationDialog } from "./location-dialog";
 import { cn } from "../ui/cn";
 
 const NAV = [
   { href: "/", label: "Home", match: (p: string) => p === "/" },
   { href: "/shop", label: "Shop", match: (p: string) => p.startsWith("/shop") || p.startsWith("/category") || p.startsWith("/product") || p === "/categories" },
+  { href: "/deals", label: "Offers", match: (p: string) => p === "/deals" },
   { href: "/about", label: "About Us", match: (p: string) => p === "/about" },
   { href: "/contact", label: "Contact", match: (p: string) => p === "/contact" },
 ];
@@ -122,47 +124,5 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
         </Suspense>
       </div>
     </header>
-  );
-}
-
-function SearchBox() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const pathname = usePathname();
-  const [q, setQ] = useState(pathname === "/shop" ? params.get("q") ?? "" : "");
-  // The header renders two search boxes (desktop + phone); each needs its own id for its label.
-  const inputId = useId();
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const term = q.trim();
-    router.push(term ? `/shop?q=${encodeURIComponent(term)}` : "/shop");
-  }
-
-  return (
-    <form role="search" onSubmit={submit} className="relative">
-      <label htmlFor={inputId} className="sr-only">
-        Search fruits and vegetables
-      </label>
-      <input
-        id={inputId}
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search fruits & vegetables…"
-        className="h-11 w-full rounded-full border border-line bg-sage-50/60 pl-5 pr-20 text-[0.9375rem] text-ink placeholder:text-muted/80 focus:border-leaf-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-lime-200/70 md:h-12"
-        enterKeyHint="search"
-        autoComplete="off"
-        maxLength={60}
-      />
-      {q ? (
-        <button type="button" aria-label="Clear search" onClick={() => setQ("")} className="absolute right-11 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted hover:bg-sage-100">
-          <X className="size-4" />
-        </button>
-      ) : null}
-      <button type="submit" aria-label="Search" className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-full text-forest-800 hover:bg-lime-100">
-        <Search className="size-[1.2rem]" />
-      </button>
-    </form>
   );
 }
