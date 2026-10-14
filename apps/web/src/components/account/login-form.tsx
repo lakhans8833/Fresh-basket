@@ -22,6 +22,7 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(linkError ? "That sign-in link is invalid or has expired." : null);
   const [info, setInfo] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
 
   async function done() {
     const p = await refresh();
@@ -68,8 +69,56 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         }
       }
     } catch (err) {
-      setError((err as Error).message || "Sign in failed.");
+      const raw = (err as Error).message || "";
+      if (/invalid login credentials/i.test(raw)) {
+        setLastError("credentials");
+        setError("Email or password is incorrect. Use “Forgot password?” below to set a new one, or create an account if you haven't signed up on this website yet.");
+      } else if (/email not confirmed/i.test(raw)) {
+        setLastError("unconfirmed");
+        setError("Please confirm your email first — open the link we emailed you (check spam too).");
+      } else if (/already registered/i.test(raw)) {
+        setError("An account with this email already exists. Sign in instead, or use “Forgot password?”.");
+      } else {
+        setError(raw || "Sign in failed. Please try again.");
+      }
       setBusy(null);
+    }
+  }
+
+  /** Emails a link to set a new password; the link lands on /reset-password via /auth/callback. */
+  async function forgotPassword() {
+    const sb = getBrowserSupabase();
+    if (!sb) return;
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setError("Enter your email above first, then tap “Forgot password?”.");
+      return;
+    }
+    setError(null);
+    setInfo(null);
+    setBusy("forgot");
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
+    });
+    setBusy(null);
+    if (error) setError(/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another email." : error.message);
+    // Same message whether or not the account exists, so nobody can probe which emails are registered.
+    else setInfo(`If an account exists for ${email}, we've emailed a link to set a new password. Check your inbox (and spam).`);
+  }
+
+  async function resendConfirmation() {
+    const sb = getBrowserSupabase();
+    if (!sb || !email) return;
+    setBusy("resend");
+    const { error } = await sb.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+    });
+    setBusy(null);
+    if (error) setError(/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another email." : error.message);
+    else {
+      setError(null);
+      setInfo(`Confirmation email sent to ${email}. Open the link in it, then sign in.`);
     }
   }
 
@@ -132,6 +181,22 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
               {tab === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>
+          {tab === "signin" ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+              <button type="button" onClick={forgotPassword} disabled={busy !== null} className="font-semibold text-forest-800 hover:underline disabled:opacity-60">
+                {busy === "forgot" ? "Sending…" : "Forgot password?"}
+              </button>
+              {lastError === "unconfirmed" ? (
+                <button type="button" onClick={resendConfirmation} disabled={busy !== null} className="font-semibold text-forest-800 hover:underline disabled:opacity-60">
+                  {busy === "resend" ? "Sending…" : "Resend confirmation email"}
+                </button>
+              ) : lastError === "credentials" ? (
+                <button type="button" onClick={() => { setTab("signup"); setError(null); }} className="font-semibold text-forest-800 hover:underline">
+                  New here? Create account
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="size-3.5" aria-hidden /> Secured by Supabase Auth</p>
         </>
       ) : (
