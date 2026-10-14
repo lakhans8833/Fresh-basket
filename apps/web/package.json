@@ -20,6 +20,7 @@
     "@freshbasket/shared": "*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.3",
+    "@vercel/functions": "^3.10.1",
     "lucide-react": "^1.56.0",
     "next": "16.4.0",
     "pg": "^8.23.1",
