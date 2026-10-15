@@ -11,7 +11,7 @@ const REUSE_INTERVAL = 10_000;
 const USER = { id: process.env.USER_ID, email: "admin@test.local", password: "Secret123!" };
 const rts = new Map(); // token -> { family, used: false, usedAt, child }
 const revoked = new Set();
-const stats = { logins: 0, refreshes: 0, reuseWithinInterval: 0, revocations: 0, userOk: 0, userFail: 0 };
+const stats = { resends: 0, logins: 0, refreshes: 0, reuseWithinInterval: 0, revocations: 0, userOk: 0, userFail: 0 };
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 function jwt(claims) {
   const h = b64({ alg: "HS256", typ: "JWT" }), p = b64(claims);
@@ -38,6 +38,10 @@ http.createServer((req, res) => {
     if (req.method === "OPTIONS") return send(res, 204);
     if (url.pathname === "/stats") return send(res, 200, stats);
     if (url.pathname === "/revoke-all") { for (const r of rts.values()) revoked.add(r.family); stats.revocations++; return send(res, 200, { ok: true }); }
+    if (url.pathname === "/auth/v1/resend") { stats.resends++; return send(res, 200, {}); }
+    if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password" && body.email === "unconfirmed@test.local") {
+      return send(res, 400, { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" });
+    }
     if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
       if (body.email !== USER.email || body.password !== USER.password) return send(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
       stats.logins++; return send(res, 200, session(randomUUID()));

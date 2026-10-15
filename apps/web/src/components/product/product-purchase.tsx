@@ -51,7 +51,20 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
                   v.stock <= 0 && "opacity-60",
                 )}
               >
-                <input type="radio" name="variant" value={v.id} checked={on} onChange={() => { setVariantId(v.id); setQty(1); }} className="sr-only" />
+                <input
+                  type="radio"
+                  name="variant"
+                  value={v.id}
+                  checked={on}
+                  onChange={() => { setVariantId(v.id); setQty(1); }}
+                  className="sr-only"
+                  // Readable name for screen readers / tests ("500 g – ₹32, 20% off"), not the pack's id.
+                  aria-label={[
+                    `${v.label} – ${formatINR(v.price)}`,
+                    percentOff(v.price, v.mrp) ? `${percentOff(v.price, v.mrp)}% off` : null,
+                    v.stock <= 0 ? "out of stock" : null,
+                  ].filter(Boolean).join(", ")}
+                />
                 <span className="font-semibold text-ink">{v.label}</span>
                 <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
                 {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
