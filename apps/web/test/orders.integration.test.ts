@@ -15,6 +15,7 @@ import { listAddresses, saveAddress } from "@/lib/account";
 import { buildQuote } from "@/lib/quote";
 import { adminListUsers, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
+import { listProducts } from "@/lib/catalog";
 
 const ADMIN = "00000000-0000-4000-8000-0000000000a1";
 const CUSTOMER = "00000000-0000-4000-8000-0000000000c1";
@@ -386,5 +387,16 @@ describe("admin users", () => {
     const admins = (await query<{ n: number }>("select count(*)::int as n from profiles where role = 'admin'"))[0]!.n;
     expect(admins).toBe(1);
     await expect(adminSetRole(OTHER, ADMIN, "customer")).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("shop listing", () => {
+  it("puts products with every size sold out last, whatever the sort", async () => {
+    for (const sort of ["featured", "price_asc", "price_desc", "name"] as const) {
+      const items = await listProducts({ sort });
+      const firstOut = items.findIndex((p) => !p.inStock);
+      expect(firstOut).toBeGreaterThan(0); // capsicum is sold out in the sample data
+      expect(items.slice(firstOut).every((p) => !p.inStock)).toBe(true);
+    }
   });
 });

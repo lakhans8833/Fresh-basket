@@ -60,6 +60,8 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   const v = s.variant;
   if (!v) return null;
   const out = v.stock <= 0;
+  /** Every size is sold out (not just the one shown). */
+  const soldOut = !product.inStock;
   const full = !out && s.maxAddable === 0;
   const href = `/product/${product.slug}`;
 
@@ -120,7 +122,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
     return (
       <article className="group relative flex gap-3 rounded-[var(--radius-card)] border border-line bg-white p-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
         <div className="relative shrink-0">
-          <ProductImage src={product.imageUrl} alt={product.name} sizes="96px" className="size-20 rounded-xl bg-white sm:size-24" />
+          <ProductImage src={product.imageUrl} alt={product.name} sizes="96px" className={cn("size-20 rounded-xl bg-white sm:size-24", soldOut && "grayscale")} />
           {out ? <span className="absolute inset-0 grid place-items-center rounded-xl bg-white/70 text-[0.6875rem] font-semibold text-danger">Sold out</span> : null}
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -142,15 +144,23 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   }
 
   return (
-    <article className="group relative flex flex-col rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
+    <article
+      className={cn(
+        "group relative flex flex-col rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]",
+        soldOut ? "bg-sage-50" : "bg-white",
+      )}
+    >
       <div className="relative overflow-hidden rounded-t-[var(--radius-card)]">
         <ProductImage
           src={product.imageUrl}
           alt={product.name}
-          className={cn("aspect-[4/3] w-full bg-white transition-transform duration-500 group-hover:scale-[1.03]", out && "opacity-60 grayscale-[40%]")}
+          className={cn("aspect-[4/3] w-full bg-white transition-transform duration-500 group-hover:scale-[1.03]", soldOut ? "opacity-50 grayscale" : out && "opacity-60 grayscale-[40%]")}
           sizes="(min-width: 1280px) 18vw, (min-width: 768px) 30vw, 50vw"
           priority={priority}
         />
+        {soldOut ? (
+          <span className="absolute inset-x-0 bottom-3 mx-auto w-fit rounded-full bg-ink/80 px-3 py-1 text-xs font-semibold text-white">Out of stock</span>
+        ) : null}
         <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
           <DiscountBadge price={v.price} mrp={v.mrp} />
           {product.seasonal ? (

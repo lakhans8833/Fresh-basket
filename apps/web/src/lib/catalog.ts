@@ -139,11 +139,13 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
   }
   const sort = f.sort ?? "featured";
   items.sort((a, b) => {
+    // Products with every size sold out always go to the end, whatever the sort.
+    if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
     if (sort === "price_asc") return shownPrice(a) - shownPrice(b);
     if (sort === "price_desc") return shownPrice(b) - shownPrice(a);
     if (sort === "name") return a.name.localeCompare(b.name);
-    // featured: in-stock first, featured first, then name
-    return Number(b.inStock) - Number(a.inStock) || Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name);
+    // featured: featured first, then name
+    return Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name);
   });
   return f.limit ? items.slice(0, f.limit) : items;
 }
