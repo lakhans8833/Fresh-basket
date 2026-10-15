@@ -35,7 +35,7 @@ const WA_METHOD_INFO: Record<WaMethod, { title: string; sub: string; icon: typeo
 };
 
 interface PlacedWaOrder {
-  order: { id: string; orderNumber: string; status: string; paymentMethod: WaMethod; paymentStatus: string; total: number; upiReference: string | null };
+  order: { id: string; orderNumber: string; status: string; paymentMethod: WaMethod; paymentStatus: string; total: number; upiReference: string | null; reservationExpiresAt: string | null };
   trackKey: string;
   trackUrl: string;
   whatsappUrl: string;
@@ -222,7 +222,7 @@ export function WhatsAppOrderView({
             </p>
           </div>
           {o.paymentMethod === "upi" && placed.upi ? (
-            <UpiPayPanel orderId={o.id} orderNumber={o.orderNumber} trackKey={placed.trackKey} info={placed.upi} reported={o.upiReference} />
+            <UpiPayPanel orderId={o.id} orderNumber={o.orderNumber} trackKey={placed.trackKey} info={placed.upi} reported={o.upiReference} holdUntil={o.reservationExpiresAt} />
           ) : o.paymentMethod === "razorpay_link" && placed.payLink ? (
             <Notice tone="warning" className="mt-5" title="Payment pending">
               Pay {formatINR(o.total)} on the secure Razorpay page. Your order is confirmed automatically once Razorpay confirms the payment.

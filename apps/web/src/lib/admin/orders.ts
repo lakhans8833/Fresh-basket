@@ -4,6 +4,7 @@ import { query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
 import { notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
+import { cancelPaymentLinkFor } from "../payments/link-cancel";
 
 /**
  * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
@@ -71,6 +72,7 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
   });
   // Customer's WhatsApp update (packed / out for delivery / delivered), once per event.
   scheduleOrderNotification(id, notifyEventForStatus(to));
+  if (to === "cancelled") cancelPaymentLinkFor(id);
   return adminGetOrder(id);
 }
 

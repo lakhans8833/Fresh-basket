@@ -6,12 +6,14 @@ import {
   type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput,
 } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
+import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
 import { conflict, badRequest, notFound, HttpError } from "./http";
 import { buildQuote, quoteMessages } from "./quote";
 import { lockAndCheckSlot } from "./delivery";
 import { getSettings, supportedPaymentMethods, whatsappPaymentMethods } from "./settings";
 import { scheduleOrderNotification } from "./notify/whatsapp";
+import { cancelPaymentLinkFor } from "./payments/link-cancel";
 
 type Q = Pick<PoolClient, "query">;
 
@@ -117,11 +119,21 @@ export class OrderRejected extends HttpError {
 
 export async function releaseExpired(): Promise<number> {
   const rows = await query<{ n: number }>("select release_expired_reservations() as n");
-  return rows[0]?.n ?? 0;
+  const n = rows[0]?.n ?? 0;
+  // Stock came back: drop the cached catalogue (this also runs from GET requests, e.g. Admin → Orders).
+  if (n > 0) invalidate(CACHE_TAGS.catalog);
+  return n;
 }
 
 /** How long stock is held for orders paid by UPI (checked by staff) or a payment link. */
 export const MANUAL_PAYMENT_HOLD_MINUTES = 24 * 60;
+/**
+ * Guests (no account) get a shorter hold and at most 2 unpaid UPI/link orders per mobile number,
+ * so nobody can block the shop's stock with fake unpaid orders. A payment confirmed after the hold
+ * still re-reserves the stock (or is flagged for refund if it's gone).
+ */
+export const GUEST_PAYMENT_HOLD_MINUTES = 3 * 60;
+const GUEST_OPEN_PREPAID_LIMIT = 2;
 
 function holdMinutesFor(method: PaymentMethod): number | null {
   if (method === "cod") return null;
@@ -147,6 +159,8 @@ interface CoreOrder {
   whatsappUpdates: boolean;
   /** Locks and checks the delivery slot (after the stock rows are locked). null = no slot (WhatsApp orders). */
   slot: ((c: PoolClient) => Promise<{ id: string; label: string }>) | null;
+  /** Override the stock hold for prepaid methods (minutes). */
+  holdMinutes?: number;
 }
 
 /**
@@ -164,7 +178,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   const slot = o.slot ? await o.slot(c) : null;
 
   const prepaid = PREPAID_METHODS.includes(o.paymentMethod);
-  const hold = holdMinutesFor(o.paymentMethod);
+  const hold = o.holdMinutes !== undefined && o.paymentMethod !== "cod" ? o.holdMinutes : holdMinutesFor(o.paymentMethod);
   const { rows: orows } = await c.query<{ id: string }>(
     `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
                          delivery_fee, total, delivery_date, slot_id, slot_label, address, customer_note, idempotency_key,
@@ -372,10 +386,22 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
       await c.query("select pg_advisory_xact_lock(hashtext('place_order:' || $1))", [owner]);
       const dup = await findSame(c);
       if (dup.rows[0]) return { id: dup.rows[0].id, created: false };
+      const prepaid = input.paymentMethod !== "cod";
+      if (!userId && prepaid) {
+        const open = await c.query<{ n: number }>(
+          `select count(*)::int as n from orders
+            where user_id is null and status = 'pending_payment' and address->>'phone' = $1`,
+          [cu.phone],
+        );
+        if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_PREPAID_LIMIT) {
+          throw conflict("You already have unpaid orders waiting. Pay for one of them, choose cash on delivery, or sign in to order.");
+        }
+      }
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
         channel: "whatsapp", deliveryDate: istDateString(new Date()), customerNote: cu.notes || null,
         idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates), slot: null,
+        holdMinutes: userId ? undefined : GUEST_PAYMENT_HOLD_MINUTES,
       });
       return { id, created: true };
     });
@@ -396,9 +422,10 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
 /* ------------------------------------------------------------------ */
 
 export async function cancelOrder(orderId: string, actor: string, reason: string) {
-  return tx(async (c) => {
+  await tx(async (c) => {
     await c.query("select cancel_order($1, $2, $3)", [orderId, actor, reason]);
   });
+  cancelPaymentLinkFor(orderId);
 }
 
 export async function customerCancel(userId: string, orderId: string) {

@@ -22,7 +22,9 @@ export interface UpiInfo {
  * Pay by UPI: QR (with the exact amount), the UPI ID to copy, an "open UPI app" link on phones, and
  * a box for the UTR. Sending the UTR does NOT mark the order paid — staff confirm the money first.
  */
-export function UpiPayPanel({ orderId, orderNumber, trackKey, info, reported }: { orderId: string; orderNumber: string; trackKey?: string; info: UpiInfo; reported: string | null }) {
+export function UpiPayPanel({
+  orderId, orderNumber, trackKey, info, reported, holdUntil,
+}: { orderId: string; orderNumber: string; trackKey?: string; info: UpiInfo; reported: string | null; holdUntil?: string | null }) {
   const router = useRouter();
   const [ref, setRef] = useState(reported ?? "");
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,11 @@ export function UpiPayPanel({ orderId, orderNumber, trackKey, info, reported }: 
       <p className="mt-1 text-sm text-ink-soft">
         Status: <b>Payment pending</b>. We confirm UPI payments by checking our account, then pack your order. A screenshot or UTR alone doesn&apos;t mark it paid.
       </p>
+      {holdUntil ? (
+        <p className="mt-1 text-sm font-medium text-[#7a5212]">
+          Please pay by {new Date(holdUntil).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} — your items are held until then.
+        </p>
+      ) : null}
       <div className="mt-5 grid gap-6 sm:grid-cols-[13rem_1fr]">
         <div className="text-center">
           <div

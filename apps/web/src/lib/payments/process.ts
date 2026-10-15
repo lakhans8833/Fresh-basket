@@ -1,8 +1,11 @@
 import "server-only";
 import { pool, tx } from "../db";
 import { scheduleOrderNotification } from "../notify/whatsapp";
+import { CACHE_TAGS, invalidate } from "../cache";
 
 const confirmedOnPayment = (orderId: string | null | undefined, result: string) => {
+  // A late payment re-takes stock: drop the cached catalogue so the shop shows it right away.
+  if (result === "paid_late") invalidate(CACHE_TAGS.catalog);
   if (orderId && (result === "paid" || result === "paid_late")) scheduleOrderNotification(orderId, "confirmed");
 };
 

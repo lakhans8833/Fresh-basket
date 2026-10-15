@@ -49,6 +49,7 @@ export const POST = route(async (req) => {
       order: {
         id: order.id, orderNumber: order.orderNumber, status: order.status, paymentMethod: order.paymentMethod, paymentStatus: order.paymentStatus,
         subtotal: order.subtotal, discount: order.discount, deliveryFee: order.deliveryFee, total: order.total, upiReference: order.upiReference,
+        reservationExpiresAt: order.reservationExpiresAt,
       },
       trackKey: trackToken.issue(order.id),
       trackUrl,

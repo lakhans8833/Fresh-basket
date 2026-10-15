@@ -187,6 +187,31 @@ describe("inventory", () => {
     await query("update products set stock_grams = 80000 where slug = 'potato'"); // restock for later tests
   });
 
+  it("returns the grams that were sold even if the pack is renamed later", async () => {
+    const grams = async () => Number((await queryOne<{ g: string }>("select stock_grams as g from products where slug = 'cucumber'"))!.g);
+    await query("update products set stock_grams = 10000 where slug = 'cucumber'");
+    const id = v["cucumber:500 g"]!;
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: id, quantity: 4 }] })); // 2 kg
+    expect(await grams()).toBe(8000);
+    await query("update product_variants set label = '1 kg' where id = $1", [id]); // admin renames the pack
+    await customerCancel(CUSTOMER, order.id);
+    expect(await grams()).toBe(10000); // not 12000
+    await query("update product_variants set label = '500 g' where id = $1", [id]);
+  });
+
+  it("doesn't deadlock when cancellations and checkouts touch the same products", async () => {
+    await query("update products set stock_grams = 200000 where slug in ('tomato', 'onion')");
+    // Variant ids sort differently from product ids for many pairs; run both directions repeatedly.
+    const items = [{ variantId: v["tomato:500 g"]!, quantity: 1 }, { variantId: v["onion:1 kg"]!, quantity: 2 }];
+    const placed = await Promise.all(Array.from({ length: 6 }, (_, i) => placeOrder(CUSTOMER, input({ items: items.map((x) => ({ ...x, quantity: x.quantity + i })) }))));
+    const results = await Promise.allSettled([
+      ...placed.map((p) => customerCancel(CUSTOMER, p.order.id)),
+      ...Array.from({ length: 6 }, (_, i) => placeOrder(CUSTOMER, input({ items: [...items].reverse().map((x) => ({ ...x, quantity: x.quantity + 10 + i })) }))),
+    ]);
+    const failed = results.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason?.code ?? (r as PromiseRejectedResult).reason));
+    expect(failed).toEqual([]);
+  });
+
   it("restocks when a customer cancels before packing, and blocks cancel after", async () => {
     const id = v["carrot:1 kg"]!;
     const before = await stock(id);
@@ -521,7 +546,7 @@ describe("WhatsApp orders", () => {
       const { order } = await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", whatsappUpdates: true }));
       expect(order).toMatchObject({ status: "pending_payment", paymentStatus: "pending", paymentMethod: "upi" });
       const hold = await queryOne<{ h: number }>("select extract(epoch from reservation_expires_at - now()) / 3600 as h from orders where id = $1", [order.id]);
-      expect(Number(hold!.h)).toBeGreaterThan(23);
+      expect(Number(hold!.h)).toBeCloseTo(3, 1); // guests: 3-hour hold (signed-in customers: 24 hours)
 
       const info = await upiPaymentInfo(order, await getSettings());
       expect(info!.uri).toContain("pa=freshbasket.test%40okaxis");
@@ -541,6 +566,22 @@ describe("WhatsApp orders", () => {
       await expect(adminConfirmUpiPayment(o2.id, { id: ADMIN, email: null }, "412345678901")).rejects.toMatchObject({ status: 409 });
     } finally {
       await query("update store_settings set upi_id = null, upi_payee_name = null");
+    }
+  });
+
+  it("limits unpaid guest UPI orders per mobile number", async () => {
+    await query("update store_settings set upi_id = 'freshbasket.test@okaxis'");
+    try {
+      const phone = "9000000001";
+      const cust = (n: number) => ({ name: "Hold Tester", phone, address: `Plot ${n}, Block C, Main Road`, area: "", city: "Bengaluru", pincode: "560034", notes: "" });
+      await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(1) }));
+      await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(2) }));
+      await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(3) }))).rejects.toMatchObject({ status: 409 });
+      // Cash on delivery and signed-in customers aren't limited this way.
+      expect((await placeWhatsAppOrder(null, wa({ paymentMethod: "cod", customer: cust(4) }))).created).toBe(true);
+      expect((await placeWhatsAppOrder(CUSTOMER, wa({ paymentMethod: "upi", customer: cust(5) }))).order.reservationExpiresAt).toBeTruthy();
+    } finally {
+      await query("update store_settings set upi_id = null");
     }
   });
 
@@ -584,6 +625,18 @@ describe("Razorpay payment links", () => {
     expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_bad1", o.total, { status: "authorized" }), "evt_link_5"))).toBe("ignored");
     expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_unknown", o.total), "evt_link_6"))).toBe("order_not_found");
     expect(await getOrderById(o.id)).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
+  });
+
+  it("cancelling a payment-link order removes its link", async () => {
+    const o = await linkOrder("plink_cancel1");
+    await query("update orders set razorpay_payment_link_url = 'https://rzp.io/l/test' where id = $1", [o.id]);
+    await customerCancel(CUSTOMER, o.id);
+    let url: string | null = "x";
+    for (let i = 0; i < 20 && url; i++) {
+      url = (await queryOne<{ u: string | null }>("select razorpay_payment_link_url as u from orders where id = $1", [o.id]))!.u;
+      if (url) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(url).toBeNull();
   });
 
   it("verifies the webhook signature on the raw body", () => {

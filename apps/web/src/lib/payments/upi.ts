@@ -4,6 +4,7 @@ import { buildUpiUri, formatINR, type Order, type StoreSettings } from "@freshba
 import { tx } from "../db";
 import { badRequest, conflict, notFound } from "../http";
 import { scheduleOrderNotification } from "../notify/whatsapp";
+import { CACHE_TAGS, invalidate } from "../cache";
 
 export interface UpiPaymentInfo {
   upiId: string;
@@ -85,6 +86,7 @@ export async function adminConfirmUpiPayment(orderId: string, actor: { id: strin
     );
     return { result };
   });
+  if (out.result === "paid_late") invalidate(CACHE_TAGS.catalog); // stock re-taken
   if (out.result === "paid" || out.result === "paid_late") scheduleOrderNotification(orderId, "confirmed");
   return out;
 }

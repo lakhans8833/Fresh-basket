@@ -63,6 +63,11 @@ export function createPaymentLink(args: {
   });
 }
 
+/** Cancel an unpaid Payment Link (Razorpay refuses for links that are already paid). */
+export function cancelPaymentLinkAtRazorpay(linkId: string) {
+  return call<RazorpayPaymentLink>(`/payment_links/${encodeURIComponent(linkId)}/cancel`, { method: "POST", body: "{}" });
+}
+
 export function fetchPayment(paymentId: string) {
   return call<RazorpayPayment>(`/payments/${encodeURIComponent(paymentId)}`);
 }

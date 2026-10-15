@@ -126,7 +126,7 @@ export function OrderDetail({
       {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
 
       {order.status === "pending_payment" && order.paymentMethod === "upi" && upi ? (
-        <UpiPayPanel orderId={order.id} trackKey={trackKey} info={upi} reported={order.upiReference} orderNumber={order.orderNumber} />
+        <UpiPayPanel orderId={order.id} trackKey={trackKey} info={upi} reported={order.upiReference} orderNumber={order.orderNumber} holdUntil={order.reservationExpiresAt} />
       ) : order.status === "pending_payment" && order.paymentMethod === "razorpay_link" ? (
         <Notice tone="warning" className="mt-5" title="Waiting for payment">
           Pay {formatINR(order.total)} with the secure Razorpay link. This page updates once Razorpay confirms the payment — a screenshot isn&apos;t needed.
