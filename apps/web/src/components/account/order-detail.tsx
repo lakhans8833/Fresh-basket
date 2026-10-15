@@ -18,11 +18,11 @@ import { ProductImage } from "../product/product-image";
 import { cn } from "../ui/cn";
 
 const STEP_ICON: Record<OrderStatus, typeof Check> = {
-  pending_payment: Clock, placed: ClipboardList, packed: PackageCheck, out_for_delivery: Truck, delivered: HomeIcon, cancelled: XCircle,
+  pending_payment: Clock, pending_confirmation: Clock, placed: ClipboardList, packed: PackageCheck, out_for_delivery: Truck, delivered: HomeIcon, cancelled: XCircle,
 };
 
 export function statusTone(s: OrderStatus) {
-  return s === "cancelled" ? "bg-danger-bg text-danger" : s === "delivered" ? "bg-lime-100 text-forest-800" : s === "pending_payment" ? "bg-[#fdf6e7] text-[#7a5212]" : "bg-sage-100 text-forest-800";
+  return s === "cancelled" ? "bg-danger-bg text-danger" : s === "delivered" ? "bg-lime-100 text-forest-800" : s === "pending_payment" || s === "pending_confirmation" ? "bg-[#fdf6e7] text-[#7a5212]" : "bg-sage-100 text-forest-800";
 }
 
 export function formatDeliveryDate(d: string) {
@@ -101,7 +101,7 @@ export function OrderDetail({
 
   return (
     <div className="container-page pt-6 md:pt-10">
-      {justPlaced && order.status !== "pending_payment" && order.status !== "cancelled" ? (
+      {justPlaced && order.status !== "pending_payment" && order.status !== "pending_confirmation" && order.status !== "cancelled" ? (
         <div className="mb-6 flex items-center gap-4 rounded-[var(--radius-card)] bg-forest-800 p-5 text-white sm:p-6" role="status">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-lime-300 text-forest-900"><PartyPopper className="size-6" aria-hidden /></span>
           <div>
@@ -124,6 +124,12 @@ export function OrderDetail({
       </div>
 
       {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+
+      {order.status === "pending_confirmation" ? (
+        <Notice tone="warning" className="mt-5" title="Waiting for the store to confirm">
+          Your order is saved. Please make sure you pressed <b>Send</b> in WhatsApp — the store confirms your order there, then it&apos;s packed for {formatDeliveryDate(order.deliveryDate)}.
+        </Notice>
+      ) : null}
 
       {order.status === "pending_payment" && order.paymentMethod === "upi" && upi ? (
         <UpiPayPanel orderId={order.id} trackKey={trackKey} info={upi} reported={order.upiReference} orderNumber={order.orderNumber} holdUntil={order.reservationExpiresAt} />

@@ -54,7 +54,11 @@ Customers can order **without an account** (or signed in): Home / Shop / Product
 - Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (digits, e.g. `919876543210`) or **Admin → Settings → WhatsApp**.
 - Delivery slots are the same as the website checkout and share their capacity (a full slot can't be picked). If no
   slots are set up, the delivery time is agreed on WhatsApp.
-- Staff see these orders in **Admin → Orders** (filter **WhatsApp**, with a WhatsApp badge) and handle them like any order.
+- **Cash-on-delivery WhatsApp orders start as _Pending confirmation_** (stock already reserved). Staff check that the
+  customer's WhatsApp message arrived, then press **Confirm order** (→ *Order placed*, sends the "confirmed" update if the
+  customer asked for updates) or **Cancel order** (stock returned). Dashboard tile + **To confirm** filter in Admin → Orders.
+  UPI / payment-link orders are confirmed by the verified payment instead.
+- Staff see all these orders in **Admin → Orders** (filter **WhatsApp**, with a WhatsApp badge).
 - Only PIN codes in **Admin → Delivery** can be ordered (exact charges); others get an "Ask us on WhatsApp" link.
 - Guests can't use coupons (per-customer limits need an account).
 - Guest orders have no `user_id`; they are tracked with a secret link `/track/<order id>?k=<key>` (HMAC with

@@ -164,11 +164,14 @@ interface CoreOrder {
   slot: ((c: PoolClient) => Promise<{ id: string; label: string }>) | null;
   /** Override the stock hold for prepaid methods (minutes). */
   holdMinutes?: number;
+  /** Cash-on-delivery orders that the store must confirm first (WhatsApp orders). Stock is still reserved. */
+  needsConfirmation?: boolean;
 }
 
 /**
  * Inside a transaction: server-side quote with locked rows, guarded stock take, order + items +
- * coupon + history. Prepaid methods start as "pending_payment" (stock held), COD as "placed".
+ * coupon + history. Prepaid methods start as "pending_payment" (stock held), COD as "placed"
+ * (or "pending_confirmation" for WhatsApp orders, until staff confirm them).
  */
 async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   const ctx = await buildQuote(
@@ -181,6 +184,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   const slot = o.slot ? await o.slot(c) : null;
 
   const prepaid = PREPAID_METHODS.includes(o.paymentMethod);
+  const firstStatus = prepaid ? "pending_payment" : o.needsConfirmation ? "pending_confirmation" : "placed";
   const hold = o.holdMinutes !== undefined && o.paymentMethod !== "cod" ? o.holdMinutes : holdMinutesFor(o.paymentMethod);
   const { rows: orows } = await c.query<{ id: string }>(
     `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
@@ -190,7 +194,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
              case when $17::int is not null then now() + make_interval(mins => $17::int) end, $18, $19, $20)
      returning id`,
     [
-      o.userId, prepaid ? "pending_payment" : "placed", o.paymentMethod, prepaid ? "pending" : "cod_pending",
+      o.userId, firstStatus, o.paymentMethod, prepaid ? "pending" : "cod_pending",
       ctx.quote.subtotal, ctx.quote.discount, ctx.couponId, ctx.quote.couponCode, ctx.quote.deliveryFee, ctx.quote.total,
       o.deliveryDate, slot?.id ?? null, slot?.label ?? "Delivery time confirmed on WhatsApp",
       JSON.stringify(o.address), o.customerNote ?? null, o.idempotencyKey,
@@ -227,11 +231,13 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
 
   const holdText = hold === null ? "" : hold >= 120 ? ` (stock held for ${Math.round(hold / 60)} hours)` : ` (stock held for ${hold} minutes)`;
   const note = !prepaid
-    ? `Order placed${o.channel === "whatsapp" ? " via WhatsApp" : ""} — pay on delivery`
+    ? o.needsConfirmation
+      ? "Order saved via WhatsApp — pay on delivery. Waiting for the store to confirm it."
+      : `Order placed${o.channel === "whatsapp" ? " via WhatsApp" : ""} — pay on delivery`
     : o.paymentMethod === "upi"
       ? `Waiting for UPI payment — staff confirm it in the bank statement${holdText}`
       : `Waiting for payment${holdText}`;
-  await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,'customer')", [id, prepaid ? "pending_payment" : "placed", note]);
+  await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,'customer')", [id, firstStatus, note]);
   return id;
 }
 
@@ -412,6 +418,8 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
         channel: "whatsapp", deliveryDate, customerNote: cu.notes || null,
         idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates),
+        // Cash on delivery: the store confirms it after the customer's WhatsApp message arrives.
+        needsConfirmation: true,
         // Slot capacity is shared with website orders; without a slot the time is agreed on WhatsApp.
         slot: slotId
           ? async (cc) => {
@@ -425,6 +433,7 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
       return { id, created: true };
     });
     const order = (await getOrderById(result.id))!;
+    // WhatsApp COD orders wait in "pending_confirmation"; the "confirmed" update is sent when staff confirm.
     if (result.created && order.status === "placed") scheduleOrderNotification(order.id, "confirmed"); // COD: confirmed right away
     return { order, created: result.created };
   } catch (e) {

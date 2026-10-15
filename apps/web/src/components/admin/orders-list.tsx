@@ -33,6 +33,7 @@ const TABS: { value: OrderStatus | "" | "late" | "whatsapp"; label: string }[] =
   { value: "", label: "All" },
   { value: "late", label: "Late" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "pending_confirmation", label: "To confirm" },
   { value: "pending_payment", label: "Awaiting payment" },
   { value: "placed", label: "Placed" },
   { value: "packed", label: "Packed" },

@@ -525,7 +525,7 @@ describe("WhatsApp orders", () => {
     const input = wa();
     const { order, created } = await placeWhatsAppOrder(null, input);
     expect(created).toBe(true);
-    expect(order).toMatchObject({ status: "placed", paymentMethod: "cod", paymentStatus: "cod_pending", channel: "whatsapp", subtotal: 3 * 4800 });
+    expect(order).toMatchObject({ status: "pending_confirmation", paymentMethod: "cod", paymentStatus: "cod_pending", channel: "whatsapp", subtotal: 3 * 4800 });
     expect(order.total).toBe(order.subtotal + order.deliveryFee);
     const row = await queryOne<{ user_id: string | null }>("select user_id from orders where id = $1", [order.id]);
     expect(row!.user_id).toBeNull();
@@ -534,6 +534,24 @@ describe("WhatsApp orders", () => {
     expect((await placeWhatsAppOrder(null, { ...input, idempotencyKey: randomUUID() })).order.id).toBe(order.id);
     const both = await Promise.all([placeWhatsAppOrder(null, wa()), placeWhatsAppOrder(null, wa())]);
     expect(new Set(both.map((b) => b.order.id)).size).toBe(2); // different addresses = different orders
+  });
+
+  it("COD WhatsApp orders wait for the store: confirm → placed, cancel → stock back; can't be packed before", async () => {
+    const id = v["onion:1 kg"]!;
+    const before = await stock(id);
+    const { order } = await placeWhatsAppOrder(null, wa());
+    expect(order.status).toBe("pending_confirmation");
+    const held = await stock(id);
+    expect(held).toBeLessThan(before); // stock reserved while waiting
+    await expect(adminUpdateOrderStatus(order.id, "packed", ADMIN)).rejects.toMatchObject({ status: 409 });
+    expect((await adminListOrders({ status: "pending_confirmation" })).some((o) => (o as { id: string }).id === order.id)).toBe(true);
+    expect(((await adminStats()) as { toConfirm?: number }).toConfirm).toBeGreaterThan(0);
+    expect((await adminUpdateOrderStatus(order.id, "placed", ADMIN)).status).toBe("placed");
+
+    const { order: o2 } = await placeWhatsAppOrder(null, wa());
+    expect(await stock(id)).toBeLessThan(held);
+    await adminUpdateOrderStatus(o2.id, "cancelled", ADMIN);
+    expect(await stock(id)).toBe(held);
   });
 
   it("saves the chosen delivery date + slot and shares slot capacity with website orders", async () => {

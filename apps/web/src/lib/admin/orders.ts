@@ -116,6 +116,7 @@ export async function adminStats() {
          (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
+         (select count(*)::int from orders where status = 'pending_confirmation') as "toConfirm",
          (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
          (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
          (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",

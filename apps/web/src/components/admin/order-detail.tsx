@@ -79,7 +79,8 @@ function UpiVerifyCard({ order, onDone }: { order: AdminOrder; onDone: (o: Admin
 
 const ACTION: Record<OrderStatus, { label: string; icon: typeof PackageCheck; help: string }> = {
   pending_payment: { label: "", icon: Clock, help: "" },
-  placed: { label: "", icon: ClipboardList, help: "" },
+  pending_confirmation: { label: "", icon: Clock, help: "" },
+  placed: { label: "Confirm order", icon: ClipboardList, help: "You got the customer's WhatsApp message and can deliver it. Sends the “confirmed” update if they asked for updates." },
   packed: { label: "Mark packed", icon: PackageCheck, help: "Items are picked, weighed and bagged." },
   out_for_delivery: { label: "Out for delivery", icon: Truck, help: "The order has left the store with a rider." },
   delivered: { label: "Mark delivered", icon: HomeIcon, help: "The customer has received the order." },

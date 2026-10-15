@@ -1,5 +1,6 @@
 export const ORDER_STATUSES = [
   "pending_payment",
+  "pending_confirmation", // WhatsApp cash-on-delivery order: saved, waiting for the store to confirm it
   "placed",
   "packed",
   "out_for_delivery",
@@ -40,6 +41,7 @@ export const PREPAID_METHODS: PaymentMethod[] = ["razorpay", "mock", "upi", "raz
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending_payment: "Awaiting payment",
+  pending_confirmation: "Pending confirmation",
   placed: "Order placed",
   packed: "Packed",
   out_for_delivery: "Out for delivery",
@@ -64,6 +66,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
  */
 const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ["cancelled"],
+  pending_confirmation: ["placed", "cancelled"], // staff confirm after checking the customer's WhatsApp message
   placed: ["packed", "cancelled"],
   packed: ["out_for_delivery", "cancelled"],
   out_for_delivery: ["delivered"],
@@ -81,7 +84,7 @@ export function canAdminTransition(from: OrderStatus, to: OrderStatus): boolean 
 
 /** Customers may cancel only before the order is packed. */
 export function canCustomerCancel(status: OrderStatus): boolean {
-  return status === "pending_payment" || status === "placed";
+  return status === "pending_payment" || status === "pending_confirmation" || status === "placed";
 }
 
 /** Steps shown on the tracking timeline (cancelled is shown separately). */
