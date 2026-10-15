@@ -1,4 +1,4 @@
-import { ReceiptText, Sprout } from "lucide-react";
+import { ReceiptText, Truck } from "lucide-react";
 import { formatINR, type Quote } from "@freshbasket/shared";
 import type { ReactNode } from "react";
 
@@ -26,7 +26,9 @@ export function OrderSummary({
     </div>
   );
   const afterDiscount = quote ? quote.subtotal - quote.discount : 0;
-  const shortOfFree = quote && delivery === "known" && freeAbove != null && quote.deliveryFee > 0 ? freeAbove - afterDiscount : null;
+  // Free-delivery progress (same rule as the server: subtotal after discount >= the area's free_above).
+  const showFree = Boolean(quote && delivery === "known" && freeAbove != null && freeAbove > 0 && quote.lines.length > 0);
+  const shortOfFree = showFree ? Math.max(0, freeAbove! - afterDiscount) : null;
   const count = quote?.lines.reduce((s, l) => s + l.quantity, 0) ?? 0;
 
   return (
@@ -65,15 +67,36 @@ export function OrderSummary({
           <div className="skeleton h-12 w-full" />
         </div>
       )}
-      {shortOfFree !== null && shortOfFree > 0 ? (
-        <p className="mt-4 flex items-start gap-3 rounded-xl border border-lime-200 bg-lime-50 p-3 text-sm text-forest-800">
-          <Sprout className="mt-0.5 size-5 shrink-0" aria-hidden />
-          <span>
-            <b>Free delivery above {formatINR(freeAbove!)}</b> in your area. Add {formatINR(shortOfFree)} more to get it.
-          </span>
-        </p>
-      ) : null}
+      {shortOfFree !== null ? <FreeDeliveryProgress short={shortOfFree} freeAbove={freeAbove!} /> : null}
       {children ? <div className="mt-5">{children}</div> : null}
     </section>
+  );
+}
+
+/** "Add ₹X more for free delivery" with a progress bar towards the delivery area's threshold. */
+export function FreeDeliveryProgress({ short, freeAbove, className }: { short: number; freeAbove: number; className?: string }) {
+  const pct = Math.max(4, Math.min(100, Math.round(((freeAbove - short) / freeAbove) * 100)));
+  const done = short <= 0;
+  return (
+    <div className={`mt-4 rounded-xl border border-lime-200 bg-lime-50 p-3 text-sm text-forest-800 ${className ?? ""}`}>
+      <p className="flex items-start gap-2.5" aria-live="polite">
+        <Truck className="mt-0.5 size-5 shrink-0" aria-hidden />
+        {done ? (
+          <span><b>Free delivery unlocked!</b> Your order is above {formatINR(freeAbove)}.</span>
+        ) : (
+          <span>Add items worth <b>{formatINR(short)}</b> more for <b>free delivery</b> (free above {formatINR(freeAbove)}).</span>
+        )}
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Progress to free delivery"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={done ? 100 : pct}
+        className="mt-2.5 h-2 overflow-hidden rounded-full bg-white"
+      >
+        <div className={`h-full rounded-full transition-[width] duration-500 ${done ? "bg-leaf-600" : "bg-leaf-400"}`} style={{ width: `${done ? 100 : pct}%` }} />
+      </div>
+    </div>
   );
 }

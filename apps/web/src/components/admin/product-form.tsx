@@ -27,6 +27,7 @@ interface LoadedProduct {
   storageTips?: string | null;
   shelfLife?: string | null;
   origin?: string | null;
+  nutrition?: string | null;
   seasonal: boolean;
   featured: boolean;
   active: boolean;
@@ -141,6 +142,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [storageTips, setStorageTips] = useState(initial?.storageTips ?? "");
   const [shelfLife, setShelfLife] = useState(initial?.shelfLife ?? "");
   const [origin, setOrigin] = useState(initial?.origin ?? "");
+  const [nutrition, setNutrition] = useState(initial?.nutrition ?? "");
   const [seasonal, setSeasonal] = useState(initial?.seasonal ?? false);
   const [featured, setFeatured] = useState(initial?.featured ?? false);
   const [active, setActive] = useState(initial?.active ?? true);
@@ -259,7 +261,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,
-      storageTips: storageTips.trim() || null, shelfLife: shelfLife.trim() || null, origin: origin.trim() || null,
+      storageTips: storageTips.trim() || null, shelfLife: shelfLife.trim() || null, origin: origin.trim() || null, nutrition: nutrition.trim() || null,
       images: images.map((i) => ({ url: i.url, alt: i.alt.trim() || null })),
       variants: vs,
       stockGrams: byWeight ? totalGramsNow : null,
@@ -406,6 +408,15 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                 <Input id="p-origin" value={origin} onChange={(e) => { setOrigin(e.target.value); touch(); }} maxLength={60} placeholder="e.g. Local farms, Haryana" />
               </Field>
             </div>
+            <Field
+              label="Nutrition (optional)"
+              htmlFor="p-nutrition"
+              error={err("nutrition")}
+              hint="Shown in the product page's Nutrition tab. One fact per line. Only enter values you have from a reliable source."
+              className="mt-4"
+            >
+              <Textarea id="p-nutrition" value={nutrition} onChange={(e) => { setNutrition(e.target.value); touch(); }} maxLength={2000} rows={4} placeholder={"e.g. Energy (per 100 g): …\nVitamin C: …"} />
+            </Field>
           </Card>
 
           <Card aria-labelledby="photos-h">

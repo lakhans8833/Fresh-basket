@@ -19,10 +19,11 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/shop")
     cards = page.locator("article")
     expect(cards.first).to_be_visible()
+    # Compact cards: ADD puts one pack in the cart, then − / + change the cart quantity.
+    cards.nth(0).get_by_role("button", name=re.compile(r"^Add .+ to cart$")).click()
     cards.nth(0).get_by_role("button", name=re.compile("Increase")).click()
-    cards.nth(0).get_by_role("button", name=re.compile(r"^Add 2 ×")).click()
-    cards.nth(1).get_by_role("button", name=re.compile(r"^Add 1 ×")).click()
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 3 items"))).to_be_visible()
+    cards.nth(1).get_by_role("button", name=re.compile(r"^Add .+ to cart$")).click()
+    expect(page.get_by_role("link", name=re.compile(r"Cart, 3 items")).first).to_be_visible()
 
     page.goto(f"{BASE}/cart")
     page.get_by_role("button", name="Order on WhatsApp").click()
@@ -74,7 +75,7 @@ with sync_playwright() as p:
 
     page.get_by_role("button", name=re.compile("I've sent it")).click()
     page.wait_for_url(re.compile(r"/$"))
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 0 items"))).to_be_visible()
+    expect(page.get_by_role("link", name=re.compile(r"Cart, 0 items")).first).to_be_visible()
     print("WHATSAPP E2E OK")
     if errors:
         print("PAGE ERRORS:", errors)

@@ -29,10 +29,10 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
       <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-display text-4xl font-semibold tabular-nums text-forest-900">{formatINR(variant.price)}</span>
         <span className="text-muted">/ {variant.label}</span>
+        {unitPriceLabel(variant.price, variant.label) ? <span className="text-sm font-medium tabular-nums text-ink-soft">· {unitPriceLabel(variant.price, variant.label)}</span> : null}
         {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">MRP {formatINR(variant.mrp)}</s> : null}
         <DiscountBadge price={variant.price} mrp={variant.mrp} className="self-center" />
       </p>
-      {unitPriceLabel(variant.price, variant.label) ? <p className="mt-1 text-sm tabular-nums text-muted">({unitPriceLabel(variant.price, variant.label)})</p> : null}
       {variant.mrp && variant.mrp > variant.price ? (
         <p className="mt-1 text-sm font-medium text-leaf-600">You save {formatINR(variant.mrp - variant.price)} on this pack</p>
       ) : null}

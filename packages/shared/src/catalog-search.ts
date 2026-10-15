@@ -111,11 +111,16 @@ export function packGrams(label: string): number | null {
   return g > 0 ? g : null;
 }
 
-/** "₹6.40 / 100 g" for weight packs (paise in, always 2 decimals); null for "1 bunch", "1 pc" etc. */
+/**
+ * Price per kilo for weight packs, e.g. 500 g at ₹90 -> "₹180/kg" (paise in; whole rupees when exact,
+ * else 2 decimals). null for "1 bunch", "1 pc" etc., and for 1 kg packs (the price already is per kg).
+ */
 export function unitPriceLabel(price: number, label: string): string | null {
   const g = packGrams(label);
-  if (!g || price <= 0) return null;
-  const per100 = Math.round((price * 100) / g); // paise per 100 g
-  const rupees = (per100 / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `₹${rupees} / 100 g`;
+  if (!g || g === 1000 || price <= 0) return null;
+  const perKg = Math.round((price * 1000) / g); // paise per kg
+  const rupees = perKg % 100 === 0
+    ? (perKg / 100).toLocaleString("en-IN")
+    : (perKg / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `₹${rupees}/kg`;
 }

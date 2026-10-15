@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound } from "lucide-react";
+  LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound, Star } from "lucide-react";
 import { useSession } from "../account/session-context";
 import { LeafMark } from "../layout/logo";
 import { DevBadge } from "../ui/feedback";
@@ -21,6 +21,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; adminOnl
   { href: "/admin/delivery", label: "Delivery", icon: Truck, adminOnly: true },
   { href: "/admin/coupons", label: "Coupons", icon: TicketPercent, adminOnly: true },
   { href: "/admin/messages", label: "Messages", icon: MessageSquare },
+  { href: "/admin/reviews", label: "Reviews", icon: Star, adminOnly: true },
   { href: "/admin/users", label: "Users", icon: UsersRound, adminOnly: true },
   { href: "/admin/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];

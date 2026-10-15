@@ -10,6 +10,10 @@ import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductPurchase } from "@/components/product/product-purchase";
 import { FavouriteButton } from "@/components/product/favourite-button";
 import { ProductRail } from "@/components/home/sections";
+import { ProductTabs } from "@/components/product/product-tabs";
+import { ReviewsPanel } from "@/components/product/reviews-panel";
+import { Stars } from "@/components/product/stars";
+import { getProductReviews } from "@/lib/reviews";
 
 type Params = Promise<{ slug: string }>;
 
@@ -29,10 +33,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default async function ProductPage({ params }: { params: Params }) {
   const product = await getProduct((await params).slug);
   if (!product) notFound();
-  const related = (await listProducts({ category: product.categorySlug, limit: 5 })).filter((p) => p.id !== product.id).slice(0, 4);
-  const settings = await getSettings();
+  const [relatedAll, settings, reviews] = await Promise.all([
+    listProducts({ category: product.categorySlug, limit: 5 }),
+    getSettings(),
+    getProductReviews(product.id),
+  ]);
+  const related = relatedAll.filter((p) => p.id !== product.id).slice(0, 4);
   const abs = (u: string) => (u.startsWith("http") ? u : `${storeConfig.siteUrl}${u}`);
-  // Product structured data built only from real catalogue data (no ratings or reviews).
+  // Product structured data built only from real data: ratings only when approved customer reviews exist.
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -41,6 +49,9 @@ export default async function ProductPage({ params }: { params: Params }) {
     image: product.images.map((i) => abs(i.url)),
     category: product.categoryName,
     brand: { "@type": "Brand", name: settings.storeName },
+    ...(reviews.count > 0 && reviews.average !== null
+      ? { aggregateRating: { "@type": "AggregateRating", ratingValue: reviews.average, reviewCount: reviews.count, bestRating: 5, worstRating: 1 } }
+      : {}),
     offers: product.variants.map((v) => ({
       "@type": "Offer",
       name: `${product.name} ${v.label}`,
@@ -79,6 +90,12 @@ export default async function ProductPage({ params }: { params: Params }) {
           <div className="lg:pt-4">
             {product.seasonal ? <p className="eyebrow text-leaf-600">In season now</p> : null}
             <h1 className="mt-1 text-[2.25rem] font-bold leading-tight text-forest-800 md:text-[2.75rem]">{product.name}</h1>
+            {reviews.count > 0 && reviews.average !== null ? (
+              <a href="#reviews" className="mt-1 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-forest-800">
+                <Stars value={reviews.average} />
+                <span><b className="text-ink">{reviews.average.toFixed(1)}</b> · {reviews.count} {reviews.count === 1 ? "review" : "reviews"}</span>
+              </a>
+            ) : null}
             {notes.length ? (
               <ul className="mt-3 flex flex-wrap gap-2" aria-label="Product notes">
                 {notes.map((h) => (
@@ -89,26 +106,46 @@ export default async function ProductPage({ params }: { params: Params }) {
               </ul>
             ) : null}
             <ProductPurchase product={product} />
-            {product.description ? (
-              <section aria-labelledby="about" className="mt-10 border-t border-line pt-6">
-                <h2 id="about" className="font-sans text-base font-semibold text-ink">About this product</h2>
-                <p className="mt-2 leading-relaxed text-ink-soft">{product.description}</p>
-              </section>
-            ) : null}
-            {info.length ? (
-              <section aria-labelledby="info" className="mt-8 border-t border-line pt-6">
-                <h2 id="info" className="font-sans text-base font-semibold text-ink">Product information</h2>
-                <dl className="mt-3 divide-y divide-line rounded-xl border border-line bg-white text-sm">
-                  {info.map(([k, v]) => (
-                    <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3">
-                      <dt className="font-medium text-muted">{k}</dt>
-                      <dd className="text-ink-soft">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-            ) : null}
           </div>
+        </div>
+        <div id="reviews" className="scroll-mt-28">
+          <ProductTabs
+            tabs={[
+              {
+                id: "description",
+                label: "Description",
+                content: (
+                  <div className="max-w-3xl">
+                    {product.description ? <p className="whitespace-pre-line leading-relaxed text-ink-soft">{product.description}</p> : <p className="text-muted">No description yet.</p>}
+                    {info.length ? (
+                      <dl className="mt-5 divide-y divide-line rounded-xl border border-line bg-white text-sm">
+                        {info.map(([k, v]) => (
+                          <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 px-4 py-3">
+                            <dt className="font-medium text-muted">{k}</dt>
+                            <dd className="text-ink-soft">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </div>
+                ),
+              },
+              {
+                id: "nutrition",
+                label: "Nutrition",
+                content: product.nutrition ? (
+                  <p className="max-w-3xl whitespace-pre-line leading-relaxed text-ink-soft">{product.nutrition}</p>
+                ) : (
+                  <p className="text-muted">Nutrition details haven&apos;t been added for this product yet.</p>
+                ),
+              },
+              {
+                id: "reviews",
+                label: reviews.count > 0 ? `Reviews (${reviews.count})` : "Reviews",
+                content: <ReviewsPanel productId={product.id} productSlug={product.slug} average={reviews.average} count={reviews.count} reviews={reviews.reviews} />,
+              },
+            ]}
+          />
         </div>
       </div>
       <ProductRail id="related" title={`More ${product.categoryName.toLowerCase()}`} href={`/category/${product.categorySlug}`} products={related} />

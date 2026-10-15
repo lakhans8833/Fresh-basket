@@ -15,7 +15,8 @@ import { listAddresses, saveAddress } from "@/lib/account";
 import { buildQuote } from "@/lib/quote";
 import { adminConfirmEmail, adminListUsers, adminResendConfirmation, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
-import { listProducts } from "@/lib/catalog";
+import { getProduct, listProducts } from "@/lib/catalog";
+import { adminListReviews, adminSetReviewStatus, getProductReviews, reviewEligibility, submitReview } from "@/lib/reviews";
 
 const ADMIN = "00000000-0000-4000-8000-0000000000a1";
 const CUSTOMER = "00000000-0000-4000-8000-0000000000c1";
@@ -444,5 +445,36 @@ describe("cached catalogue filtering", () => {
     const inCat = await listProducts({ category: (await queryOne<{ slug: string }>("select slug from categories where id = $1", [cat.categoryId]))!.slug });
     expect(inCat.every((p) => p.categoryId === cat.categoryId)).toBe(true);
     expect(await listProducts({ ids: [] })).toEqual([]);
+  });
+});
+
+describe("product reviews", () => {
+  it("only customers with a delivered order can review; only approved reviews count", async () => {
+    const product = (await getProduct("beetroot"))!;
+    const id = v["beetroot:500 g"]!;
+    expect((await reviewEligibility(CUSTOMER, product.id)).canReview).toBe(false);
+    await expect(submitReview(CUSTOMER, product.id, 5, "Great")).rejects.toMatchObject({ status: 403 });
+
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: id, quantity: 4 }] }));
+    await expect(submitReview(CUSTOMER, product.id, 5, "Great")).rejects.toMatchObject({ status: 403 }); // not delivered yet
+    for (const s of ["packed", "out_for_delivery", "delivered"] as const) await adminUpdateOrderStatus(order.id, s, ADMIN);
+    expect((await reviewEligibility(CUSTOMER, product.id)).canReview).toBe(true);
+
+    const r = await submitReview(CUSTOMER, product.id, 4, "  Fresh and sweet  ");
+    expect(r.status).toBe("pending");
+    expect(await getProductReviews(product.id)).toMatchObject({ count: 0, average: null, reviews: [] }); // not shown until approved
+    expect((await adminListReviews("pending")).map((x) => x.id)).toContain(r.id);
+
+    await adminSetReviewStatus(r.id, "approved");
+    const shown = await getProductReviews(product.id);
+    expect(shown).toMatchObject({ count: 1, average: 4 });
+    expect(shown.reviews[0]).toMatchObject({ rating: 4, comment: "Fresh and sweet", author: "Test" });
+
+    // Editing sends it back for approval; hiding removes it from the page.
+    await submitReview(CUSTOMER, product.id, 2, null);
+    expect((await getProductReviews(product.id)).count).toBe(0);
+    await adminSetReviewStatus(r.id, "hidden");
+    expect((await getProductReviews(product.id)).count).toBe(0);
+    expect((await reviewEligibility(CUSTOMER, product.id)).mine).toMatchObject({ rating: 2, status: "hidden" });
   });
 });

@@ -63,6 +63,8 @@ export interface ProductDetail extends ProductSummary {
   storageTips: string | null;
   shelfLife: string | null;
   origin: string | null;
+  /** Nutrition notes entered in Admin (plain text, may have line breaks). */
+  nutrition: string | null;
   images: { id: string; url: string; alt: string | null }[];
   categorySlug: string;
 }

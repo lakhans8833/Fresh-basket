@@ -24,10 +24,14 @@ describe("packGrams / unitPriceLabel", () => {
     expect(packGrams("250 gm")).toBe(250);
     expect(packGrams("1 bunch")).toBeNull();
   });
-  it("formats price per 100 g", () => {
-    expect(unitPriceLabel(3200, "500 g")).toBe("₹6.40 / 100 g");
-    expect(unitPriceLabel(6000, "1 kg")).toBe("₹6.00 / 100 g");
-    expect(unitPriceLabel(700, "100 g")).toBe("₹7.00 / 100 g");
+  it("formats price per kg", () => {
+    expect(unitPriceLabel(9000, "500 g")).toBe("₹180/kg");
+    expect(unitPriceLabel(3200, "500 g")).toBe("₹64/kg");
+    expect(unitPriceLabel(700, "100 g")).toBe("₹70/kg");
+    expect(unitPriceLabel(1850, "250 g")).toBe("₹74/kg");
+    expect(unitPriceLabel(1333, "250 g")).toBe("₹53.32/kg");
+    expect(unitPriceLabel(13500, "2 kg")).toBe("₹67.50/kg");
+    expect(unitPriceLabel(6000, "1 kg")).toBeNull(); // already per kg
     expect(unitPriceLabel(1500, "1 bunch")).toBeNull();
   });
 });

@@ -29,6 +29,12 @@ docs/API.md      API reference
   route, row-level security on every table (customers can only read their own orders/addresses; orders, payments and
   coupons can't be written from a client at all), customers can't change their own role (trigger), CSRF origin check
   for cookie requests, secrets only in server env vars.
+- **Stock by weight**: products whose packs are all weights keep one total in grams (`products.stock_grams`); every
+  pack's stock is derived from it and orders take/return grams (`take_stock` / `return_stock` lock the product row).
+- **Reviews**: only a customer with a *delivered* order containing the product can review it; reviews show only after
+  an admin publishes them (Admin → Reviews), and star ratings/counts are computed from published reviews only.
+- **Caching**: shop/category/settings data is served from the Next.js data cache and dropped after every successful
+  stock- or catalogue-changing API call (`apps/web/src/lib/cache.ts`); checkout always re-reads prices and stock.
 - **Order workflow**: placed → packed → out for delivery → delivered (or cancelled before dispatch). Staff can only make
   valid transitions; nobody can mark an online order paid by hand. COD cash collection and refunds are recorded by staff.
 

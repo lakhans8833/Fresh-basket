@@ -14,8 +14,8 @@ type Variant = ProductSummary["variants"][number];
  * With a single option it renders as a plain label.
  */
 export function PackSizeSelect({
-  product, value, onChange, className,
-}: { product: ProductSummary; value: string; onChange: (id: string) => void; className?: string }) {
+  product, value, onChange, className, compact,
+}: { product: ProductSummary; value: string; onChange: (id: string) => void; className?: string; /** Small chip (shop cards); the list opens as a sheet on phones. */ compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -38,6 +38,7 @@ export function PackSizeSelect({
   if (!selected) return null;
 
   if (variants.length <= 1) {
+    if (compact) return <p className={cn("relative z-10 text-xs text-muted", className)}>{selected.label}</p>;
     return (
       <p className={cn("relative z-10 flex h-9 items-center rounded-lg bg-sage-50 px-3 text-sm text-ink-soft", className)}>
         {selected.label}
@@ -64,7 +65,7 @@ export function PackSizeSelect({
   }
 
   return (
-    <div ref={rootRef} className={cn("relative z-10", open && "z-30", className)}>
+    <div ref={rootRef} className={cn("relative z-10", open && (compact ? "z-[70] sm:z-30" : "z-30"), className)}>
       <button
         ref={btnRef}
         type="button"
@@ -75,12 +76,14 @@ export function PackSizeSelect({
         onClick={() => (open ? setOpen(false) : openList())}
         onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); openList(); } }}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-medium transition-colors",
-          open ? "border-forest-900 bg-forest-900 text-white" : "border-forest-800/30 bg-lime-50 text-ink hover:border-forest-800",
+          compact
+            ? "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors"
+            : "flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-medium transition-colors",
+          open ? "border-forest-900 bg-forest-900 text-white" : compact ? "border-line bg-white text-ink-soft hover:border-forest-800" : "border-forest-800/30 bg-lime-50 text-ink hover:border-forest-800",
         )}
       >
         <span className="truncate">{selected.label}</span>
-        <ChevronDown className={cn("size-4 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
+        <ChevronDown className={cn(compact ? "size-3.5" : "size-4", "shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
       </button>
 
       {open ? (
@@ -92,7 +95,12 @@ export function PackSizeSelect({
           aria-label={`Pack sizes for ${product.name}`}
           aria-activedescendant={`${listId}-${active}`}
           onKeyDown={onListKey}
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 min-w-[13rem] space-y-1.5 overflow-y-auto rounded-xl border border-line bg-white p-2 shadow-[var(--shadow-lift)] outline-none"
+          className={cn(
+            "z-30 max-h-72 space-y-1.5 overflow-y-auto rounded-xl border border-line bg-white p-2 shadow-[var(--shadow-lift)] outline-none",
+            compact
+              ? "fixed inset-x-3 bottom-20 z-50 max-h-[60vh] sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-1 sm:w-56"
+              : "absolute left-0 right-0 top-full mt-1 min-w-[13rem]",
+          )}
         >
           {variants.map((v, i) => {
             const pct = percentOff(v.price, v.mrp);

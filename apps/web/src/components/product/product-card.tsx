@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, ShoppingCart } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
@@ -54,7 +54,7 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
   return { variant, setVariantId: choosePack, qty, setQty, inCart, maxAddable, addToCart, justAdded, setCartQty, cartCap };
 }
 
-/** Product card: white photo panel, pack size, price per pack, quantity and Add to Cart. */
+/** Compact product card: photo, name, size chip (opens a small picker), price (+ per kg) and ADD. */
 export function ProductCard({ product, priority, variant: layout = "grid", preferDeal, preferVariantId }: { product: ProductSummary; index?: number; priority?: boolean; variant?: "grid" | "compact"; preferDeal?: boolean; preferVariantId?: string }) {
   const s = useCardState(product, preferDeal, preferVariantId);
   const v = s.variant;
@@ -65,26 +65,10 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   const full = !out && s.maxAddable === 0;
   const href = `/product/${product.slug}`;
 
-  const addButton = (
-    <button
-      type="button"
-      disabled={out || full}
-      onClick={s.addToCart}
-      className={cn(
-        "relative z-10 inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed",
-        out || full ? "bg-sage-100 text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "bg-forest-800 text-white hover:bg-forest-900",
-        layout === "grid" ? "w-full" : "min-w-[6.5rem] flex-1 px-2.5",
-      )}
-      aria-label={out ? `${product.name} is out of stock` : full ? `${product.name}: maximum quantity already in cart` : `Add ${s.qty} × ${product.name} ${v.label} to cart`}
-    >
-      {out ? "Out of stock" : full ? "Max in cart" : s.justAdded ? <><Check className="size-4" aria-hidden /> Added</> : <><ShoppingCart className="size-4" aria-hidden /> {layout === "grid" ? "Add to Cart" : "Add"}</>}
-    </button>
-  );
-
-  // Not in the cart yet: pick a quantity, then Add. Already in the cart: the card shows the cart's
-  // own quantity and − / + change the cart directly (so it never "jumps back" to 1 after adding).
+  const perKg = unitPriceLabel(v.price, v.label);
   const inCartMode = s.inCart > 0;
-  const stepper = inCartMode ? (
+  // One tap adds one pack; once it's in the cart the button turns into − N + for the cart itself.
+  const action = inCartMode ? (
     <QuantityStepper
       size="sm"
       tone="lime"
@@ -92,31 +76,28 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       onChange={s.setCartQty}
       max={s.cartCap}
       label={`${product.name} ${v.label} in cart`}
-      className={cn("relative z-10 rounded-lg font-semibold", layout === "grid" ? "w-full" : "shrink-0")}
+      className="relative z-10 w-[6.75rem] shrink-0 rounded-lg font-semibold"
     />
-  ) : !out && !full ? (
-    <QuantityStepper
-      size="sm"
-      tone="outline"
-      value={s.qty}
-      onChange={(n) => s.setQty(Math.max(1, Math.min(n, s.maxAddable)))}
-      max={s.maxAddable}
-      label={`${product.name} ${v.label}`}
-      className={cn("relative z-10 rounded-lg", layout === "grid" ? "w-full" : "shrink-0")}
-    />
-  ) : null;
-  const inCartNote = inCartMode ? (
-    <Link
-      href="/cart"
+  ) : (
+    <button
+      type="button"
+      disabled={out || full}
+      onClick={s.addToCart}
       className={cn(
-        "relative z-10 inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-forest-800 px-3 text-sm font-semibold text-forest-800 hover:bg-lime-50",
-        layout === "grid" ? "w-full" : "min-w-[6.5rem] flex-1 px-2.5",
+        "relative z-10 inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-3.5 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
+        out || full ? "bg-sage-100 text-xs font-semibold tracking-normal text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "border border-forest-800 bg-lime-50 text-forest-800 hover:bg-forest-800 hover:text-white",
       )}
+      aria-label={out ? `${product.name} ${v.label} is out of stock` : full ? `${product.name}: maximum quantity already in cart` : `Add ${product.name} ${v.label} to cart`}
     >
-      <Check className="size-4" aria-hidden /> {s.inCart} in cart · View
-    </Link>
-  ) : null;
-  const actions = inCartMode ? <>{stepper}{inCartNote}</> : <>{stepper}{addButton}</>;
+      {out ? "Sold out" : full ? "Max" : s.justAdded ? <Check className="size-4" aria-hidden /> : <>ADD <Plus className="size-3.5" strokeWidth={3} aria-hidden /></>}
+    </button>
+  );
+  const price = (
+    <p className="flex flex-wrap items-baseline gap-x-1 leading-tight">
+      <span className="text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
+      {perKg ? <span className="text-[0.6875rem] tabular-nums text-muted">· {perKg}</span> : null}
+    </p>
+  );
 
   if (layout === "compact") {
     return (
@@ -129,15 +110,12 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
           <h3 className="truncate font-sans text-[0.9375rem] font-semibold text-ink">
             <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
           </h3>
-          <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm text-muted">
-            <span className="font-bold tabular-nums text-forest-800">{formatINR(v.price)}</span> / {v.label}
-            {v.mrp && v.mrp > v.price ? <s className="text-xs">{formatINR(v.mrp)}</s> : null}
-            {percentOff(v.price, v.mrp) ? <span className="text-xs font-semibold text-offer">{percentOff(v.price, v.mrp)}% off</span> : null}
-          </p>
-          {unitPriceLabel(v.price, v.label) ? <p className="text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
-          {product.variants.length > 1 ? <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} className="mt-1.5 max-w-[12rem]" /> : null}
-          {out ? <p className="text-xs font-medium text-danger">Out of stock</p> : null}
-          <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">{actions}</div>
+          {product.variants.length > 1 ? <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="mt-1 self-start" /> : <p className="text-xs text-muted">{v.label}</p>}
+          {v.mrp && v.mrp > v.price ? <s className="mt-1 text-[0.6875rem] text-muted">MRP {formatINR(v.mrp)}</s> : null}
+          <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5 pt-1.5">
+            {price}
+            {action}
+          </div>
         </div>
       </article>
     );
@@ -169,20 +147,19 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
         </div>
         <FavouriteButton productId={product.id} name={product.name} className="absolute right-2.5 top-2.5 z-10 size-8 bg-white shadow" />
       </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3 sm:p-4">
-        <h3 className="font-sans text-[0.9375rem] font-semibold leading-snug text-ink sm:text-base">
+      <div className="flex flex-1 flex-col gap-1 p-3">
+        <h3 className="line-clamp-2 font-sans text-sm font-semibold leading-snug text-ink sm:text-[0.9375rem]">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
-        <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} />
-        <p className="flex flex-wrap items-baseline gap-x-1.5">
-          <span className="text-lg font-bold tabular-nums text-forest-800 sm:text-xl">{formatINR(v.price)}</span>
-          {v.mrp && v.mrp > v.price ? <s className="text-xs text-muted">MRP {formatINR(v.mrp)}</s> : null}
-        </p>
-        {unitPriceLabel(v.price, v.label) ? <p className="-mt-1 text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
-        <p className="min-h-4 text-xs font-medium" aria-live="polite">
-          {out ? <span className="text-danger">Out of stock</span> : v.stock <= 5 ? <span className="text-amber">Only {v.stock} left</span> : null}
-        </p>
-        <div className="mt-auto flex flex-col gap-2 pt-1">{actions}</div>
+        <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="self-start" />
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5 pt-2">
+          <div className="min-w-0">
+            {v.mrp && v.mrp > v.price ? <s className="block text-[0.6875rem] tabular-nums text-muted">MRP {formatINR(v.mrp)}</s> : null}
+            {price}
+          </div>
+          {action}
+        </div>
+        {!out && v.stock <= 5 ? <p className="text-[0.6875rem] font-medium text-amber">Only {v.stock} left</p> : null}
       </div>
     </article>
   );
