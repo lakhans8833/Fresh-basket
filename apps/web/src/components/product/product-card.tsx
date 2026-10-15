@@ -23,7 +23,7 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
   const [qty, setQty] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
   const variant = product.variants.find((v) => v.id === variantId) ?? firstAvailable;
-  const { add, quantityOf, hydrated } = useCart();
+  const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const inCart = variant && hydrated ? quantityOf(variant.id) : 0;
   const maxAddable = variant ? Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart) : 0;
@@ -42,7 +42,16 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
     setVariantId(id);
     setQty(1);
   };
-  return { variant, setVariantId: choosePack, qty, setQty, inCart, maxAddable, addToCart, justAdded };
+  /** Change the quantity already in the cart from the card (0 removes it). */
+  function setCartQty(n: number) {
+    if (!variant) return;
+    const cap = Math.min(MAX_QTY_PER_LINE, variant.stock);
+    const next = Math.max(0, Math.min(n, Math.max(cap, 0)));
+    setQuantity(variant.id, next);
+    if (next === 0) toast(`${product.name} (${variant.label}) removed from cart`);
+  }
+  const cartCap = variant ? Math.min(MAX_QTY_PER_LINE, Math.max(variant.stock, inCart)) : 0;
+  return { variant, setVariantId: choosePack, qty, setQty, inCart, maxAddable, addToCart, justAdded, setCartQty, cartCap };
 }
 
 /** Product card: white photo panel, pack size, price per pack, quantity and Add to Cart. */
@@ -70,7 +79,20 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
     </button>
   );
 
-  const stepper = !out && !full ? (
+  // Not in the cart yet: pick a quantity, then Add. Already in the cart: the card shows the cart's
+  // own quantity and − / + change the cart directly (so it never "jumps back" to 1 after adding).
+  const inCartMode = s.inCart > 0;
+  const stepper = inCartMode ? (
+    <QuantityStepper
+      size="sm"
+      tone="lime"
+      value={s.inCart}
+      onChange={s.setCartQty}
+      max={s.cartCap}
+      label={`${product.name} ${v.label} in cart`}
+      className={cn("relative z-10 rounded-lg font-semibold", layout === "grid" ? "w-full" : "shrink-0")}
+    />
+  ) : !out && !full ? (
     <QuantityStepper
       size="sm"
       tone="outline"
@@ -81,6 +103,18 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       className={cn("relative z-10 rounded-lg", layout === "grid" ? "w-full" : "shrink-0")}
     />
   ) : null;
+  const inCartNote = inCartMode ? (
+    <Link
+      href="/cart"
+      className={cn(
+        "relative z-10 inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-forest-800 px-3 text-sm font-semibold text-forest-800 hover:bg-lime-50",
+        layout === "grid" ? "w-full" : "min-w-[6.5rem] flex-1 px-2.5",
+      )}
+    >
+      <Check className="size-4" aria-hidden /> {s.inCart} in cart · View
+    </Link>
+  ) : null;
+  const actions = inCartMode ? <>{stepper}{inCartNote}</> : <>{stepper}{addButton}</>;
 
   if (layout === "compact") {
     return (
@@ -101,10 +135,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
           {unitPriceLabel(v.price, v.label) ? <p className="text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
           {product.variants.length > 1 ? <PackSizeSelect product={product} value={v.id} onChange={s.setVariantId} className="mt-1.5 max-w-[12rem]" /> : null}
           {out ? <p className="text-xs font-medium text-danger">Out of stock</p> : null}
-          <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">
-            {stepper}
-            {addButton}
-          </div>
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-2">{actions}</div>
         </div>
       </article>
     );
@@ -139,12 +170,9 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
         </p>
         {unitPriceLabel(v.price, v.label) ? <p className="-mt-1 text-xs tabular-nums text-muted">({unitPriceLabel(v.price, v.label)})</p> : null}
         <p className="min-h-4 text-xs font-medium" aria-live="polite">
-          {out ? <span className="text-danger">Out of stock</span> : v.stock <= 5 ? <span className="text-amber">Only {v.stock} left</span> : s.inCart > 0 ? <span className="text-leaf-600">{s.inCart} in cart</span> : null}
+          {out ? <span className="text-danger">Out of stock</span> : v.stock <= 5 ? <span className="text-amber">Only {v.stock} left</span> : null}
         </p>
-        <div className="mt-auto flex flex-col gap-2 pt-1">
-          {stepper}
-          {addButton}
-        </div>
+        <div className="mt-auto flex flex-col gap-2 pt-1">{actions}</div>
       </div>
     </article>
   );
