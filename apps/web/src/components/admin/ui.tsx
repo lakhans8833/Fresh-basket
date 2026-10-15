@@ -62,6 +62,14 @@ export function orderTone(s: OrderStatus): Tone {
 export function paymentTone(s: PaymentStatus): Tone {
   return s === "paid" || s === "cod_collected" ? "green" : s === "refund_pending" || s === "failed" ? "red" : s === "pending" ? "amber" : "neutral";
 }
+/** Order still "placed" after its delivery slot ended. */
+export function LateBadge() {
+  return (
+    <Badge tone="red" className="uppercase tracking-wide">
+      <span title="Delivery slot has ended and the order is still not packed">Late</span>
+    </Badge>
+  );
+}
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return <Badge tone={orderTone(status)}>{ORDER_STATUS_LABEL[status]}</Badge>;
 }

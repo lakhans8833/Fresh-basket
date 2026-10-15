@@ -10,10 +10,10 @@ import { pool, query, queryOne, asUser } from "@/lib/db";
 import { placeOrder, getMyOrder, releaseExpired, customerCancel, reorderItems, getOrderById } from "@/lib/orders";
 import { processPaymentEvent, normaliseRazorpayEvent } from "@/lib/payments/process";
 import { verifyCheckoutSignature, verifyWebhookSignature } from "@/lib/payments/razorpay";
-import { adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
+import { adminGetOrder, adminListOrders, adminStats, adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
 import { listAddresses, saveAddress } from "@/lib/account";
 import { buildQuote } from "@/lib/quote";
-import { adminListUsers, adminSetRole } from "@/lib/admin/users";
+import { adminConfirmEmail, adminListUsers, adminResendConfirmation, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
 import { listProducts } from "@/lib/catalog";
 
@@ -398,5 +398,51 @@ describe("shop listing", () => {
       expect(firstOut).toBeGreaterThan(0); // capsicum is sold out in the sample data
       expect(items.slice(firstOut).every((p) => !p.inStock)).toBe(true);
     }
+  });
+});
+
+describe("late orders", () => {
+  it("flags placed orders whose delivery slot has ended, until they are packed", async () => {
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["onion:1 kg"]!, quantity: 3 }] }));
+    const isLate = async () => (await adminListOrders({})).find((o) => (o as { id: string }).id === order.id) as { late: boolean } | undefined;
+    expect((await isLate())?.late).toBe(false); // slot is tomorrow
+    const lateCount = async () => ((await adminStats()) as Record<string, unknown>).lateOrders as number;
+    const before = await lateCount();
+
+    await query("update orders set delivery_date = delivery_date - 3 where id = $1", [order.id]);
+    expect((await isLate())?.late).toBe(true);
+    expect((await adminListOrders({ status: "late" })).map((o) => (o as { id: string }).id)).toContain(order.id);
+    expect((await adminGetOrder(order.id)).late).toBe(true);
+    expect(await lateCount()).toBe(before + 1);
+
+    await adminUpdateOrderStatus(order.id, "packed", ADMIN);
+    expect((await isLate())?.late).toBe(false);
+    expect(await lateCount()).toBe(before);
+  });
+});
+
+describe("admin email confirmation", () => {
+  it("confirms an unconfirmed email (and is a no-op when already confirmed)", async () => {
+    const id = (await queryOne<{ id: string }>("insert into auth.users (email) values ('newbie@freshbasket.local') returning id"))!.id;
+    await query("insert into profiles (id, email) values ($1, 'newbie@freshbasket.local') on conflict do nothing", [id]);
+    const before = (await adminListUsers("newbie")).find((u) => u.id === id);
+    expect(before?.emailConfirmedAt).toBeNull();
+    const r = await adminConfirmEmail(id);
+    expect(r.emailConfirmedAt).toBeTruthy();
+    expect((await adminListUsers("newbie")).find((u) => u.id === id)?.emailConfirmedAt).toBe(r.emailConfirmedAt);
+    expect((await adminConfirmEmail(id)).emailConfirmedAt).toBe(r.emailConfirmedAt);
+    await expect(adminResendConfirmation(id)).rejects.toMatchObject({ status: 409 }); // already confirmed
+    await expect(adminConfirmEmail("00000000-0000-4000-8000-000000000999")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("cached catalogue filtering", () => {
+  it("searches Hindi names, categories and slugs, and filters by category", async () => {
+    expect((await listProducts({ q: "tamatar" })).map((p) => p.slug)).toContain("tomato");
+    expect((await listProducts({ q: "LADIES finger" })).map((p) => p.slug)).toContain("ladies-finger");
+    const cat = (await listProducts({ q: "tomato" }))[0]!;
+    const inCat = await listProducts({ category: (await queryOne<{ slug: string }>("select slug from categories where id = $1", [cat.categoryId]))!.slug });
+    expect(inCat.every((p) => p.categoryId === cat.categoryId)).toBe(true);
+    expect(await listProducts({ ids: [] })).toEqual([]);
   });
 });

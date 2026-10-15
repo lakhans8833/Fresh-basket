@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
@@ -11,6 +12,8 @@ import { issueToken, readToken } from "./tokens";
 export const DEV_COOKIE = "fb_dev_session";
 /** Set by src/proxy.ts after it verified/refreshed the Supabase session (client values are stripped). */
 export const ACCESS_HEADER = "x-fb-sb-access-token";
+/** Set by src/proxy.ts: the requested path + query (client values are stripped). */
+export const PATH_HEADER = "x-fb-path";
 const DEV_TTL = 60 * 60 * 24 * 7;
 
 export interface Session {
@@ -57,27 +60,34 @@ async function resolveUserId(): Promise<{ id: string; email: string | null } | n
   }
 
   if (env.auth.mode === "supabase") {
-    if (bearer) {
-      const sb = createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
-      const { data } = await sb.auth.getUser(bearer);
-      return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
-    }
+    if (bearer) return verifyAccessToken(bearer);
     // Cookie sessions: the proxy (src/proxy.ts) has already refreshed the session if needed and
     // passes the current access token in an internal header. Only verify it here — never refresh
     // in route handlers / server components, or parallel requests would reuse one refresh token
     // and Supabase would revoke the whole session.
     const token = h.get(ACCESS_HEADER);
-    if (!token) return null;
-    const sb = createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data } = await sb.auth.getUser(token);
-    return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
+    return token ? verifyAccessToken(token) : null;
   }
   return null;
 }
 
+let verifier: ReturnType<typeof createClient> | null = null;
+/**
+ * Verifies a Supabase access token. getClaims() checks the signature locally with the project's
+ * public signing keys (cached), falling back to Supabase Auth for legacy shared-secret projects.
+ * Never refreshes anything (see src/proxy.ts).
+ */
+async function verifyAccessToken(token: string): Promise<{ id: string; email: string | null } | null> {
+  verifier ??= createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data } = await verifier.auth.getClaims(token);
+  const c = data?.claims;
+  return c?.sub ? { id: c.sub, email: typeof c.email === "string" && c.email ? c.email : null } : null;
+}
+
 type ProfileRow = { id: string; email: string | null; full_name: string | null; phone: string | null; role: Profile["role"] };
 
-export async function getSession(): Promise<Session | null> {
+/** The signed-in user and profile. Cached per request, so the layout and page share one lookup. */
+export const getSession = cache(async (): Promise<Session | null> => {
   const u = await resolveUserId();
   if (!u) return null;
   let row = await queryOne<ProfileRow>("select id, email, full_name, phone, role from profiles where id = $1", [u.id]);
@@ -92,7 +102,7 @@ export async function getSession(): Promise<Session | null> {
     userId: row.id,
     profile: { id: row.id, email: row.email, fullName: row.full_name, phone: row.phone, role: row.role },
   };
-}
+});
 
 export async function requireUser(): Promise<Session> {
   const s = await getSession();

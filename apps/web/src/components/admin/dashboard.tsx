@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, ClipboardList, IndianRupee, PackageOpen, Truck, Clock, RotateCcw, AlertTriangle, MessageSquare, RotateCw } from "lucide-react";
+import { AlarmClock, ArrowRight, ClipboardList, IndianRupee, PackageOpen, Truck, Clock, RotateCcw, AlertTriangle, MessageSquare, RotateCw } from "lucide-react";
 import { formatINR, type Order } from "@freshbasket/shared";
 import { Button } from "../ui/button";
 import { EmptyState } from "../ui/feedback";
@@ -17,6 +17,7 @@ interface Stats {
   awaitingPayment: number;
   refundsPending: number;
   lowStockCount: number;
+  lateOrders: number;
   openMessages: number;
   recent: Order[];
   lowStock: { variantId: string; productName: string; label: string; stock: number }[];
@@ -30,6 +31,7 @@ export function Dashboard() {
         { label: "Orders today", value: data.ordersToday, icon: ClipboardList, href: "/admin/orders" },
         { label: "Revenue today", value: formatINR(data.revenueToday), icon: IndianRupee, hint: "Paid + cash on delivery" },
         { label: "To fulfil", value: data.toFulfil, icon: PackageOpen, href: "/admin/orders?status=placed", attention: data.toFulfil > 0 },
+        { label: "Late orders", value: data.lateOrders, icon: AlarmClock, href: "/admin/orders?status=late", warn: data.lateOrders > 0, hint: "Slot over, still not packed" },
         { label: "Out for delivery", value: data.outForDelivery, icon: Truck, href: "/admin/orders?status=out_for_delivery" },
         { label: "Awaiting payment", value: data.awaitingPayment, icon: Clock, href: "/admin/orders?status=pending_payment" },
         { label: "Refunds pending", value: data.refundsPending, icon: RotateCcw, href: "/admin/orders?status=cancelled", warn: data.refundsPending > 0 },

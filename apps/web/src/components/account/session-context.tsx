@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Profile } from "@freshbasket/shared";
 import { api, SESSION_RECOVERED_EVENT, UNAUTHORIZED_EVENT } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
@@ -16,6 +16,10 @@ const Ctx = createContext<SessionState>({ profile: null, loading: true, refresh:
 export function SessionProvider({ children, initial }: { children: ReactNode; initial: Profile | null }) {
   const [profile, setProfile] = useState<Profile | null>(initial);
   const [loading, setLoading] = useState(false);
+  const current = useRef(profile);
+  useEffect(() => {
+    current.current = profile;
+  }, [profile]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -33,7 +37,11 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
   useEffect(() => {
     const sb = getBrowserSupabase();
     if (!sb) return;
-    const { data } = sb.auth.onAuthStateChange((event) => {
+    const { data } = sb.auth.onAuthStateChange((event, session) => {
+      // Supabase also reports SIGNED_IN when a tab regains focus; only re-load the profile when
+      // the signed-in user actually changed (saves a /api/me round trip on every tab switch).
+      if (event === "SIGNED_IN" && session?.user.id === current.current?.id) return;
+      if (event === "SIGNED_OUT" && !current.current) return;
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") void refresh();
     });
     return () => data.subscription.unsubscribe();
@@ -54,11 +62,13 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
         }
         setProfile(null);
         const { pathname, search } = window.location;
-        if (/^\/(admin|account|checkout|orders|pay)(\/|$)/.test(pathname) && !pathname.startsWith("/login")) {
+        const isAdmin = /^\/admin(\/|$)/.test(pathname);
+        if ((isAdmin || /^\/(account|checkout|orders|pay)(\/|$)/.test(pathname)) && !/^\/(admin\/)?login/.test(pathname)) {
           // Full page load on purpose: the admin sidebar / account header were rendered on the server
           // with the old user, so a client-side push would keep showing them.
+          const login = isAdmin ? "/admin/login" : "/login";
           // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-          window.location.assign(`/login?next=${encodeURIComponent(pathname + search)}`);
+          window.location.assign(`${login}?next=${encodeURIComponent(pathname + search)}`);
         }
       } finally {
         setTimeout(() => (checking = false), 3000);

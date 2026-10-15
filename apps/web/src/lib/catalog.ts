@@ -1,7 +1,8 @@
 import "server-only";
 import type { Category, ProductDetail, ProductSummary, Variant } from "@freshbasket/shared";
 import { expandSearchTerms } from "@freshbasket/shared";
-import { query, queryOne } from "./db";
+import { query } from "./db";
+import { CACHE_TAGS, cached } from "./cache";
 import { defaultVariant } from "@/components/product/default-variant";
 
 /**
@@ -48,7 +49,8 @@ function toSummary(r: ProductRow): ProductSummary {
   };
 }
 
-export async function listCategories(): Promise<Category[]> {
+/** Active categories with product counts (cached; see lib/cache.ts). */
+export const listCategories = cached("categories-v1", [CACHE_TAGS.catalog], 300, async (): Promise<Category[]> => {
   const rows = await query<{ id: string; slug: string; name: string; description: string | null; image_url: string | null; sort_order: number; product_count: string }>(
     `select c.*, (select count(*) from products p where p.category_id = c.id and p.active) as product_count
        from categories c where c.active order by c.sort_order, c.name`,
@@ -57,7 +59,7 @@ export async function listCategories(): Promise<Category[]> {
     id: r.id, slug: r.slug, name: r.name, description: r.description, imageUrl: r.image_url, sortOrder: r.sort_order,
     productCount: Number(r.product_count),
   }));
-}
+});
 
 export type SortKey = "featured" | "price_asc" | "price_desc" | "name";
 export interface ProductFilters {
@@ -101,31 +103,34 @@ export const PRICE_BUCKETS: { key: string; label: string; min: number; max: numb
   { key: "60+", label: "₹60 and above", min: 6001, max: null },
 ];
 
+/**
+ * Every product on sale (active product in an active category), cached across requests and dropped
+ * whenever stock or the catalogue changes (lib/cache.ts). Filtering happens in memory — the whole
+ * shop is a few hundred rows at most, and one cached read is far faster than a query per page.
+ */
+const activeProductRows = cached("products-v1", [CACHE_TAGS.catalog], 300, () =>
+  query<ProductRow>(`${PRODUCT_SELECT} where p.active and c.active order by p.name`),
+);
+
 export async function listProducts(f: ProductFilters = {}): Promise<ProductSummary[]> {
-  const where: string[] = ["p.active", "c.active"];
-  const params: unknown[] = [];
+  if (f.ids && f.ids.length === 0) return [];
+  let rows = await activeProductRows();
   if (f.q && f.q.trim()) {
     // "tamatar" also searches "tomato" (Hindi/Hinglish names, see packages/shared/src/catalog-search.ts)
     const terms = expandSearchTerms(f.q);
-    const ors = (terms.length ? terms : [f.q.trim().toLowerCase()]).map((t) => {
-      params.push(`%${t.replace(/[%_\\]/g, (m) => "\\" + m)}%`);
-      const n = params.length;
-      return `lower(p.name) like $${n} or lower(c.name) like $${n} or replace(p.slug, '-', ' ') like $${n}`;
+    const list = (terms.length ? terms : [f.q.trim()]).map((t) => t.toLowerCase());
+    rows = rows.filter((r) => {
+      const hay = [r.name.toLowerCase(), r.category_name.toLowerCase(), r.slug.replace(/-/g, " ")];
+      return list.some((t) => hay.some((h) => h.includes(t)));
     });
-    where.push(`(${ors.join(" or ")})`);
   }
-  if (f.category) {
-    params.push(f.category);
-    where.push(`c.slug = $${params.length}`);
-  }
+  if (f.category) rows = rows.filter((r) => r.category_slug === f.category);
   if (f.ids) {
-    if (f.ids.length === 0) return [];
-    params.push(f.ids);
-    where.push(`p.id = any($${params.length}::uuid[])`);
+    const want = new Set(f.ids);
+    rows = rows.filter((r) => want.has(r.id));
   }
-  if (f.seasonal) where.push("p.seasonal");
-  if (f.featured) where.push("p.featured");
-  const rows = await query<ProductRow>(`${PRODUCT_SELECT} where ${where.join(" and ")} order by p.name`, params);
+  if (f.seasonal) rows = rows.filter((r) => r.seasonal);
+  if (f.featured) rows = rows.filter((r) => r.featured);
   let items = rows.map(toSummary).filter((p) => p.variants.length > 0);
   if (f.inStockOnly) items = items.filter((p) => p.inStock);
   const buckets = PRICE_BUCKETS.filter((b) => f.prices?.includes(b.key));
@@ -150,13 +155,14 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
   return f.limit ? items.slice(0, f.limit) : items;
 }
 
+const productImages = cached("product-images-v1", [CACHE_TAGS.catalog], 300, (productId: string) =>
+  query<{ id: string; url: string; alt: string | null }>("select id, url, alt from product_images where product_id = $1 order by sort_order", [productId]),
+);
+
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
-  const r = await queryOne<ProductRow>(`${PRODUCT_SELECT} where p.slug = $1 and p.active and c.active`, [slug]);
+  const r = (await activeProductRows()).find((x) => x.slug === slug);
   if (!r) return null;
-  const images = await query<{ id: string; url: string; alt: string | null }>(
-    "select id, url, alt from product_images where product_id = $1 order by sort_order",
-    [r.id],
-  );
+  const images = await productImages(r.id);
   return { ...toSummary(r), description: r.description, highlights: r.highlights ?? [],
     storageTips: r.storage_tips ?? null, shelfLife: r.shelf_life ?? null, origin: r.origin ?? null, images, categorySlug: r.category_slug };
 }
@@ -182,7 +188,7 @@ export async function getVariantsForCart(ids: string[]) {
  * Returns an empty list when there isn't enough sales history yet.
  */
 /** Ids of products sold most in the last 30 days (≥3 units), or [] when there are fewer than 4. */
-export async function bestSellerIds(limit = 8): Promise<string[]> {
+export const bestSellerIds = cached("best-sellers-v1", [CACHE_TAGS.catalog], 600, async (limit: number = 8): Promise<string[]> => {
   const rows = await query<{ product_id: string }>(
     `select oi.product_id from order_items oi join orders o on o.id = oi.order_id
       where o.status <> 'cancelled' and o.created_at > now() - interval '30 days' and oi.product_id is not null
@@ -190,7 +196,7 @@ export async function bestSellerIds(limit = 8): Promise<string[]> {
     [limit],
   );
   return rows.length < 4 ? [] : rows.map((r) => r.product_id);
-}
+});
 
 export async function listBestSellers(limit = 8): Promise<ProductSummary[]> {
   const ids = await bestSellerIds(limit);

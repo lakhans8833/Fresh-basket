@@ -5,6 +5,7 @@
  * newly connected Supabase database is set up automatically.
  *
  * - Skipped when no database URL is set, or when SKIP_DB_MIGRATIONS=true.
+ * - Skipped on Vercel preview builds (VERCEL_ENV=preview), so a branch never changes the live schema.
  * - Applied migration names are recorded in public._fb_migrations.
  * - SEED_SAMPLE_DATA=false skips the sample catalogue on first setup.
  */
@@ -35,6 +36,12 @@ const raw =
   (nonPooling?.includes("pooler") ? nonPooling : undefined) ||
   envAlias("POSTGRES_URL");
 
+// Vercel preview builds (branches / pull requests) share the production database settings, so
+// they must never change its schema: only production builds (or local runs) apply migrations.
+if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production" && process.env.MIGRATE_PREVIEW !== "true") {
+  console.log(`[migrate] skipped on Vercel ${process.env.VERCEL_ENV} build (migrations run only on production deploys)`);
+  process.exit(0);
+}
 if (process.env.SKIP_DB_MIGRATIONS === "true" || !raw) {
   console.log(`[migrate] skipped (${raw ? "SKIP_DB_MIGRATIONS=true" : "no database URL configured"})`);
   process.exit(0);

@@ -27,8 +27,9 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
   const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
 
   async function done() {
-    const p = await refresh();
-    router.replace(p && p.role !== "customer" && next === "/account" ? "/admin" : next);
+    await refresh();
+    // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
+    router.replace(next);
     router.refresh();
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound } from "lucide-react";
@@ -45,7 +45,6 @@ export function AdminShell({
   children, role, storeName, userName, userEmail, devNotes,
 }: { children: ReactNode; role: AdminRole; storeName: string; userName: string; userEmail: string | null; devNotes: string[] }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { logout } = useSession();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -64,8 +63,8 @@ export function AdminShell({
   async function signOut() {
     setSigningOut(true);
     await logout();
-    router.replace("/login");
-    router.refresh();
+    // Full page load so nothing from the signed-in panel stays on screen.
+    window.location.assign("/admin/login");
   }
 
   const nav = (

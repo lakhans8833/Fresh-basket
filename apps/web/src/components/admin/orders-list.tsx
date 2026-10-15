@@ -9,7 +9,7 @@ import { Input } from "../ui/form";
 import { EmptyState } from "../ui/feedback";
 import { cn } from "../ui/cn";
 import { useAdminData } from "./use-admin-data";
-import { Card, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
+import { Card, LateBadge, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
 
 interface OrderRow {
   id: string;
@@ -24,10 +24,13 @@ interface OrderRow {
   pincode: string;
   createdAt: string;
   itemCount: number;
+  /** Still "placed" after its delivery slot ended. */
+  late: boolean;
 }
 
-const TABS: { value: OrderStatus | ""; label: string }[] = [
+const TABS: { value: OrderStatus | "" | "late"; label: string }[] = [
   { value: "", label: "All" },
+  { value: "late", label: "Late" },
   { value: "pending_payment", label: "Awaiting payment" },
   { value: "placed", label: "Placed" },
   { value: "packed", label: "Packed" },
@@ -153,7 +156,12 @@ export function OrdersList({ initial }: { initial: { status: string; q: string; 
                       <div className="text-ink">{formatDay(o.deliveryDate)}</div>
                       <div className="text-xs text-muted">{o.slotLabel.split(",")[0]}</div>
                     </td>
-                    <td className="px-3 py-3.5"><OrderStatusBadge status={o.status} /></td>
+                    <td className="px-3 py-3.5">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <OrderStatusBadge status={o.status} />
+                        {o.late ? <LateBadge /> : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-3.5">
                       <PaymentStatusBadge status={o.paymentStatus} />
                       <div className="mt-0.5 text-xs text-muted">{METHOD[o.paymentMethod]}</div>
@@ -178,6 +186,7 @@ export function OrdersList({ initial }: { initial: { status: string; q: string; 
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <OrderStatusBadge status={o.status} />
+                    {o.late ? <LateBadge /> : null}
                     <PaymentStatusBadge status={o.paymentStatus} />
                   </div>
                   <p className="mt-2 text-xs text-muted">

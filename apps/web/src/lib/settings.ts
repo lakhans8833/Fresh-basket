@@ -3,6 +3,7 @@ import { cache } from "react";
 import type { StoreSettings } from "@freshbasket/shared";
 import { queryOne } from "./db";
 import { env } from "./env";
+import { CACHE_TAGS, cached } from "./cache";
 
 type Row = {
   store_name: string; tagline: string; logo_url: string | null; support_phone: string | null; support_email: string | null;
@@ -29,31 +30,36 @@ export const DEFAULT_SETTINGS: StoreSettings = {
 };
 
 export const getSettings = cache(async (): Promise<StoreSettings> => {
-  let r: Row | null = null;
+  let base: StoreSettings = DEFAULT_SETTINGS;
   try {
-    r = await queryOne<Row>("select * from store_settings where id");
+    base = (await loadSettings()) ?? DEFAULT_SETTINGS;
   } catch (e) {
-    // Database not reachable or not migrated yet: keep the shell rendering with defaults.
+    // Database not reachable or not migrated yet: keep the shell rendering with defaults (not cached).
     console.error("[settings] could not load store settings — see /api/health", e);
   }
-  const base = r
-    ? {
-        storeName: r.store_name,
-        tagline: r.tagline,
-        logoUrl: r.logo_url,
-        supportPhone: r.support_phone,
-        supportEmail: r.support_email,
-        whatsapp: r.whatsapp,
-        address: r.address,
-        supportHours: r.support_hours,
-        social: { instagram: r.instagram_url, facebook: r.facebook_url, youtube: r.youtube_url, x: r.x_url },
-        codEnabled: r.cod_enabled,
-        defaultMinOrder: r.default_min_order,
-        slotDaysAhead: r.slot_days_ahead,
-        announcement: r.announcement,
-      }
-    : DEFAULT_SETTINGS;
-  return { ...DEFAULT_SETTINGS, ...base, onlinePayment: env.payments.online };
+  return { ...base, onlinePayment: env.payments.online };
+});
+
+/** Store settings row, cached across requests (dropped when Admin → Settings is saved). Throws on DB errors. */
+const loadSettings = cached("settings-v1", [CACHE_TAGS.settings], 600, async (): Promise<StoreSettings | null> => {
+  const r = await queryOne<Row>("select * from store_settings where id");
+  if (!r) return null;
+  return {
+    ...DEFAULT_SETTINGS,
+    storeName: r.store_name,
+    tagline: r.tagline,
+    logoUrl: r.logo_url,
+    supportPhone: r.support_phone,
+    supportEmail: r.support_email,
+    whatsapp: r.whatsapp,
+    address: r.address,
+    supportHours: r.support_hours,
+    social: { instagram: r.instagram_url, facebook: r.facebook_url, youtube: r.youtube_url, x: r.x_url },
+    codEnabled: r.cod_enabled,
+    defaultMinOrder: r.default_min_order,
+    slotDaysAhead: r.slot_days_ahead,
+    announcement: r.announcement,
+  };
 });
 
 /** Payment methods that can actually be used right now — the only ones shown anywhere. */

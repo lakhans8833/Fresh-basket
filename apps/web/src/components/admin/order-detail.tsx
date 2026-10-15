@@ -17,13 +17,15 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { errorMessage, useAdminData } from "./use-admin-data";
 import { useAdmin } from "./admin-context";
-import { Card, CardHeader, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, Thumb, formatDateTime, formatDay } from "./ui";
+import { Card, CardHeader, LateBadge, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, Thumb, formatDateTime, formatDay } from "./ui";
 
 interface AdminOrder extends Order {
   userId: string;
   razorpayOrderId: string | null;
   payments: { provider: string; paymentId: string | null; amount: number; status: string; source: string; createdAt: string }[];
   customer: { email: string | null; fullName: string | null; phone: string | null } | null;
+  /** Still "placed" after its delivery slot ended. */
+  late?: boolean;
 }
 
 const ACTION: Record<OrderStatus, { label: string; icon: typeof PackageCheck; help: string }> = {
@@ -115,6 +117,7 @@ export function AdminOrderDetail({ id }: { id: string }) {
           actions={
             <>
               <OrderStatusBadge status={o.status} />
+              {o.late ? <LateBadge /> : null}
               <PaymentStatusBadge status={o.paymentStatus} />
               <Button variant="outline" size="sm" onClick={() => window.print()}>
                 <Printer className="size-4" aria-hidden /> Packing slip

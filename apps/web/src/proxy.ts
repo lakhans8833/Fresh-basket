@@ -4,6 +4,8 @@ import { createServerClient } from "@supabase/ssr";
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Internal header carrying the access token the proxy just verified (see lib/auth.ts). */
 const ACCESS_HEADER = "x-fb-sb-access-token";
+/** Internal header with the requested path + query, so server layouts can build ?next= links. */
+const PATH_HEADER = "x-fb-path";
 // Server-to-server endpoints authenticated by signature/secret instead of cookies.
 const ORIGIN_EXEMPT = ["/api/webhooks/", "/api/cron/"];
 
@@ -49,6 +51,7 @@ export async function proxy(req: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const forwarded = new Headers(req.headers);
   forwarded.delete(ACCESS_HEADER); // never trust a client-supplied value
+  forwarded.set(PATH_HEADER, pathname + req.nextUrl.search);
   if (!url || !key) return withCors(req, NextResponse.next({ request: { headers: forwarded } }));
 
   const toSet: { name: string; value: string; options: Parameters<NextResponse["cookies"]["set"]>[2] }[] = [];
@@ -63,9 +66,12 @@ export async function proxy(req: NextRequest) {
       },
     },
   });
-  // getUser() verifies the JWT with Supabase Auth and refreshes it first if it has expired.
-  const { data } = await sb.auth.getUser();
-  if (data.user) {
+  // getClaims() refreshes an expired session first, then verifies the JWT. With Supabase's
+  // asymmetric signing keys this is a local signature check (public keys cached for 10 min), so
+  // most requests make no call to Supabase Auth at all; with a legacy shared secret it falls
+  // back to asking Supabase Auth (getUser).
+  const { data } = await sb.auth.getClaims();
+  if (data?.claims?.sub) {
     const { data: s } = await sb.auth.getSession(); // already fresh — no second refresh
     if (s.session?.access_token) forwarded.set(ACCESS_HEADER, s.session.access_token);
   }

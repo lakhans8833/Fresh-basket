@@ -4,11 +4,20 @@ import { query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
 
+/**
+ * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
+ * Needs `left join delivery_slots s on s.id = o.slot_id`; if the slot was deleted, the end of the
+ * delivery day counts.
+ */
+export const LATE_SQL = `(o.status = 'placed' and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+
 export async function adminListOrders(f: { status?: string | null; q?: string | null; date?: string | null; limit?: number }) {
   await releaseExpired();
   const where: string[] = [];
   const params: unknown[] = [];
-  if (f.status) {
+  if (f.status === "late") {
+    where.push(LATE_SQL);
+  } else if (f.status) {
     params.push(f.status);
     where.push(`o.status = $${params.length}`);
   }
@@ -25,8 +34,9 @@ export async function adminListOrders(f: { status?: string | null; q?: string | 
     `select o.id, o.order_number as "orderNumber", o.status, o.payment_method as "paymentMethod", o.payment_status as "paymentStatus",
             o.total, to_char(o.delivery_date, 'YYYY-MM-DD') as "deliveryDate", o.slot_label as "slotLabel",
             o.address->>'fullName' as "customerName", o.address->>'pincode' as pincode, o.created_at as "createdAt",
-            (select count(*)::int from order_items i where i.order_id = o.id) as "itemCount"
-       from orders o ${where.length ? "where " + where.join(" and ") : ""}
+            (select count(*)::int from order_items i where i.order_id = o.id) as "itemCount",
+            ${LATE_SQL} as late
+       from orders o left join delivery_slots s on s.id = o.slot_id ${where.length ? "where " + where.join(" and ") : ""}
       order by o.created_at desc limit $${params.length}`,
     params,
   );
@@ -40,7 +50,8 @@ export async function adminGetOrder(id: string) {
     [id],
   );
   const customer = await query(`select email, full_name as "fullName", phone from profiles where id = $1`, [o.userId]);
-  return { ...o, payments, customer: customer[0] ?? null };
+  const late = await query<{ late: boolean }>(`select ${LATE_SQL} as late from orders o left join delivery_slots s on s.id = o.slot_id where o.id = $1`, [id]);
+  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false };
 }
 
 export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorId: string, note?: string | null) {
@@ -92,6 +103,7 @@ export async function adminStats() {
        (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
           and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
        (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
+       (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
        (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
        (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
        (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",

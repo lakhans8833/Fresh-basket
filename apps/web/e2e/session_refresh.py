@@ -15,11 +15,10 @@ APIS=["/api/admin/stats","/api/admin/orders","/api/admin/products","/api/admin/c
 with sync_playwright() as p:
     b=p.chromium.launch(executable_path="/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
     pg=b.new_page(viewport={"width":1280,"height":900})
-    pg.goto(B+"/login"); pg.wait_for_load_state("networkidle")
-    pg.get_by_role("tab", name="Password").click()
-    pg.locator("#email").fill("admin@test.local"); pg.locator("#password").fill("Secret123!")
+    pg.goto(B+"/admin/login"); pg.wait_for_load_state("networkidle")
+    pg.locator("#admin-email").fill("admin@test.local"); pg.locator("#admin-password").fill("Secret123!")
     pg.locator("form").get_by_role("button", name="Sign in").click()
-    pg.wait_for_url(re.compile(r"/admin"), timeout=20000); print("signed in ->", pg.url.split("3100")[1])
+    pg.wait_for_url(re.compile(r"3100/admin/?$"), timeout=20000); print("signed in ->", pg.url.split("3100")[1])
     ok=True
     for r in range(ROUNDS):
         print(f"round {r+1}: waiting 65 s for the access token to expire…", flush=True)

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, Search, Users } from "lucide-react";
+import { CheckCircle2, CircleAlert, MailCheck, Search, Send, Users } from "lucide-react";
 import type { Profile } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
 import { Input } from "../ui/form";
+import { Button } from "../ui/button";
 import { EmptyState } from "../ui/feedback";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -51,6 +52,8 @@ function Inner() {
   const { data, error, loading, reload, setData } = useAdminData<{ users: AdminUser[] }>(`/api/admin/users${dq ? `?q=${encodeURIComponent(dq)}` : ""}`);
   const [saving, setSaving] = useState<string | null>(null);
   const [promote, setPromote] = useState<AdminUser | null>(null);
+  const [confirmFor, setConfirmFor] = useState<AdminUser | null>(null);
+  const [emailBusy, setEmailBusy] = useState<string | null>(null);
   const users = data?.users ?? [];
 
   async function setRole(u: AdminUser, role: Profile["role"]) {
@@ -64,6 +67,31 @@ function Inner() {
       await reload();
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function confirmEmail(u: AdminUser) {
+    setEmailBusy(`confirm:${u.id}`);
+    try {
+      const r = await api<{ emailConfirmedAt: string }>(`/api/admin/users/${u.id}`, { method: "POST", json: { action: "confirm-email" } });
+      setData((d) => (d ? { users: d.users.map((x) => (x.id === u.id ? { ...x, emailConfirmedAt: r.emailConfirmedAt } : x)) } : d));
+      toast(`${u.email ?? "Email"} is now confirmed — they can sign in.`);
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setEmailBusy(null);
+    }
+  }
+
+  async function resendEmail(u: AdminUser) {
+    setEmailBusy(`resend:${u.id}`);
+    try {
+      await api(`/api/admin/users/${u.id}`, { method: "POST", json: { action: "resend-confirmation" } });
+      toast(`Confirmation email sent to ${u.email}.`);
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setEmailBusy(null);
     }
   }
 
@@ -110,7 +138,35 @@ function Inner() {
                     {u.emailConfirmedAt ? (
                       <Badge tone="green"><CheckCircle2 className="size-3.5" aria-hidden /> Confirmed</Badge>
                     ) : (
-                      <Badge tone="amber"><CircleAlert className="size-3.5" aria-hidden /> Not confirmed</Badge>
+                      <>
+                        <Badge tone="amber"><CircleAlert className="size-3.5" aria-hidden /> Not confirmed</Badge>
+                        {u.email ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-2.5 text-xs"
+                              disabled={emailBusy !== null}
+                              aria-label={`Confirm email for ${u.email}`}
+                              onClick={() => setConfirmFor(u)}
+                            >
+                              <MailCheck className="size-3.5" aria-hidden /> Confirm email
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2.5 text-xs"
+                              disabled={emailBusy !== null}
+                              aria-label={`Resend confirmation email to ${u.email}`}
+                              onClick={() => void resendEmail(u)}
+                            >
+                              <Send className="size-3.5" aria-hidden /> {emailBusy === `resend:${u.id}` ? "Sending…" : "Resend email"}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </>
                     )}
                   </div>
                   <p className="text-sm text-muted">
@@ -157,6 +213,20 @@ function Inner() {
         onClose={() => setPromote(null)}
       >
         Admins can change prices, settings, coupons and other users&apos; roles. Only give this to people who run the store.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmFor !== null}
+        title={`Confirm ${confirmFor?.email ?? "this email"}?`}
+        confirmLabel="Confirm email"
+        busy={emailBusy === `confirm:${confirmFor?.id}`}
+        onConfirm={async () => {
+          if (confirmFor) await confirmEmail(confirmFor);
+          setConfirmFor(null);
+        }}
+        onClose={() => setConfirmFor(null)}
+      >
+        Only do this if you know this address belongs to the customer (for example, they called the store). They can then sign in without clicking the email link.
       </ConfirmDialog>
     </>
   );

@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { invalidateAfter } from "./cache";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string, public details?: unknown) {
@@ -39,7 +40,9 @@ type Handler<C> = (req: Request, ctx: C) => Promise<Response>;
 export function route<C = unknown>(fn: Handler<C>): Handler<C> {
   return async (req, ctx) => {
     try {
-      return await fn(req, ctx);
+      const res = await fn(req, ctx);
+      invalidateAfter(req, res.status);
+      return res;
     } catch (e) {
       if (e instanceof HttpError) {
         return NextResponse.json({ error: e.message, code: e.code, details: e.details }, { status: e.status });
