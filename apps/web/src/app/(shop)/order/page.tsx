@@ -4,10 +4,14 @@ import { resolveWhatsAppNumber, storeConfig } from "@/config/store";
 import { PageBanner } from "@/components/layout/page-banner";
 import { CheckoutSteps } from "@/components/cart/checkout-steps";
 import { WhatsAppOrderView } from "@/components/cart/whatsapp-order-view";
+import { bookingPaymentMethods } from "@/lib/bookings";
 
-export const metadata: Metadata = { title: "Order on WhatsApp", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Book on WhatsApp", robots: { index: false, follow: false } };
 
-/** WhatsApp checkout: no account needed. The customer sends the order from their own WhatsApp. */
+/**
+ * WhatsApp booking: no account needed. The booking is saved on the server (Pending Confirmation),
+ * then WhatsApp opens with the booking details; the shop confirms it in Admin → WhatsApp bookings.
+ */
 export default async function WhatsAppOrderPage() {
   const settings = await getSettings();
   return (
@@ -19,6 +23,7 @@ export default async function WhatsAppOrderPage() {
         whatsappNumber={resolveWhatsAppNumber(settings.whatsapp)}
         storeName={settings.storeName}
         defaultCity={storeConfig.defaultCity}
+        paymentMethods={bookingPaymentMethods(settings)}
       />
     </>
   );

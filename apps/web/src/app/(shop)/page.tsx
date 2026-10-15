@@ -80,8 +80,8 @@ export default async function HomePage() {
           badge: "Easy ordering",
           title: ["Order on WhatsApp", "in One Tap"],
           subtitle: "Fill your cart, add your address and send the order to us on WhatsApp.",
-          cta: { href: "/shop", label: "Start shopping" },
-          secondary: { href: "/help", label: "How it works" },
+          cta: { href: "/order", label: "Order on WhatsApp" },
+          secondary: { href: "/shop", label: "Start shopping" },
           image: "/images/site/hero-shopping-basket.webp",
           imageAlt: "A shopping basket filled with fresh vegetables",
         }

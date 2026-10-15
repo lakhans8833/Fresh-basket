@@ -232,8 +232,8 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
             {whatsapp ? (
               <div className="overflow-hidden rounded-[var(--radius-card)] bg-forest-800 p-5 text-white">
                 <p className="font-script text-[2rem] font-bold leading-[0.95]">Eat Fresh,<br />Stay Healthy</p>
-                <p className="mt-2 text-sm text-white/80">Add items to your cart and send the order on WhatsApp in one tap.</p>
-                <Link href="/cart" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-forest-800 hover:bg-lime-100">
+                <p className="mt-2 text-sm text-white/80">Add items to your cart, choose a delivery slot and book on WhatsApp.</p>
+                <Link href="/order" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-forest-800 hover:bg-lime-100">
                   <WhatsAppIcon className="size-4 text-whatsapp-dark" /> Order on WhatsApp
                 </Link>
               </div>

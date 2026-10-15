@@ -26,7 +26,7 @@ export function invalidate(...tags: string[]) {
 }
 
 // Requests that never change products, stock, categories or settings.
-const NO_CATALOG_CHANGE = ["/api/auth/", "/api/me", "/api/newsletter", "/api/contact", "/api/quote", "/api/search/", "/api/delivery/check", "/api/admin/upload", "/api/admin/messages", "/api/admin/users"];
+const NO_CATALOG_CHANGE = ["/api/auth/", "/api/me", "/api/newsletter", "/api/contact", "/api/quote", "/api/search/", "/api/delivery/check", "/api/admin/upload", "/api/admin/messages", "/api/admin/users", "/api/bookings"];
 
 /**
  * After a successful API request that may have changed stock or the catalogue (orders, cancellations,

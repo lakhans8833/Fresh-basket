@@ -113,7 +113,8 @@ export async function adminStats() {
          (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
          (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",
          (select count(*)::int from product_variants where active and stock <= 5) as "lowStockCount",
-         (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
+         (select count(*)::int from support_messages where status = 'open') as "openMessages",
+         (select count(*)::int from whatsapp_bookings where status = 'pending_confirmation') as "pendingBookings"`,
     ),
     query<OrderRow>(
       `select o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount, o.coupon_code,

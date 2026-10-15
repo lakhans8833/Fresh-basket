@@ -71,16 +71,18 @@ export async function adminDeleteCoupon(id: string) {
 export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>) {
   await query(
     `insert into store_settings (id, store_name, tagline, logo_url, support_phone, support_email, whatsapp, address, support_hours,
-        instagram_url, facebook_url, youtube_url, x_url, cod_enabled, default_min_order, slot_days_ahead, announcement)
-     values (true,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        instagram_url, facebook_url, youtube_url, x_url, cod_enabled, default_min_order, slot_days_ahead, announcement, upi_id, upi_payee_name)
+     values (true,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      on conflict (id) do update set store_name=excluded.store_name, tagline=excluded.tagline, logo_url=excluded.logo_url,
         support_phone=excluded.support_phone, support_email=excluded.support_email, whatsapp=excluded.whatsapp, address=excluded.address,
         support_hours=excluded.support_hours, instagram_url=excluded.instagram_url, facebook_url=excluded.facebook_url,
         youtube_url=excluded.youtube_url, x_url=excluded.x_url, cod_enabled=excluded.cod_enabled,
-        default_min_order=excluded.default_min_order, slot_days_ahead=excluded.slot_days_ahead, announcement=excluded.announcement`,
+        default_min_order=excluded.default_min_order, slot_days_ahead=excluded.slot_days_ahead, announcement=excluded.announcement,
+        upi_id=excluded.upi_id, upi_payee_name=excluded.upi_payee_name`,
     [
       d.storeName, d.tagline, d.logoUrl || null, d.supportPhone || null, d.supportEmail || null, d.whatsapp || null, d.address || null,
       d.supportHours || null, d.instagram, d.facebook, d.youtube, d.x, d.codEnabled, d.defaultMinOrder, d.slotDaysAhead, d.announcement || null,
+      d.upiId || null, d.upiPayeeName || null,
     ],
   );
 }

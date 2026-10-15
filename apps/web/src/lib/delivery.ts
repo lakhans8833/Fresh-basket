@@ -27,8 +27,11 @@ export async function getSlotOptions(daysAhead: number, now = new Date()): Promi
   const today = istDateString(now);
   const dates = Array.from({ length: daysAhead }, (_, i) => addDays(today, i));
   const counts = await query<{ delivery_date: string; slot_id: string; n: string }>(
-    `select to_char(delivery_date, 'YYYY-MM-DD') as delivery_date, slot_id, count(*) as n from orders
-      where status <> 'cancelled' and delivery_date between $1::date and $2::date group by 1, 2`,
+    `select to_char(delivery_date, 'YYYY-MM-DD') as delivery_date, slot_id, count(*) as n from (
+        select delivery_date, slot_id from orders where status <> 'cancelled' and delivery_date between $1::date and $2::date
+        union all
+        select delivery_date, slot_id from whatsapp_bookings where status <> 'cancelled' and delivery_date between $1::date and $2::date
+      ) x group by 1, 2`,
     [dates[0], dates[dates.length - 1]],
   );
   const booked = new Map(counts.map((c) => [`${c.delivery_date}|${c.slot_id}`, Number(c.n)]));
@@ -46,7 +49,8 @@ export async function lockAndCheckSlot(db: Q, slotId: string, date: string, now 
   if (!rows[0]) return { ok: false as const, reason: "This delivery slot is no longer offered." };
   const rule = toSlotRule(rows[0]);
   const { rows: c } = await db.query<{ n: string }>(
-    "select count(*) as n from orders where slot_id = $1 and delivery_date = $2 and status <> 'cancelled'",
+    `select (select count(*) from orders where slot_id = $1 and delivery_date = $2 and status <> 'cancelled')
+          + (select count(*) from whatsapp_bookings where slot_id = $1 and delivery_date = $2 and status <> 'cancelled') as n`,
     [slotId, date],
   );
   if (!isSlotBookable(rule, date, now, Number(c[0]?.n ?? 0))) {

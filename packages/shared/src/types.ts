@@ -20,6 +20,9 @@ export interface StoreSettings {
   defaultMinOrder: Paise;
   slotDaysAhead: number;
   announcement: string | null;
+  /** UPI ID for UPI QR payments on WhatsApp bookings (e.g. shopname@okaxis). */
+  upiId: string | null;
+  upiPayeeName: string | null;
 }
 
 export interface Category {

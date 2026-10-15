@@ -10,6 +10,7 @@ type Row = {
   whatsapp: string | null; address: string | null; support_hours: string | null; instagram_url: string | null;
   facebook_url: string | null; youtube_url: string | null; x_url: string | null; cod_enabled: boolean;
   default_min_order: number; slot_days_ahead: number; announcement: string | null;
+  upi_id?: string | null; upi_payee_name?: string | null;
 };
 
 export const DEFAULT_SETTINGS: StoreSettings = {
@@ -27,6 +28,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   defaultMinOrder: 0,
   slotDaysAhead: 3,
   announcement: null,
+  upiId: null,
+  upiPayeeName: null,
 };
 
 export const getSettings = cache(async (): Promise<StoreSettings> => {
@@ -59,6 +62,8 @@ const loadSettings = cached("settings-v1", [CACHE_TAGS.settings], 600, async ():
     defaultMinOrder: r.default_min_order,
     slotDaysAhead: r.slot_days_ahead,
     announcement: r.announcement,
+    upiId: r.upi_id ?? null,
+    upiPayeeName: r.upi_payee_name ?? null,
   };
 });
 

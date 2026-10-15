@@ -6,8 +6,10 @@ import { api } from "@/lib/client/api";
 import { useCart } from "./cart-context";
 
 /** Fetches server-computed totals whenever the basket, coupon or PIN code changes. */
-export function useQuote(pincode: string | null | undefined) {
-  const { lines, couponCode, hydrated } = useCart();
+export function useQuote(pincode: string | null | undefined, opts: { withCoupon?: boolean } = {}) {
+  const { lines, couponCode: cartCoupon, hydrated } = useCart();
+  // WhatsApp bookings are priced without coupons (coupons apply at the account checkout).
+  const couponCode = opts.withCoupon === false ? null : cartCoupon;
   const [data, setData] = useState<QuoteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

@@ -65,6 +65,8 @@ function Editor({ initial }: { initial: StoreSettings }) {
     defaultMinOrder: paiseToInput(initial.defaultMinOrder),
     slotDaysAhead: String(initial.slotDaysAhead),
     announcement: initial.announcement ?? "",
+    upiId: initial.upiId ?? "",
+    upiPayeeName: initial.upiPayeeName ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -107,6 +109,8 @@ function Editor({ initial }: { initial: StoreSettings }) {
       address: f.address.trim() || null,
       supportHours: f.supportHours.trim() || null,
       announcement: f.announcement.trim() || null,
+      upiId: f.upiId.trim(),
+      upiPayeeName: f.upiPayeeName.trim() || null,
       defaultMinOrder: minOrder === null || Number.isNaN(minOrder) ? 0 : minOrder,
       slotDaysAhead: days,
     });
@@ -217,6 +221,10 @@ function Editor({ initial }: { initial: StoreSettings }) {
             <Field label="Days of slots to show" htmlFor="st-days" error={errors.slotDaysAhead} hint="How far ahead customers can book (1–14)">
               <Input id="st-days" inputMode="numeric" value={f.slotDaysAhead} invalid={!!errors.slotDaysAhead} onChange={(e) => set({ slotDaysAhead: e.target.value.replace(/[^\d]/g, "") })} />
             </Field>
+          </div>
+          <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-2">
+            {text("upiId", "UPI ID (for UPI QR payments)", { max: 120, placeholder: "shopname@okaxis", hint: "WhatsApp bookings show a QR code for this UPI ID with the exact amount. Leave empty to hide UPI QR." })}
+            {text("upiPayeeName", "UPI payee name", { max: 50, placeholder: "Ram Avatar Fresh Basket", hint: "Name shown in the customer's UPI app" })}
           </div>
         </div>
       </Card>

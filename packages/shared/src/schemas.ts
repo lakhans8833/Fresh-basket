@@ -235,4 +235,6 @@ export const adminSettingsSchema = z.object({
   defaultMinOrder: z.number().int().min(0),
   slotDaysAhead: z.number().int().min(1).max(14),
   announcement: trimmed(160).optional().nullable(),
+  upiId: z.union([z.string().trim().regex(/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/, "Enter a valid UPI ID, e.g. shopname@okaxis"), z.literal("")]).optional().nullable(),
+  upiPayeeName: trimmed(50).optional().nullable(),
 });

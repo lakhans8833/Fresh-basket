@@ -38,22 +38,32 @@ docs/API.md      API reference
 - **Order workflow**: placed → packed → out for delivery → delivered (or cancelled before dispatch). Staff can only make
   valid transitions; nobody can mark an online order paid by hand. COD cash collection and refunds are recorded by staff.
 
-## WhatsApp ordering
+## WhatsApp booking
 
-Customers can order **without an account**: Cart → **Order on WhatsApp** → `/order` (name, mobile, address, area,
-city, PIN code, notes) → **Proceed to WhatsApp**. The site opens `https://wa.me/<number>?text=<encoded order>`; the
-order reaches the seller only when the customer presses **Send** in WhatsApp — nothing is submitted automatically.
+Customers can book **without an account**: Home / Shop / Product page / Cart → **Order on WhatsApp** → `/order`
+(name, mobile, full address, area, city, PIN code, delivery instructions, **delivery date + slot**, **payment method**) →
+**Confirm Booking on WhatsApp**.
 
-- Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (international format, digits only, e.g. `919876543210` — example format)
-  or, if that's empty, the WhatsApp number in **Admin → Settings** (a 10-digit Indian mobile gets `91` added).
-  With no valid number, all WhatsApp buttons are hidden and only the normal checkout is shown.
-- Prices, discount and delivery charge in the message come from the server quote (`/api/quote`, live database prices).
-  If the PIN code isn't in **Admin → Delivery**, the message says "Delivery: to be confirmed" instead of guessing.
-- The message is built in the customer's browser and they can edit it in WhatsApp before sending, so treat it as an
-  order *request*: confirm items and the amount in the chat. It is not a secure payment record — for online payments
-  use the normal checkout (server-side totals + Razorpay verification).
-- Message building/validation: `packages/shared/src/whatsapp.ts` (unit-tested). Customer text is cleaned of WhatsApp
-  formatting/control characters and URL-encoded.
+1. The browser sends only variant IDs + quantities. `POST /api/bookings` re-prices everything from the database
+   (`buildQuote`), checks the PIN code is a delivery area, the slot still has room and items are in stock, and saves the
+   booking in `whatsapp_bookings` with a **server-generated Booking ID** (`WB<yymmdd>-<n>`) and status **Pending Confirmation**.
+2. The server builds the pre-filled WhatsApp message (`packages/shared/src/booking.ts`, URL-encoded) and the site opens
+   `https://wa.me/<number>?text=…`. The customer must press **Send** in WhatsApp.
+3. **Opening WhatsApp never confirms anything.** Staff open **Admin → WhatsApp bookings**, check the customer's message and
+   press **Confirm booking** (this takes the stock), then *Preparing → Out for Delivery → Delivered*, or *Cancel* (stock returned).
+
+- Duplicates: a unique idempotency key per attempt, and the same mobile/items/date/slot within 10 minutes returns the first
+  booking; a per-mobile advisory lock makes simultaneous taps safe. Rate limits per IP and per mobile, plus a hidden honeypot field.
+- Bookings count towards delivery slot capacity together with normal orders.
+- Payment (`payment_status` starts **unpaid**):
+  - **UPI QR Code**: shown when a UPI ID is set in Admin → Settings. QR / `upi://` link for the exact amount with the Booking ID
+    as the note. Staff mark it paid only after checking the UPI transaction ID (UTR) in their bank app.
+  - **Razorpay Payment Link**: shown when Razorpay keys are set. Created server-side; the booking becomes paid only from the
+    signed `payment_link.paid` webhook with the exact amount (never by hand).
+  - **Cash on Delivery**: stays unpaid until staff record the cash (only once out for delivery / delivered).
+- Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER`, or the WhatsApp number in **Admin → Settings** (same number for every button).
+  With no valid number all WhatsApp buttons are hidden.
+- Coupons apply at the account checkout only, not to WhatsApp bookings.
 - The account checkout (`/checkout`, sign-in, slots, COD/Razorpay, order tracking) still works alongside it.
 
 ## PWA (install on phone)

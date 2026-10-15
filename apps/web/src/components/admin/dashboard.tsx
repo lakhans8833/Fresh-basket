@@ -19,6 +19,7 @@ export interface Stats {
   lowStockCount: number;
   lateOrders: number;
   openMessages: number;
+  pendingBookings?: number;
   recent: Order[];
   lowStock: { variantId: string; productName: string; label: string; stock: number }[];
 }
@@ -36,6 +37,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
         { label: "Awaiting payment", value: data.awaitingPayment, icon: Clock, href: "/admin/orders?status=pending_payment" },
         { label: "Refunds pending", value: data.refundsPending, icon: RotateCcw, href: "/admin/orders?status=cancelled", warn: data.refundsPending > 0 },
         { label: "Low stock", value: data.lowStockCount, icon: AlertTriangle, href: "/admin/inventory?filter=low", warn: data.lowStockCount > 0 },
+        { label: "WhatsApp bookings to confirm", value: data.pendingBookings ?? 0, icon: MessageSquare, href: "/admin/bookings", attention: (data.pendingBookings ?? 0) > 0 },
         { label: "Open messages", value: data.openMessages, icon: MessageSquare, href: "/admin/messages", attention: data.openMessages > 0 },
       ]
     : [];

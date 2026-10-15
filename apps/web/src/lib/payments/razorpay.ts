@@ -44,6 +44,34 @@ export function capturePayment(paymentId: string, amount: number) {
   });
 }
 
+export interface RazorpayPaymentLink { id: string; short_url: string; status: string; amount: number; reference_id: string }
+
+/**
+ * Payment link for a WhatsApp booking (amount in paise, server-computed). The booking number is the
+ * reference_id; Razorpay sends "payment_link.paid" to the webhook when the customer pays.
+ */
+export function createPaymentLink(args: {
+  amount: number; referenceId: string; description: string; bookingId: string; callbackUrl: string;
+  customer: { name: string; contact: string };
+}) {
+  return call<RazorpayPaymentLink>("/payment_links", {
+    method: "POST",
+    body: JSON.stringify({
+      amount: args.amount,
+      currency: "INR",
+      accept_partial: false,
+      reference_id: args.referenceId,
+      description: args.description,
+      customer: args.customer,
+      notify: { sms: false, email: false },
+      reminder_enable: false,
+      notes: { booking_id: args.bookingId },
+      callback_url: args.callbackUrl,
+      callback_method: "get",
+    }),
+  });
+}
+
 /** Checkout handler signature: HMAC_SHA256(order_id + "|" + payment_id, key_secret). */
 export function verifyCheckoutSignature(razorpayOrderId: string, paymentId: string, signature: string, secret = env.payments.razorpayKeySecret) {
   if (!secret) return false;
