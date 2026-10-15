@@ -13,6 +13,7 @@ import { verifyCheckoutSignature, verifyWebhookSignature } from "@/lib/payments/
 import { adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
 import { listAddresses, saveAddress } from "@/lib/account";
 import { buildQuote } from "@/lib/quote";
+import { adminListUsers, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
 
 const ADMIN = "00000000-0000-4000-8000-0000000000a1";
@@ -327,5 +328,23 @@ describe("permissions (row-level security)", () => {
   it("pending online orders cannot be marked placed by staff", async () => {
     const { order } = await placeOrder(CUSTOMER, input({ paymentMethod: "mock" }));
     await expect(adminUpdateOrderStatus(order.id, "placed", ADMIN)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("admin users", () => {
+  it("lists users with email status and changes roles safely", async () => {
+    const users = await adminListUsers();
+    expect(users.find((u) => u.id === ADMIN)?.role).toBe("admin");
+    expect(users.every((u) => "emailConfirmedAt" in u)).toBe(true);
+    // can't change your own role
+    await expect(adminSetRole(ADMIN, ADMIN, "customer")).rejects.toMatchObject({ status: 400 });
+    // promote / demote someone else
+    await adminSetRole(ADMIN, OTHER, "staff");
+    expect((await queryOne<{ role: string }>("select role from profiles where id = $1", [OTHER]))!.role).toBe("staff");
+    await adminSetRole(ADMIN, OTHER, "customer");
+    // the only admin can't be demoted
+    const admins = (await query<{ n: number }>("select count(*)::int as n from profiles where role = 'admin'"))[0]!.n;
+    expect(admins).toBe(1);
+    await expect(adminSetRole(OTHER, ADMIN, "customer")).rejects.toMatchObject({ status: 409 });
   });
 });
