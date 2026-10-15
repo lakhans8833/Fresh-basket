@@ -27,9 +27,29 @@ export async function GET() {
       : `Database error (${err.code ?? "unknown"}): ${(err.message ?? "").slice(0, 160)}`;
     database = { ok: false, source, message: msg };
   }
+  // Where things run (no secrets): the function region and the database host's region, so you can
+  // check they are close together (e.g. bom1 Mumbai ↔ Supabase ap-south-1).
+  let dbHost = "";
+  try {
+    dbHost = new URL(env.databaseUrl).hostname;
+  } catch {
+    /* ignore */
+  }
+  const dbRegion = /(?:^|\.)aws-\d+-([a-z]{2}-[a-z]+-\d)\.pooler\.supabase\.com$/.exec(dbHost)?.[1]
+    ?? (/\.supabase\.co$/.test(dbHost) ? "unknown (direct connection host — see Supabase → Project Settings → General)" : dbHost === "localhost" ? "local" : "unknown");
+  const timing = { functionRegion: process.env.VERCEL_REGION ?? "local", databaseRegion: dbRegion, queryMs: 0 };
+  try {
+    const t = Date.now();
+    await pool.query("select 1");
+    timing.queryMs = Date.now() - t;
+  } catch {
+    /* reported above */
+  }
+
   return NextResponse.json(
     {
       database,
+      regions: timing,
       auth: env.auth.mode,
       storage: env.storage.mode,
       onlinePayments: env.payments.online ?? "off (Cash on delivery only)",
