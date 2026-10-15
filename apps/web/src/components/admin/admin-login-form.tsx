@@ -21,6 +21,30 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  /** Emails a password-reset link; after setting the new password the staff member lands on /admin/login. */
+  async function forgotPassword() {
+    const sb = getBrowserSupabase();
+    if (!sb) return;
+    setError(null);
+    setInfo(null);
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError("Enter your email above first, then tap “Forgot password?”.");
+      document.getElementById("admin-email")?.focus();
+      return;
+    }
+    setSending(true);
+    const next = `/reset-password?next=${encodeURIComponent("/admin/login")}`;
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+    });
+    setSending(false);
+    if (error) setError(/rate|seconds/i.test(error.message) ? "Please wait a minute before asking for another email." : error.message);
+    // Same message whether or not the account exists, so nobody can probe which emails are registered.
+    else setInfo(`If ${email.trim()} has an account, we've emailed a link to set a new password. Check your inbox (and spam).`);
+  }
 
   async function finish() {
     const p = await refresh();
@@ -39,6 +63,7 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
     e.preventDefault();
     if (busy) return;
     setError(null);
+    setInfo(null);
     setBusy(true);
     try {
       if (mode === "dev") {
@@ -74,6 +99,7 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
         <Notice tone="warning" className="mt-5">You&apos;re signed in as {signedInAs}, which doesn&apos;t have admin access. Sign in with a staff account.</Notice>
       ) : null}
       {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {info ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
       {mode === "unconfigured" ? <Notice tone="error" className="mt-5">Sign-in isn&apos;t configured on this server.</Notice> : null}
 
       <form onSubmit={submit} className="mt-6 space-y-4" noValidate={false}>
@@ -94,7 +120,11 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
           <DevBadge /> No password needed in development. Try admin@freshbasket.local.
         </p>
       ) : (
-        <p className="mt-4 text-xs text-muted">Forgot your password? Ask the store admin to send a reset, or use “Forgot password?” on the store sign-in page.</p>
+        <div className="mt-4 text-center">
+          <Button type="button" variant="ghost" size="sm" loading={sending} disabled={mode === "unconfigured"} onClick={forgotPassword}>
+            Forgot password?
+          </Button>
+        </div>
       )}
     </>
   );

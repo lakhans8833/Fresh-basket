@@ -15,18 +15,18 @@ const toAddress = (r: Row): Address => ({
 // All address operations run with RLS as the customer: the database itself prevents
 // reading or changing another customer's addresses.
 export const listAddresses = (userId: string) =>
-  asUser(userId, async (c) => (await c.query<Row>("select * from addresses order by is_default desc, created_at")).rows.map(toAddress));
+  asUser(userId, async (c) => (await c.query<Row>("select * from addresses where user_id = auth.uid() order by is_default desc, created_at")).rows.map(toAddress));
 
 export async function saveAddress(userId: string, id: string | null, a: AddressInput): Promise<Address> {
   return asUser(userId, async (c) => {
-    const { rows: cnt } = await c.query<{ n: string }>("select count(*) as n from addresses");
+    const { rows: cnt } = await c.query<{ n: string }>("select count(*) as n from addresses where user_id = auth.uid()");
     const makeDefault = a.isDefault || Number(cnt[0]?.n ?? 0) === 0;
-    if (makeDefault) await c.query("update addresses set is_default = false where is_default and ($1::uuid is null or id <> $1)", [id]);
+    if (makeDefault) await c.query("update addresses set is_default = false where user_id = auth.uid() and is_default and ($1::uuid is null or id <> $1)", [id]);
     const p = [a.label, a.fullName, a.phone, a.line1, a.line2 ?? null, a.landmark ?? null, a.city, a.state, a.pincode, makeDefault];
     const { rows } = id
       ? await c.query<Row>(
           `update addresses set label=$1, full_name=$2, phone=$3, line1=$4, line2=$5, landmark=$6, city=$7, state=$8, pincode=$9,
-                  is_default = case when $10 then true else is_default end where id = $11 returning *`,
+                  is_default = case when $10 then true else is_default end where id = $11 and user_id = auth.uid() returning *`,
           [...p, id],
         )
       : await c.query<Row>(
@@ -41,10 +41,10 @@ export async function saveAddress(userId: string, id: string | null, a: AddressI
 
 export async function deleteAddress(userId: string, id: string) {
   return asUser(userId, async (c) => {
-    const { rows } = await c.query<Row>("delete from addresses where id = $1 returning *", [id]);
+    const { rows } = await c.query<Row>("delete from addresses where id = $1 and user_id = auth.uid() returning *", [id]);
     if (!rows[0]) throw notFound("Address not found.");
     if (rows[0].is_default) {
-      await c.query("update addresses set is_default = true where id = (select id from addresses order by created_at limit 1)");
+      await c.query("update addresses set is_default = true where id = (select id from addresses where user_id = auth.uid() order by created_at limit 1)");
     }
   });
 }

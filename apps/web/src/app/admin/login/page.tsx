@@ -3,13 +3,15 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { env } from "@/lib/env";
+import { safeNextPath } from "@/lib/safe-next";
 import { AdminLoginForm } from "@/components/admin/admin-login-form";
 import { AdminAuthFrame } from "@/components/admin/admin-auth-frame";
 
 export const metadata: Metadata = { title: "Staff sign in" };
 
 function safeNext(n: string | undefined) {
-  return n && /^\/admin(\/|$|\?)/.test(n) && !n.startsWith("/admin/login") ? n : "/admin";
+  const p = safeNextPath(n, "/admin");
+  return /^\/admin(\/|$|\?)/.test(p) && !p.startsWith("/admin/login") ? p : "/admin";
 }
 
 export default async function AdminLoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {

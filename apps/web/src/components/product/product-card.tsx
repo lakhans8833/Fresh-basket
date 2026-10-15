@@ -76,7 +76,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       onChange={s.setCartQty}
       max={s.cartCap}
       label={`${product.name} ${v.label} in cart`}
-      className="relative z-10 w-[6.75rem] shrink-0 rounded-lg font-semibold"
+      className="relative z-10 w-[5.75rem] shrink-0 rounded-lg font-semibold sm:w-[6.75rem]"
     />
   ) : (
     <button
@@ -84,7 +84,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       disabled={out || full}
       onClick={s.addToCart}
       className={cn(
-        "relative z-10 inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-3.5 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
+        "relative z-10 inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-3 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
         out || full ? "bg-sage-100 text-xs font-semibold tracking-normal text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "border border-forest-800 bg-lime-50 text-forest-800 hover:bg-forest-800 hover:text-white",
       )}
       aria-label={out ? `${product.name} ${v.label} is out of stock` : full ? `${product.name}: maximum quantity already in cart` : `Add ${product.name} ${v.label} to cart`}
@@ -93,9 +93,10 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
     </button>
   );
   const price = (
-    <p className="flex flex-wrap items-baseline gap-x-1 leading-tight">
+    <p className="leading-tight">
       <span className="text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
-      {perKg ? <span className="text-[0.6875rem] tabular-nums text-muted">· {perKg}</span> : null}
+      {/* Always one line tall, so the price and ADD sit at the same height on every card. */}
+      <span className="block h-4 truncate text-[0.6875rem] tabular-nums text-muted">{perKg ?? ""}</span>
     </p>
   );
 
@@ -151,15 +152,20 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
         <h3 className="line-clamp-2 font-sans text-sm font-semibold leading-snug text-ink sm:text-[0.9375rem]">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
-        <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="self-start" />
-        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5 pt-2">
+        {/* Same height whether or not there is a size picker ("1 pc", combos), so rows line up. */}
+        <div className="flex h-7 min-w-0 items-center gap-2">
+          <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="shrink-0" />
+          {!out && v.stock <= 5 ? <span className="truncate text-[0.6875rem] font-medium text-amber">Only {v.stock} left</span> : null}
+        </div>
+        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
           <div className="min-w-0">
-            {v.mrp && v.mrp > v.price ? <s className="block text-[0.6875rem] tabular-nums text-muted">MRP {formatINR(v.mrp)}</s> : null}
+            <s className={cn("block h-4 text-[0.6875rem] tabular-nums text-muted", !(v.mrp && v.mrp > v.price) && "invisible")}>
+              {v.mrp && v.mrp > v.price ? `MRP ${formatINR(v.mrp)}` : "MRP"}
+            </s>
             {price}
           </div>
           {action}
         </div>
-        {!out && v.stock <= 5 ? <p className="text-[0.6875rem] font-medium text-amber">Only {v.stock} left</p> : null}
       </div>
     </article>
   );

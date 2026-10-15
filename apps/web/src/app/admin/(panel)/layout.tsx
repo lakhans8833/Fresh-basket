@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { getSession, PATH_HEADER } from "@/lib/auth";
+import { safeNextPath } from "@/lib/safe-next";
 import { getSettings } from "@/lib/settings";
 import { env } from "@/lib/env";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -14,7 +15,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!session) {
     // The proxy passes the requested path so staff come back to the same page after signing in.
     const path = (await headers()).get(PATH_HEADER);
-    const next = path && path.startsWith("/admin") && !path.startsWith("//") ? path : "/admin";
+    const safe = safeNextPath(path, "/admin");
+    const next = safe.startsWith("/admin") ? safe : "/admin";
     redirect(`/admin/login?next=${encodeURIComponent(next)}`);
   }
 

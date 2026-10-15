@@ -9,7 +9,7 @@ import { Button, ButtonLink } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
 
-export function ResetPasswordForm({ signedIn }: { signedIn: boolean }) {
+export function ResetPasswordForm({ signedIn, next = "/account" }: { signedIn: boolean; next?: string }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -33,7 +33,7 @@ export function ResetPasswordForm({ signedIn }: { signedIn: boolean }) {
     }
     setDone(true);
     setTimeout(() => {
-      router.replace("/account");
+      router.replace(next);
       router.refresh();
     }, 1200);
   }
@@ -53,7 +53,7 @@ export function ResetPasswordForm({ signedIn }: { signedIn: boolean }) {
           <Notice tone="warning" title="This link has expired or was already used">
             Ask for a new link from the sign-in page (“Forgot password?”) and open it on this device.
           </Notice>
-          <ButtonLink href="/login" variant="dark" className="w-full">Back to sign in</ButtonLink>
+          <ButtonLink href={next.startsWith("/admin") ? "/admin/login" : "/login"} variant="dark" className="w-full">Back to sign in</ButtonLink>
         </div>
       ) : done ? (
         <Notice tone="success" className="mt-6">Password updated. Taking you to your account…</Notice>
@@ -67,7 +67,7 @@ export function ResetPasswordForm({ signedIn }: { signedIn: boolean }) {
             <Input id="confirm-password" type="password" required minLength={8} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </Field>
           <Button type="submit" variant="dark" size="lg" className="w-full" loading={busy}>Save new password</Button>
-          <p className="text-center text-sm text-muted"><Link href="/account" className="font-semibold text-forest-800 hover:underline">Skip for now</Link></p>
+          <p className="text-center text-sm text-muted"><Link href={next} className="font-semibold text-forest-800 hover:underline">Skip for now</Link></p>
         </form>
       )}
     </div>

@@ -8,10 +8,12 @@ import { api, ApiError, SESSION_RECOVERED_EVENT } from "@/lib/client/api";
  * Changing `path` or calling `reload()` refetches without blanking the current data
  * (no flash of skeletons); `loading` is true while a request is in flight.
  */
-export function useAdminData<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
+export function useAdminData<T>(path: string | null, initial?: T | null) {
+  const [data, setData] = useState<T | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [settledPath, setSettledPath] = useState<string | null>(null);
+  // Data rendered on the server counts as already loaded for that path (no skeleton, no refetch).
+  const [settledPath, setSettledPath] = useState<string | null>(initial ? path : null);
+  const skipFirst = useRef(Boolean(initial));
   const [refreshing, setRefreshing] = useState(0);
   const seq = useRef(0);
 
@@ -33,6 +35,10 @@ export function useAdminData<T>(path: string | null) {
   }, []);
 
   useEffect(() => {
+    if (skipFirst.current) {
+      skipFirst.current = false;
+      return;
+    }
     if (path) void fetchPath(path);
   }, [path, fetchPath]);
 

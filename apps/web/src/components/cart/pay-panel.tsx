@@ -73,7 +73,17 @@ export function PayPanel({ order, payment, token, returnToApp, storeName }: Prop
       handler: async (resp: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
         try {
           const r = await api<{ status: string }>(`/api/payments/razorpay/verify${q}`, { method: "POST", json: { orderId: order.id, ...resp } });
-          finish(r.status === "pending_confirmation" ? "pending" : "paid");
+          if (["paid", "paid_late", "already_processed"].includes(r.status)) finish("paid");
+          else if (r.status === "pending_confirmation") finish("pending");
+          else {
+            // refund_required / amount_mismatch: never show "Payment confirmed" for these.
+            setError(
+              r.status === "refund_required"
+                ? "We received your payment, but this order can no longer be completed. Your refund will be processed — see the order page."
+                : "We couldn't confirm this payment automatically. Our team will check it — see the order page.",
+            );
+            finish("pending");
+          }
         } catch (e) {
           // The webhook will still confirm a genuine payment; send the customer to the order page.
           setError((e as Error).message);

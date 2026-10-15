@@ -1,6 +1,6 @@
 import "server-only";
 import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
-import { query, tx } from "../db";
+import { pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
 import { notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
@@ -101,30 +101,36 @@ export async function adminUpdatePaymentStatus(id: string, to: PaymentStatus, ac
   return adminGetOrder(id);
 }
 
+/**
+ * Everything the dashboard shows, in one call: expired holds are released first (so the counts are
+ * right), then the counts, recent orders and low-stock list are read in parallel.
+ */
 export async function adminStats() {
   await releaseExpired();
-  const [r] = await query<Record<string, number>>(
-    `select
-       (select count(*)::int from orders where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
-       (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
-          and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
-       (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
-       (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
-       (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
-       (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
-       (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",
-       (select count(*)::int from product_variants where active and stock <= 5) as "lowStockCount",
-       (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
-  );
-  const recent: OrderRow[] = await query<OrderRow>(
-    `select o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount, o.coupon_code,
-            o.delivery_fee, o.total, to_char(o.delivery_date,'YYYY-MM-DD') as delivery_date, o.slot_label, o.address, o.customer_note,
-            o.reservation_expires_at, o.razorpay_order_id, o.created_at
-       from orders o order by created_at desc limit 8`,
-  );
-  const lowStock = await query(
-    `select v.id as "variantId", p.name as "productName", v.label, v.stock from product_variants v join products p on p.id = v.product_id
-      where v.active and p.active and v.stock <= 5 order by v.stock, p.name limit 10`,
-  );
-  return { ...r, recent: await tx((c) => hydrateOrders(c, recent)), lowStock };
+  const [counts, recentRows, lowStock] = await Promise.all([
+    query<Record<string, number>>(
+      `select
+         (select count(*)::int from orders where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
+         (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
+            and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
+         (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
+         (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
+         (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
+         (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
+         (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",
+         (select count(*)::int from product_variants where active and stock <= 5) as "lowStockCount",
+         (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
+    ),
+    query<OrderRow>(
+      `select o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount, o.coupon_code,
+              o.delivery_fee, o.total, to_char(o.delivery_date,'YYYY-MM-DD') as delivery_date, o.slot_label, o.address, o.customer_note,
+              o.reservation_expires_at, o.razorpay_order_id, o.created_at
+         from orders o order by created_at desc limit 8`,
+    ),
+    query(
+      `select v.id as "variantId", p.name as "productName", v.label, v.stock from product_variants v join products p on p.id = v.product_id
+        where v.active and p.active and v.stock <= 5 order by v.stock, p.name limit 10`,
+    ),
+  ]);
+  return { ...counts[0], recent: await hydrateOrders(pool, recentRows), lowStock };
 }

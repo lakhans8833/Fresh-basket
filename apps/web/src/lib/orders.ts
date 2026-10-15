@@ -33,14 +33,17 @@ const ORDER_COLUMNS = `o.id, o.order_number, o.user_id, o.status, o.payment_meth
 export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
-  const { rows: items } = await db.query<{
-    order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
-    unit_price: number; quantity: number; line_total: number; image_url: string | null;
-  }>("select * from order_items where order_id = any($1::uuid[]) order by product_name", [ids]);
-  const { rows: events } = await db.query<{ order_id: string; status: OrderStatus; note: string | null; created_at: Date }>(
-    "select order_id, status, note, created_at from order_events where order_id = any($1::uuid[]) order by created_at, id",
-    [ids],
-  );
+  // Both lookups at once (on a pool they run in parallel; on one client they simply queue).
+  const [{ rows: items }, { rows: events }] = await Promise.all([
+    db.query<{
+      order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
+      unit_price: number; quantity: number; line_total: number; image_url: string | null;
+    }>("select * from order_items where order_id = any($1::uuid[]) order by product_name", [ids]),
+    db.query<{ order_id: string; status: OrderStatus; note: string | null; created_at: Date }>(
+      "select order_id, status, note, created_at from order_events where order_id = any($1::uuid[]) order by created_at, id",
+      [ids],
+    ),
+  ]);
   return rows.map((r) => ({
     id: r.id,
     orderNumber: r.order_number,
@@ -91,8 +94,8 @@ export async function listMyOrders(userId: string, limit = 50): Promise<Order[]>
 
 export async function getMyOrder(userId: string, orderId: string): Promise<Order | null> {
   return asUser(userId, async (c) => {
-    // RLS hides other customers' orders even without the user_id filter.
-    const { rows } = await c.query<OrderRow>(`select ${ORDER_COLUMNS} from orders o where o.id = $1`, [orderId]);
+    // Own orders only (RLS would also let staff read every order through this customer path).
+    const { rows } = await c.query<OrderRow>(`select ${ORDER_COLUMNS} from orders o where o.id = $1 and o.user_id = auth.uid()`, [orderId]);
     const [o] = await hydrateOrders(c, rows);
     return o ?? null;
   });

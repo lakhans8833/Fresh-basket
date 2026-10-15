@@ -158,11 +158,18 @@ export async function adminPatchInventory(
   products: { productId: string; stockGrams: number }[] = [],
 ) {
   return tx(async (c) => {
-    // Products first (their packs are recomputed by a trigger), then packs — same lock order as checkout.
-    for (const pr of [...products].sort((a, b) => a.productId.localeCompare(b.productId))) {
+    // Same lock order as checkout: every affected product row (by id) first, then packs by id —
+    // otherwise a save running alongside a checkout could deadlock.
+    await c.query(
+      `select id from products
+        where id = any($2::uuid[]) or id in (select product_id from product_variants where id = any($1::uuid[]))
+        order by id for update`,
+      [updates.map((u) => u.variantId), products.map((p) => p.productId)],
+    );
+    for (const pr of [...products].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0))) {
       await c.query("update products set stock_grams = $2 where id = $1 and stock_grams is not null", [pr.productId, pr.stockGrams]);
     }
-    for (const u of updates) {
+    for (const u of [...updates].sort((a, b) => (a.variantId < b.variantId ? -1 : a.variantId > b.variantId ? 1 : 0))) {
       // For stock-by-weight packs the database derives `stock` from the product total, so a
       // stock value sent here is ignored for them (price / active still apply).
       await c.query(

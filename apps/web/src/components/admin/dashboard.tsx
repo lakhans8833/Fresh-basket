@@ -9,7 +9,7 @@ import { cn } from "../ui/cn";
 import { useAdminData } from "./use-admin-data";
 import { Card, CardHeader, LoadError, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
 
-interface Stats {
+export interface Stats {
   ordersToday: number;
   revenueToday: number;
   toFulfil: number;
@@ -23,8 +23,8 @@ interface Stats {
   lowStock: { variantId: string; productName: string; label: string; stock: number }[];
 }
 
-export function Dashboard() {
-  const { data, error, loading, reload } = useAdminData<Stats>("/api/admin/stats");
+export function Dashboard({ initial }: { initial?: Stats | null }) {
+  const { data, error, loading, reload } = useAdminData<Stats>("/api/admin/stats", initial);
 
   const cards = data
     ? [
