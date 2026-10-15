@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { useCart } from "../cart/cart-context";
 import { useSession } from "../account/session-context";
 import { useToast } from "../ui/toast";
@@ -13,6 +14,8 @@ import { checkPincode, savedAddresses } from "./delivery-location";
  */
 export function AutoLocation() {
   const { profile } = useSession();
+  // Not in the admin panel: staff don't shop there, and the toast would cover admin screens.
+  const inAdmin = usePathname().startsWith("/admin");
   const { location, setLocation, hydrated } = useCart();
   const toast = useToast();
   const done = useRef<string | null>(null);
@@ -29,7 +32,7 @@ export function AutoLocation() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !profile || location || done.current === profile.id) return;
+    if (inAdmin || !hydrated || !profile || location || done.current === profile.id) return;
     done.current = profile.id;
     (async () => {
       const addresses = await savedAddresses();
@@ -49,7 +52,7 @@ export function AutoLocation() {
         }
       }
     })();
-  }, [hydrated, profile, location]);
+  }, [hydrated, profile, location, inAdmin]);
 
   return null;
 }
