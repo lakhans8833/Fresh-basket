@@ -28,10 +28,13 @@ const address = {
   state: "Karnataka", pincode: "560034", isDefault: false,
 };
 
+// Each test order gets its own address line, so it isn't treated as a duplicate of the previous
+// one (the server refuses an identical order from the same customer within 2 minutes).
+let orderNo = 0;
 function input(o: Partial<PlaceOrderInput> = {}): PlaceOrderInput {
   return {
     items: [{ variantId: v["tomato:500 g"]!, quantity: 4 }], // ₹128 — above the ₹99 minimum
-    address, saveAddress: false, slotId: eveningSlot, deliveryDate: tomorrow, paymentMethod: "cod",
+    address: { ...address, line1: `${address.line1}, flat ${++orderNo}` }, saveAddress: false, slotId: eveningSlot, deliveryDate: tomorrow, paymentMethod: "cod",
     idempotencyKey: randomUUID(), couponCode: null, customerNote: null, ...o,
   } as PlaceOrderInput;
 }
@@ -96,6 +99,29 @@ describe("checkout totals are computed on the server", () => {
     } finally {
       await query("update store_settings set cod_enabled = true");
     }
+  });
+});
+
+describe("duplicate orders", () => {
+  it("returns the first order when the same order is resubmitted with a new key", async () => {
+    const same = input();
+    const a = await placeOrder(CUSTOMER, same);
+    const b = await placeOrder(CUSTOMER, { ...same, idempotencyKey: randomUUID() });
+    expect(a.created).toBe(true);
+    expect(b.created).toBe(false);
+    expect(b.order.id).toBe(a.order.id);
+  });
+  it("creates exactly one order for simultaneous identical submissions (double click)", async () => {
+    const same = input();
+    const results = await Promise.all([0, 1, 2, 3].map(() => placeOrder(CUSTOMER, { ...same, idempotencyKey: randomUUID() })));
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    expect(new Set(results.map((r) => r.order.id)).size).toBe(1);
+  });
+  it("still allows a different order right away", async () => {
+    const a = await placeOrder(CUSTOMER, input());
+    const b = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["tomato:500 g"]!, quantity: 5 }] }));
+    expect(b.created).toBe(true);
+    expect(b.order.id).not.toBe(a.order.id);
   });
 });
 

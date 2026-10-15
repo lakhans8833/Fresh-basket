@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, stateMatchesPincode,
@@ -135,8 +136,35 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
   const existing = await query<{ id: string }>("select id from orders where user_id = $1 and idempotency_key = $2", [userId, input.idempotencyKey]);
   if (existing[0]) return { order: (await getOrderById(existing[0].id))!, created: false };
 
+  // What is being ordered — identical resubmits within 2 minutes return the first order.
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify({
+        items: [...input.items].map((i) => [i.variantId, i.quantity]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+        addressId: input.addressId ?? null,
+        address: input.address
+          ? [input.address.fullName, input.address.phone, input.address.line1, input.address.line2 ?? "", input.address.pincode].map((x) => String(x).trim().toLowerCase())
+          : null,
+        slot: input.slotId,
+        date: input.deliveryDate,
+        pay: input.paymentMethod,
+        coupon: (input.couponCode ?? "").trim().toUpperCase(),
+      }),
+    )
+    .digest("hex");
+
   try {
-    const orderId = await tx(async (c) => {
+    const result = await tx(async (c): Promise<{ id: string; created: boolean }> => {
+      // One order placement at a time per customer, so two simultaneous submits can't both pass the check below.
+      await c.query("select pg_advisory_xact_lock(hashtext('place_order:' || $1))", [userId]);
+      const dup = await c.query<{ id: string }>(
+        `select id from orders
+          where user_id = $1 and (idempotency_key = $2 or (request_fingerprint = $3 and created_at > now() - interval '2 minutes' and status <> 'cancelled'))
+          order by created_at desc limit 1`,
+        [userId, input.idempotencyKey, fingerprint],
+      );
+      if (dup.rows[0]) return { id: dup.rows[0].id, created: false };
+
       // Resolve the delivery address (saved address must belong to the user).
       let address: AddressSnapshot;
       if (input.addressId) {
@@ -186,9 +214,9 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
       const { rows: orows } = await c.query<{ id: string }>(
         `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
                              delivery_fee, total, delivery_date, slot_id, slot_label, address, customer_note, idempotency_key,
-                             reservation_expires_at)
+                             reservation_expires_at, request_fingerprint)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                 case when $17::boolean then now() + make_interval(mins => $18::int) end)
+                 case when $17::boolean then now() + make_interval(mins => $18::int) end, $19)
          returning id`,
         [
           userId, online ? "pending_payment" : "placed", input.paymentMethod, online ? "pending" : "cod_pending",
@@ -196,7 +224,7 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
           input.deliveryDate, input.slotId,
           `${slot.rule.label}, ${slot.rule.startTime}–${slot.rule.endTime}`,
           JSON.stringify(address), input.customerNote ?? null, input.idempotencyKey,
-          online, env.payments.reservationMinutes,
+          online, env.payments.reservationMinutes, fingerprint,
         ],
       );
       const id = orows[0]!.id;
@@ -229,9 +257,9 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
         online ? "pending_payment" : "placed",
         online ? `Waiting for payment (stock held for ${env.payments.reservationMinutes} minutes)` : "Order placed — pay on delivery",
       ]);
-      return id;
+      return { id, created: true };
     });
-    return { order: (await getOrderById(orderId))!, created: true };
+    return { order: (await getOrderById(result.id))!, created: result.created };
   } catch (e) {
     // Concurrent retry with the same idempotency key.
     if ((e as { code?: string }).code === "23505" && String((e as { constraint?: string }).constraint).includes("idempotency")) {

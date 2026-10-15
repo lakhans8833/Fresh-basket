@@ -51,6 +51,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   const [note, setNote] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
+  const placingRef = useRef(false);
   const [placeError, setPlaceError] = useState<{ message: string; messages?: Record<string, string> } | null>(null);
   const idemKey = useRef(newIdempotencyKey());
 
@@ -76,8 +77,10 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   const pincode = selectedAddress?.pincode ?? (draft.pincode.length === 6 ? draft.pincode : null);
   const { data, loading } = useQuote(pincode);
 
-  // Any change to what's being ordered gets a fresh idempotency key.
-  const payloadKey = JSON.stringify([lines.map((l) => [l.variantId, l.quantity]), couponCode, addressId, draft, slotId, date, method]);
+  // A change to what's being ordered gets a fresh idempotency key. Address fields are left out on
+  // purpose: they auto-fill (city/state from PIN) and a key change mid-submit allowed duplicates.
+  // The server also refuses an identical order within 2 minutes, whatever the key.
+  const payloadKey = JSON.stringify([lines.map((l) => [l.variantId, l.quantity]), couponCode, addressId, slotId, date, method]);
   useEffect(() => {
     idemKey.current = newIdempotencyKey();
   }, [payloadKey]);
@@ -115,6 +118,8 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   const blockingIssue = quote?.issues.find((i) => i.code !== "COUPON_INVALID");
 
   async function placeOrder() {
+    // Synchronous guard: a double click fires twice before React re-renders the disabled button.
+    if (placingRef.current) return;
     setPlaceError(null);
     let addressPayload: Record<string, unknown> = {};
     if (addressId === "new" || !addressId) {
@@ -129,6 +134,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
     if (!slotId || !date) return setPlaceError({ message: "Choose a delivery slot." });
     if (!method) return setPlaceError({ message: "Choose a payment method." });
 
+    placingRef.current = true;
     setPlacing(true);
     try {
       const res = await api<PlaceOrderResponse>("/api/orders", {
@@ -155,6 +161,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       const err = e as ApiError;
       const messages = (err.details as { messages?: Record<string, string> } | undefined)?.messages;
       setPlaceError({ message: err.message, messages });
+      placingRef.current = false;
       setPlacing(false);
       if (err.status === 401) router.push("/login?next=/checkout");
     }
