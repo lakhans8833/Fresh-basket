@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Profile } from "@freshbasket/shared";
-import { api } from "@/lib/client/api";
+import { api, SESSION_RECOVERED_EVENT, UNAUTHORIZED_EVENT } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 
 interface SessionState {
@@ -38,6 +38,46 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
     });
     return () => data.subscription.unsubscribe();
   }, [refresh]);
+
+  // Any API 401: re-check the session once (the server proxy refreshes it if it can). If it's really
+  // gone, drop the stale profile and send the user to sign in, coming back to this page afterwards.
+  useEffect(() => {
+    let checking = false;
+    const onUnauthorized = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const p = await refresh();
+        if (p) {
+          window.dispatchEvent(new Event(SESSION_RECOVERED_EVENT));
+          return;
+        }
+        setProfile(null);
+        const { pathname, search } = window.location;
+        if (/^\/(admin|account|checkout|orders|pay)(\/|$)/.test(pathname) && !pathname.startsWith("/login")) {
+          // Full page load on purpose: the admin sidebar / account header were rendered on the server
+          // with the old user, so a client-side push would keep showing them.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+          window.location.assign(`/login?next=${encodeURIComponent(pathname + search)}`);
+        }
+      } finally {
+        setTimeout(() => (checking = false), 3000);
+      }
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [refresh]);
+
+  // After signing in, remove PKCE code-verifier cookies left over from earlier sign-in attempts.
+  useEffect(() => {
+    if (!profile || typeof document === "undefined") return;
+    for (const part of document.cookie.split(";")) {
+      const name = part.split("=")[0]?.trim();
+      if (name && /^sb-.+-auth-token-code-verifier(\.\d+)?$/.test(name)) {
+        document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+      }
+    }
+  }, [profile]);
 
   const logout = useCallback(async () => {
     await getBrowserSupabase()?.auth.signOut();

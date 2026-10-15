@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError } from "@/lib/client/api";
+import { api, ApiError, SESSION_RECOVERED_EVENT } from "@/lib/client/api";
 
 /**
  * Loads JSON from an admin endpoint and keeps loading / error / data state.
@@ -34,6 +34,14 @@ export function useAdminData<T>(path: string | null) {
 
   useEffect(() => {
     if (path) void fetchPath(path);
+  }, [path, fetchPath]);
+
+  // A 401 that turned out to be a session that just needed refreshing: load again automatically.
+  useEffect(() => {
+    if (!path) return;
+    const again = () => void fetchPath(path);
+    window.addEventListener(SESSION_RECOVERED_EVENT, again);
+    return () => window.removeEventListener(SESSION_RECOVERED_EVENT, again);
   }, [path, fetchPath]);
 
   const reload = useCallback(async () => {

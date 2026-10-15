@@ -9,6 +9,8 @@ import { forbidden, unauthorized } from "./http";
 import { issueToken, readToken } from "./tokens";
 
 export const DEV_COOKIE = "fb_dev_session";
+/** Set by src/proxy.ts after it verified/refreshed the Supabase session (client values are stripped). */
+export const ACCESS_HEADER = "x-fb-sb-access-token";
 const DEV_TTL = 60 * 60 * 24 * 7;
 
 export interface Session {
@@ -56,12 +58,18 @@ async function resolveUserId(): Promise<{ id: string; email: string | null } | n
 
   if (env.auth.mode === "supabase") {
     if (bearer) {
-      const sb = createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false } });
+      const sb = createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
       const { data } = await sb.auth.getUser(bearer);
       return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
     }
-    const sb = await supabaseServerClient();
-    const { data } = await sb.auth.getUser(); // verifies the JWT with Supabase Auth
+    // Cookie sessions: the proxy (src/proxy.ts) has already refreshed the session if needed and
+    // passes the current access token in an internal header. Only verify it here — never refresh
+    // in route handlers / server components, or parallel requests would reuse one refresh token
+    // and Supabase would revoke the whole session.
+    const token = h.get(ACCESS_HEADER);
+    if (!token) return null;
+    const sb = createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data } = await sb.auth.getUser(token);
     return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
   }
   return null;
