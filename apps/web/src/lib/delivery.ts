@@ -1,4 +1,5 @@
 import "server-only";
+import { CACHE_TAGS, cached } from "./cache";
 import type { PoolClient } from "pg";
 import { addDays, isSlotBookable, istDateString, type DeliveryArea, type SlotOption, type SlotRule } from "@freshbasket/shared";
 import { pool, query, queryOne } from "./db";
@@ -71,3 +72,15 @@ export async function listActiveSlots(): Promise<SlotRule[]> {
 }
 
 export { queryOne };
+
+/**
+ * The free-delivery amount when every active delivery area uses the same one (so the cart can show
+ * "Add ₹X more for FREE delivery" before a PIN code is chosen). null when areas differ or none has it.
+ * Cached with the catalogue (Admin → Delivery saves drop it).
+ */
+export const commonFreeAbove = cached("common-free-above-v1", [CACHE_TAGS.catalog], 300, async (): Promise<number | null> => {
+  const rows = await query<{ v: number | null; n: number }>(
+    "select free_above as v, count(*)::int as n from delivery_areas where active group by free_above",
+  );
+  return rows.length === 1 && rows[0]!.v !== null ? rows[0]!.v : null;
+});

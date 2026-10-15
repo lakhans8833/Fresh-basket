@@ -3,13 +3,18 @@ import { formatINR, type Quote } from "@freshbasket/shared";
 import type { ReactNode } from "react";
 
 /**
- * Totals panel. All numbers come from the server quote (/api/quote).
+ * Totals panel. Totals come from the server quote (/api/quote). While it loads, the subtotal is shown
+ * straight away from the cart's own prices (`localLines`) and only delivery / total wait (skeleton).
  * `delivery` — "known": use quote.deliveryFee; "unknown": PIN code not entered yet;
  * "confirm": PIN code not in our delivery list, seller confirms the charge.
  */
 export function OrderSummary({
-  quote, delivery, freeAbove, loading, children, items, headerAction,
+  quote, delivery, freeAbove, loading, children, items, headerAction, localLines, freeAboveFallback,
 }: {
+  /** Cart lines with their last known prices — shown instantly before the server quote arrives. */
+  localLines?: { quantity: number; unitPrice: number }[];
+  /** Free-delivery amount to use when no delivery area is known yet (same for every area). */
+  freeAboveFallback?: number | null;
   quote: Quote | null;
   delivery: "known" | "unknown" | "confirm";
   freeAbove?: number | null;
@@ -25,11 +30,16 @@ export function OrderSummary({
       <dd className="tabular-nums font-medium text-ink">{value}</dd>
     </div>
   );
-  const afterDiscount = quote ? quote.subtotal - quote.discount : 0;
-  // Free-delivery progress (same rule as the server: subtotal after discount >= the area's free_above).
-  const showFree = Boolean(quote && delivery === "known" && freeAbove != null && freeAbove > 0 && quote.lines.length > 0);
-  const shortOfFree = showFree ? Math.max(0, freeAbove! - afterDiscount) : null;
-  const count = quote?.lines.reduce((s, l) => s + l.quantity, 0) ?? 0;
+  const localSubtotal = localLines?.reduce((s, l) => s + l.unitPrice * l.quantity, 0) ?? null;
+  const afterDiscount = quote ? quote.subtotal - quote.discount : (localSubtotal ?? 0);
+  // Free-delivery progress (same rule as the server: subtotal after discount >= free_above). Uses the
+  // area's amount, or the one all areas share before a PIN code is chosen; hidden when there is none.
+  const threshold = delivery === "known" ? freeAbove : delivery === "unknown" ? (freeAbove ?? freeAboveFallback) : null;
+  const hasItems = quote ? quote.lines.length > 0 : (localLines?.length ?? 0) > 0;
+  const showFree = Boolean(threshold != null && threshold > 0 && hasItems && (quote || localSubtotal !== null));
+  const shortOfFree = showFree ? Math.max(0, threshold! - afterDiscount) : null;
+  const count = quote ? quote.lines.reduce((s, l) => s + l.quantity, 0) : (localLines?.reduce((s, l) => s + l.quantity, 0) ?? 0);
+  const pending = <span className="skeleton inline-block h-4 w-16 align-middle" aria-hidden />;
 
   return (
     <section aria-labelledby="summary" className="rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)] sm:p-6" aria-busy={loading}>
@@ -60,6 +70,15 @@ export function OrderSummary({
             </dd>
           </div>
         </dl>
+      ) : localSubtotal !== null && localLines && localLines.length ? (
+        <dl className="mt-4 space-y-2.5 text-[0.9375rem]">
+          {row(`Subtotal (${count} ${count === 1 ? "item" : "items"})`, formatINR(localSubtotal))}
+          {row("Delivery charges", pending)}
+          <div className="!mt-4 flex items-center justify-between gap-4 rounded-xl bg-lime-100 px-4 py-3">
+            <dt className="text-base font-bold text-ink">Total amount</dt>
+            <dd><span className="skeleton inline-block h-7 w-24 align-middle" aria-hidden /><span className="sr-only">Calculating…</span></dd>
+          </div>
+        </dl>
       ) : (
         <div className="mt-4 space-y-3" aria-hidden>
           <div className="skeleton h-4 w-full" />
@@ -67,7 +86,7 @@ export function OrderSummary({
           <div className="skeleton h-12 w-full" />
         </div>
       )}
-      {shortOfFree !== null ? <FreeDeliveryProgress short={shortOfFree} freeAbove={freeAbove!} /> : null}
+      {shortOfFree !== null ? <FreeDeliveryProgress short={shortOfFree} freeAbove={threshold!} /> : null}
       {children ? <div className="mt-5">{children}</div> : null}
     </section>
   );
@@ -82,9 +101,9 @@ export function FreeDeliveryProgress({ short, freeAbove, className }: { short: n
       <p className="flex items-start gap-2.5" aria-live="polite">
         <Truck className="mt-0.5 size-5 shrink-0" aria-hidden />
         {done ? (
-          <span><b>Free delivery unlocked!</b> Your order is above {formatINR(freeAbove)}.</span>
+          <span><b>Delivery FREE!</b> Your order is above {formatINR(freeAbove)}.</span>
         ) : (
-          <span>Add items worth <b>{formatINR(short)}</b> more for <b>free delivery</b> (free above {formatINR(freeAbove)}).</span>
+          <span>Add <b>{formatINR(short)}</b> more for <b>FREE delivery</b> (free above {formatINR(freeAbove)}).</span>
         )}
       </p>
       <div

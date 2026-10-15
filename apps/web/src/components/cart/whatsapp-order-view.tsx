@@ -466,6 +466,8 @@ export function WhatsAppOrderView({
             quote={quote}
             delivery={delivery}
             freeAbove={area?.freeAbove}
+            freeAboveFallback={data?.commonFreeAbove}
+            localLines={lines.map((l) => ({ quantity: l.quantity, unitPrice: l.priceHint }))}
             loading={loading}
             items={itemsTable}
             headerAction={<Link href="/cart" className="inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline"><Pencil className="size-3.5" aria-hidden /> Edit Cart</Link>}

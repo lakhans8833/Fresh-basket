@@ -177,6 +177,8 @@ export interface QuoteResponse {
   quote: Quote;
   messages: Record<string, string>; // variantId or "_cart" -> human message
   area: DeliveryArea | null;
+  /** Free-delivery amount shared by every active delivery area (shown before a PIN code is chosen); null if they differ or none is set. */
+  commonFreeAbove?: number | null;
 }
 
 export interface PlaceOrderResponse {
