@@ -123,10 +123,15 @@ export function WhatsAppBand({ whatsappUrl }: { whatsappUrl: string }) {
         <WhatsAppIcon className="size-10 shrink-0 text-white" />
         <p className="text-xl font-semibold">Order on WhatsApp</p>
         <span aria-hidden className="hidden h-6 w-px bg-white/30 sm:block" />
-        <p className="text-white/85">Add items to your cart, then send the order to us on WhatsApp.</p>
-        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-forest-800 hover:bg-lime-100">
-          <WhatsAppIcon className="size-5 text-whatsapp-dark" /> Chat now
-        </a>
+        <p className="text-white/85">Fill your cart, pick a delivery slot and send the order to us on WhatsApp.</p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Link href="/order" className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-forest-800 hover:bg-lime-100">
+            <WhatsAppIcon className="size-5 text-whatsapp-dark" /> Order on WhatsApp
+          </Link>
+          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full border border-white/50 px-4 text-sm font-semibold text-white hover:bg-white/10">
+            Chat with us
+          </a>
+        </div>
       </div>
     </section>
   );

@@ -89,6 +89,8 @@ export interface WhatsAppOrder {
   payLink?: string | null;
   /** Secret tracking link for this order. */
   trackUrl?: string | null;
+  /** Chosen delivery day + slot, e.g. "Fri, 16 Oct · Morning, 07:00–10:00". */
+  delivery?: string | null;
 }
 
 /** Short human-friendly reference so the seller and customer can refer to the order. */
@@ -129,6 +131,7 @@ export function buildWhatsAppOrderMessage(o: WhatsAppOrder): string {
   lines.push(`Address: ${cleanText(c.address, 200)}`);
   if (c.area) lines.push(`Area: ${cleanText(c.area, 80)}`);
   lines.push(`City / PIN: ${cleanText(c.city, 60)} - ${c.pincode}`);
+  if (o.delivery) lines.push(`Delivery slot: ${cleanText(o.delivery, 80)}`);
   lines.push("");
   lines.push(`*Items (${o.lines.length})*`);
   o.lines.forEach((l, i) => {
@@ -141,7 +144,7 @@ export function buildWhatsAppOrderMessage(o: WhatsAppOrder): string {
   lines.push(`Delivery: ${o.deliveryFee === null ? "to be confirmed" : o.deliveryFee === 0 ? "Free" : formatINR(o.deliveryFee)}`);
   lines.push(`*Total: ${formatINR(o.total)}*${o.deliveryFee === null ? " + delivery" : ""}`);
   if (o.paymentMethod) {
-    lines.push(`Payment: ${cleanText(o.paymentMethod, 60)}${o.paymentStatus ? ` (${cleanText(o.paymentStatus, 40)})` : ""}`);
+    lines.push(`Payment: ${cleanText(o.paymentMethod, 60)}${o.paymentStatus && o.paymentStatus !== o.paymentMethod ? ` (${cleanText(o.paymentStatus, 40)})` : ""}`);
   }
   if (o.payLink) lines.push(`Pay online: ${o.payLink}`);
   if (c.notes) {
@@ -153,7 +156,7 @@ export function buildWhatsAppOrderMessage(o: WhatsAppOrder): string {
     lines.push(`Track order: ${o.trackUrl}`);
   }
   lines.push("");
-  lines.push("Please confirm availability and delivery time. Thank you!");
+  lines.push(o.delivery ? "Please confirm my order. Thank you!" : "Please confirm availability and delivery time. Thank you!");
   return lines.join("\n");
 }
 

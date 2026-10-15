@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Banknote, Building2, CheckCircle2, CreditCard, ExternalLink, Home, MapPin, NotebookPen, Pencil, Phone, QrCode, ShieldCheck, ShoppingBasket, Truck, UserRound } from "lucide-react";
+import { Banknote, Building2, CalendarClock, CheckCircle2, CreditCard, ExternalLink, Home, MapPin, NotebookPen, Pencil, Phone, QrCode, ShieldCheck, ShoppingBasket, Truck, UserRound } from "lucide-react";
 import {
-  buildWhatsAppUrl, formatINR, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
-  type QuoteIssue, type WhatsAppCustomer, type WhatsAppCustomerInput,
+  buildWhatsAppUrl, formatINR, formatSlotTime, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
+  type QuoteIssue, type SlotOption, type WhatsAppCustomer, type WhatsAppCustomerInput,
 } from "@freshbasket/shared";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
@@ -22,6 +22,7 @@ import { EmptyState, Notice } from "../ui/feedback";
 import { useToast } from "../ui/toast";
 import { WhatsAppIcon } from "../ui/whatsapp-icon";
 import { cn } from "../ui/cn";
+import { dayLabel, SlotPicker } from "./slot-picker";
 
 const BLOCKING: QuoteIssue["code"][] = ["OUT_OF_STOCK", "UNAVAILABLE", "INVALID_QUANTITY", "EMPTY_CART", "TOO_MANY_LINES", "BELOW_MIN_ORDER"];
 
@@ -86,6 +87,27 @@ export function WhatsAppOrderView({
   const placingRef = useRef(false);
   const [placed, setPlaced] = useState<PlacedWaOrder | null>(null);
   const idemKey = useRef(newIdempotencyKey());
+  // Delivery date + slot (shared capacity with website orders). null = still loading; [] = no slots set up.
+  const [slots, setSlots] = useState<SlotOption[] | null>(null);
+  const [date, setDate] = useState<string | null>(null);
+  const [slotId, setSlotId] = useState<string | null>(null);
+
+  const loadSlots = () =>
+    api<{ slots: SlotOption[] }>("/api/delivery/slots", { cache: "no-store" }).then(
+      (r) => {
+        setSlots(r.slots);
+        const first = r.slots.find((x) => x.available);
+        setDate((d) => (d && r.slots.some((x) => x.date === d) ? d : first?.date ?? r.slots[0]?.date ?? null));
+        setSlotId((id) => (id && r.slots.some((x) => x.slotId === id && x.available) ? id : first?.slotId ?? null));
+      },
+      () => setSlots([]),
+    );
+  useEffect(() => {
+    void loadSlots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once
+  }, []);
+  const chosenSlot = slots?.find((x) => x.slotId === slotId && x.date === date) ?? null;
+  const slotText = chosenSlot ? `${dayLabel(chosenSlot.date, slots?.[0]?.date ?? chosenSlot.date).name}, ${dayLabel(chosenSlot.date, chosenSlot.date).date} · ${chosenSlot.label}, ${formatSlotTime(chosenSlot.startTime)}–${formatSlotTime(chosenSlot.endTime)}` : null;
 
   useEffect(() => {
     const saved = loadSavedCustomer();
@@ -114,7 +136,7 @@ export function WhatsAppOrderView({
   const guestCoupon = !profile && Boolean(couponCode);
 
   // A new order (different items, details or payment) gets a new key; resubmitting the same one reuses it.
-  const payloadKey = JSON.stringify([lines.map((l) => [l.variantId, l.quantity]), couponCode, form, method]);
+  const payloadKey = JSON.stringify([lines.map((l) => [l.variantId, l.quantity]), couponCode, form, method, date, slotId]);
   useEffect(() => {
     idemKey.current = newIdempotencyKey();
   }, [payloadKey]);
@@ -142,6 +164,11 @@ export function WhatsAppOrderView({
     if (!area) return setFormError("We don't deliver to this PIN code yet. Message us on WhatsApp to ask, or try another address.");
     if (blocking.length) return setFormError("Some items in your cart need attention before you can order.");
     if (guestCoupon) return setFormError("Coupons need an account. Sign in to use your coupon, or remove it in the cart to order as a guest.");
+    if (slots === null) return setFormError("Delivery slots are still loading — please try again in a moment.");
+    if (slots.length > 0 && !chosenSlot) {
+      document.getElementById("wa-slot-step")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return setFormError("Choose a delivery date and time slot.");
+    }
     if (!method) return setFormError("Choose how you'll pay.");
     setReview(parsed.data);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -170,6 +197,8 @@ export function WhatsAppOrderView({
           couponCode: profile ? couponCode : null,
           whatsappUpdates,
           idempotencyKey: idemKey.current,
+          deliveryDate: chosenSlot ? chosenSlot.date : null,
+          slotId: chosenSlot ? chosenSlot.slotId : null,
         },
       });
       saveCustomer(remember ? review : null);
@@ -185,6 +214,12 @@ export function WhatsAppOrderView({
         /* ignore */
       }
       const err = e as ApiError;
+      const slotFull = Boolean((err.details as { messages?: Record<string, string> } | undefined)?.messages?._slot);
+      if (slotFull) {
+        // That slot filled up meanwhile: back to the form with fresh slots so another can be picked.
+        void loadSlots();
+        setReview(null);
+      }
       setFormError(err.message || "Couldn't place the order. Please try again.");
     } finally {
       placingRef.current = false;
@@ -278,6 +313,8 @@ export function WhatsAppOrderView({
               <p className="text-ink-soft">{review.name} · +91 {review.phone}</p>
               <p className="text-ink-soft">{[review.address, review.area, review.city, review.pincode].filter(Boolean).join(", ")}</p>
               {review.notes ? <p className="mt-1 text-muted">“{review.notes}”</p> : null}
+              <p className="mt-2 font-semibold text-ink">Delivery</p>
+              <p className="text-ink-soft">{slotText ?? "Time agreed with you on WhatsApp"}</p>
             </div>
             <div>
               <p className="font-semibold text-ink">Payment</p>
@@ -285,7 +322,7 @@ export function WhatsAppOrderView({
               <p className="text-muted">{method === "cod" ? "Pay when it arrives" : method === "upi" ? "UPI QR shown next — we confirm the payment before packing" : "Secure payment link shown next"}</p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-muted">Delivery time is confirmed with you on WhatsApp. Prices and charges are checked again on our server when you confirm.</p>
+          <p className="mt-3 text-xs text-muted">Prices and charges are checked again on our server when you confirm.</p>
           {formError ? <Notice tone="error" className="mt-4">{formError}</Notice> : null}
           <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
             <Button size="lg" className="rounded-xl sm:flex-1" loading={placing} onClick={confirmOrder}>
@@ -397,8 +434,21 @@ export function WhatsAppOrderView({
             </div>
           </fieldset></div>
 
+          <div id="wa-slot-step" className="mt-7 scroll-mt-32 border-t border-line pt-6"><fieldset>
+            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">3</span> <CalendarClock className="size-5 text-forest-800" aria-hidden /> Delivery Date &amp; Time</legend>
+            <div className="mt-4">
+              {slots === null ? (
+                <div className="skeleton h-28 w-full" aria-busy="true" />
+              ) : slots.length ? (
+                <SlotPicker slots={slots} date={date} slotId={slotId} onChange={(d, id) => { setDate(d); setSlotId(id); }} />
+              ) : (
+                <Notice tone="info">We&apos;ll agree the delivery time with you on WhatsApp.</Notice>
+              )}
+            </div>
+          </fieldset></div>
+
           <div className="mt-7 border-t border-line pt-6"><fieldset>
-            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">3</span> Order Notes <span className="text-sm font-normal text-muted">(Optional)</span></legend>
+            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">4</span> Order Notes <span className="text-sm font-normal text-muted">(Optional)</span></legend>
             <div className="relative mt-4">
               <label htmlFor="wa-notes" className="sr-only">Order notes</label>
               <NotebookPen className="pointer-events-none absolute left-3.5 top-3.5 size-[1.1rem] text-ink-soft" aria-hidden />
@@ -417,7 +467,7 @@ export function WhatsAppOrderView({
           </fieldset></div>
 
           <div className="mt-7 border-t border-line pt-6"><fieldset>
-            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">4</span> Payment</legend>
+            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">5</span> Payment</legend>
             {paymentMethods.length ? (
               <div role="radiogroup" aria-label="Payment method" className="mt-4 grid gap-2.5 sm:grid-cols-2">
                 {paymentMethods.map((m) => {

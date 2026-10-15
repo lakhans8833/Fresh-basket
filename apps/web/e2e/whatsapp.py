@@ -68,7 +68,8 @@ with sync_playwright() as p:
     assert "Name: Test Customer" in msg and "*Customer*" in msg  # customer's own * stripped, our heading kept
     assert "Mobile: +91 9876543210" in msg
     assert "City / PIN: Bengaluru - 560034" in msg or "- 560034" in msg
-    assert "Payment: Cash on delivery (Cash on delivery)" in msg
+    assert "Payment: Cash on delivery\n" in msg and "(Cash on delivery)" not in msg
+    assert re.search(r"Delivery slot: \w{3}, \d{1,2} \w{3} · ", msg), "slot line missing"
     assert "Notes: Call before coming" in msg
     assert "Track order: " in msg
     items = [int(x.replace(",", "")) for x in re.findall(r"= ₹([\d,]+)", msg)]

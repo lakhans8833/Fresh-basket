@@ -267,5 +267,8 @@ export const whatsappOrderSchema = z.object({
   couponCode: trimmed(32).toUpperCase().optional().nullable(),
   whatsappUpdates: z.boolean().optional().default(false),
   idempotencyKey: z.string().min(8).max(80),
-});
+  /** Delivery date + slot chosen on the WhatsApp order page (both or neither). */
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  slotId: uuid.optional().nullable(),
+}).refine((v) => Boolean(v.deliveryDate) === Boolean(v.slotId), { message: "Choose a delivery date and time slot.", path: ["slotId"] });
 export type WhatsAppOrderInput = z.infer<typeof whatsappOrderSchema>;

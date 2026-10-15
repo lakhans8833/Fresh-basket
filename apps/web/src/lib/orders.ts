@@ -358,6 +358,12 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
     throw badRequest("That payment method isn't available right now.");
   }
   if (!userId && input.couponCode) throw badRequest("Sign in to use a coupon, or remove it to order as a guest.");
+  const today = istDateString(new Date());
+  const slotId = input.slotId ?? null;
+  const deliveryDate = input.deliveryDate ?? today;
+  if (slotId && (deliveryDate < today || deliveryDate > addDays(today, settings.slotDaysAhead - 1))) {
+    throw badRequest("Please choose a delivery date shown on the page.");
+  }
   await releaseExpired();
 
   const cu = input.customer;
@@ -371,6 +377,8 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
     address: [cu.address, cu.area, cu.pincode].map((x) => String(x ?? "").trim().toLowerCase()),
     pay: input.paymentMethod,
     coupon: (input.couponCode ?? "").trim().toUpperCase(),
+    slot: slotId,
+    date: slotId ? deliveryDate : null,
   });
   const owner = userId ?? `guest:${cu.phone}`;
   const findSame = (c: Q) =>
@@ -402,8 +410,16 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
       }
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
-        channel: "whatsapp", deliveryDate: istDateString(new Date()), customerNote: cu.notes || null,
-        idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates), slot: null,
+        channel: "whatsapp", deliveryDate, customerNote: cu.notes || null,
+        idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates),
+        // Slot capacity is shared with website orders; without a slot the time is agreed on WhatsApp.
+        slot: slotId
+          ? async (cc) => {
+              const slot = await lockAndCheckSlot(cc, slotId, deliveryDate);
+              if (!slot.ok) throw new OrderRejected(slot.reason, { _slot: slot.reason });
+              return { id: slotId, label: `${slot.rule.label}, ${slot.rule.startTime}–${slot.rule.endTime}` };
+            }
+          : null,
         holdMinutes: userId ? undefined : GUEST_PAYMENT_HOLD_MINUTES,
       });
       return { id, created: true };

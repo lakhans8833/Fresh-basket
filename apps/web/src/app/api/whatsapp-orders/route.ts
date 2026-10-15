@@ -42,6 +42,7 @@ export const POST = route(async (req) => {
     paymentStatus: PAYMENT_STATUS_LABEL[order.paymentStatus],
     payLink,
     trackUrl,
+    delivery: input.slotId ? `${new Date(`${order.deliveryDate}T12:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} · ${order.slotLabel}` : null,
   });
 
   return json(

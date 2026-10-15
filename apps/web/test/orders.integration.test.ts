@@ -536,6 +536,22 @@ describe("WhatsApp orders", () => {
     expect(new Set(both.map((b) => b.order.id)).size).toBe(2); // different addresses = different orders
   });
 
+  it("saves the chosen delivery date + slot and shares slot capacity with website orders", async () => {
+    const { order } = await placeWhatsAppOrder(null, wa({ deliveryDate: tomorrow, slotId: eveningSlot }));
+    expect(order.deliveryDate).toBe(tomorrow);
+    expect(order.slotLabel).toMatch(/^Evening, /);
+    // Date outside the booking window, or a date without a slot, is refused.
+    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: addDays(tomorrow, 60), slotId: eveningSlot }))).rejects.toMatchObject({ status: 400 });
+    expect(() => wa({ deliveryDate: tomorrow })).toThrow();
+
+    const tiny = (await queryOne<{ id: string }>(
+      "insert into delivery_slots (label, start_time, end_time, cutoff_minutes, capacity) values ('Tiny WA', '18:00', '19:00', 0, 1) returning id",
+    ))!.id;
+    await placeOrder(CUSTOMER, input({ slotId: tiny }));
+    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: tomorrow, slotId: tiny }))).rejects.toMatchObject({ status: 409 });
+    await query("update delivery_slots set active = false where id = $1", [tiny]);
+  });
+
   it("refuses coupons for guests, unknown PIN codes and methods that aren't enabled", async () => {
     await expect(placeWhatsAppOrder(null, wa({ couponCode: "FRESH10" }))).rejects.toMatchObject({ status: 400 });
     await expect(placeWhatsAppOrder(null, wa({ customer: { name: "A B", phone: "9876543210", address: "House 1, Lane 2", city: "Delhi", pincode: "110001" } }))).rejects.toMatchObject({ status: 409 });

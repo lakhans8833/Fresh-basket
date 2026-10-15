@@ -19,6 +19,8 @@ export async function adminListOrders(f: { status?: string | null; q?: string | 
   const params: unknown[] = [];
   if (f.status === "late") {
     where.push(LATE_SQL);
+  } else if (f.status === "whatsapp") {
+    where.push("o.channel = 'whatsapp'");
   } else if (f.status) {
     params.push(f.status);
     where.push(`o.status = $${params.length}`);
@@ -37,7 +39,7 @@ export async function adminListOrders(f: { status?: string | null; q?: string | 
             o.total, to_char(o.delivery_date, 'YYYY-MM-DD') as "deliveryDate", o.slot_label as "slotLabel",
             o.address->>'fullName' as "customerName", o.address->>'pincode' as pincode, o.created_at as "createdAt",
             (select count(*)::int from order_items i where i.order_id = o.id) as "itemCount",
-            ${LATE_SQL} as late
+            ${LATE_SQL} as late, o.channel
        from orders o left join delivery_slots s on s.id = o.slot_id ${where.length ? "where " + where.join(" and ") : ""}
       order by o.created_at desc limit $${params.length}`,
     params,

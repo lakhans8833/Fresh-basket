@@ -40,8 +40,8 @@ docs/API.md      API reference
 
 ## WhatsApp ordering
 
-Customers can order **without an account** (or signed in): Cart → **Order on WhatsApp** → `/order` (name, mobile,
-address, area, city, PIN code, notes, payment method, optional "send me order updates on WhatsApp") → **Review order**
+Customers can order **without an account** (or signed in): Home / Shop / Product page / Cart → **Order on WhatsApp** →
+`/order` (name, mobile, address, area, city, PIN code, **delivery date + time slot**, notes, payment method, optional "send me order updates on WhatsApp") → **Review order**
 (full summary) → **Confirm & send on WhatsApp**.
 
 - The order is **saved in the database first** (`POST /api/whatsapp-orders` → `placeWhatsAppOrder` in `lib/orders.ts`):
@@ -52,6 +52,9 @@ address, area, city, PIN code, notes, payment method, optional "send me order up
 - WhatsApp opens with `https://wa.me/<number>?text=…`; the customer presses **Send** themselves (wa.me can't send
   automatically — automatic updates use the Cloud API below).
 - Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (digits, e.g. `919876543210`) or **Admin → Settings → WhatsApp**.
+- Delivery slots are the same as the website checkout and share their capacity (a full slot can't be picked). If no
+  slots are set up, the delivery time is agreed on WhatsApp.
+- Staff see these orders in **Admin → Orders** (filter **WhatsApp**, with a WhatsApp badge) and handle them like any order.
 - Only PIN codes in **Admin → Delivery** can be ordered (exact charges); others get an "Ask us on WhatsApp" link.
 - Guests can't use coupons (per-customer limits need an account).
 - Guest orders have no `user_id`; they are tracked with a secret link `/track/<order id>?k=<key>` (HMAC with
