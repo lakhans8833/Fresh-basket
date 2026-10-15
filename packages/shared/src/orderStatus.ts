@@ -14,6 +14,7 @@ export const PAYMENT_STATUSES = [
   "failed",
   "cod_pending", // cash on delivery, not yet collected
   "cod_collected",
+  "cod_cancelled", // cash-on-delivery order cancelled — nothing to collect
   "refund_pending", // money received but order cannot be fulfilled
   "refunded",
 ] as const;
@@ -37,6 +38,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   failed: "Payment failed",
   cod_pending: "Cash on delivery",
   cod_collected: "Cash collected",
+  cod_cancelled: "Not collected — order cancelled",
   refund_pending: "Refund pending",
   refunded: "Refunded",
 };

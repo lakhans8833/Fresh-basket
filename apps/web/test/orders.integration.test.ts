@@ -147,6 +147,7 @@ describe("inventory", () => {
     expect(await stock(id)).toBe(before - 3);
     const cancelled = await customerCancel(CUSTOMER, order.id);
     expect(cancelled?.status).toBe("cancelled");
+    expect(cancelled?.paymentStatus).toBe("cod_cancelled"); // nothing left to collect
     expect(await stock(id)).toBe(before);
 
     const { order: o2 } = await placeOrder(CUSTOMER, input({ items: [{ variantId: id, quantity: 2 }] }));

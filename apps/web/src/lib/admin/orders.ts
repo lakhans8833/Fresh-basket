@@ -62,6 +62,7 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
 /** Manual payment bookkeeping that only staff can confirm offline. */
 const PAYMENT_TRANSITIONS: Partial<Record<PaymentStatus, PaymentStatus[]>> = {
   cod_pending: ["cod_collected"],
+  cod_cancelled: [],
   refund_pending: ["refunded"],
 };
 

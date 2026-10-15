@@ -384,7 +384,7 @@ function PackingSlip({ order: o, storeName }: { order: AdminOrder; storeName: st
         </div>
         <div>
           <p className="font-bold">Payment</p>
-          <p>{o.paymentMethod === "cod" ? `CASH ON DELIVERY — collect ${formatINR(o.total)}` : PAYMENT_STATUS_LABEL[o.paymentStatus]}</p>
+          <p>{o.paymentMethod === "cod" && o.paymentStatus === "cod_pending" ? `CASH ON DELIVERY — collect ${formatINR(o.total)}` : PAYMENT_STATUS_LABEL[o.paymentStatus]}</p>
           {o.customerNote ? <p className="mt-2"><b>Note:</b> {o.customerNote}</p> : null}
         </div>
       </div>
