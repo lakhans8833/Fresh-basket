@@ -27,6 +27,10 @@ export interface CouponRule {
   usedCount: number;
   perUserLimit: number | null;
   usedByUser: number;
+  /** Only for a customer's first order. */
+  firstOrderOnly?: boolean;
+  /** Whether this customer has no earlier (non-cancelled) order; null when not signed in. */
+  isFirstOrder?: boolean | null;
 }
 
 export interface DeliveryRule {
@@ -72,6 +76,8 @@ export function couponProblem(c: CouponRule, subtotal: Paise, now: Date): string
   if (c.endsAt && now > c.endsAt) return "This coupon has expired.";
   if (c.usageLimit !== null && c.usedCount >= c.usageLimit) return "This coupon has reached its usage limit.";
   if (c.perUserLimit !== null && c.usedByUser >= c.perUserLimit) return "You have already used this coupon.";
+  if (c.firstOrderOnly && c.isFirstOrder === null) return "Sign in to use this first-order coupon.";
+  if (c.firstOrderOnly && c.isFirstOrder === false) return "This coupon is only for your first order.";
   if (subtotal < c.minOrder) return `Add items worth ${c.minOrder - subtotal} paise more to use this coupon.`;
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeQuote, couponDiscount, type CouponRule, type PricedLineInput } from "../src/pricing";
+import { computeQuote, couponDiscount, couponProblem, type CouponRule, type PricedLineInput } from "../src/pricing";
 import { canAdminTransition, canCustomerCancel } from "../src/orderStatus";
 import { isValidPincode, isValidIndianMobile } from "../src/pincode";
 import { isSlotBookable, istInstant, istDateString } from "../src/slots";
@@ -109,4 +109,12 @@ describe("slots (IST)", () => {
     expect(isSlotBookable(slot, "2026-10-15", new Date("2026-10-14T23:31:00Z"), 0)).toBe(false);
     expect(isSlotBookable(slot, "2026-10-16", new Date("2026-10-14T23:31:00Z"), 10)).toBe(false);
   });
+});
+
+describe("first-order coupons", () => {
+  const base = { code: "WELCOME50", kind: "flat" as const, value: 5000, minOrder: 0, maxDiscount: null, active: true, startsAt: null, endsAt: null, usageLimit: null, usedCount: 0, perUserLimit: 1, usedByUser: 0, firstOrderOnly: true };
+  it("allows a first order", () => expect(couponProblem({ ...base, isFirstOrder: true }, 50000, new Date())).toBeNull());
+  it("refuses a repeat customer", () => expect(couponProblem({ ...base, isFirstOrder: false }, 50000, new Date())).toBe("This coupon is only for your first order."));
+  it("asks guests to sign in", () => expect(couponProblem({ ...base, isFirstOrder: null }, 50000, new Date())).toBe("Sign in to use this first-order coupon."));
+  it("ignores the rule for normal coupons", () => expect(couponProblem({ ...base, firstOrderOnly: false, isFirstOrder: false }, 50000, new Date())).toBeNull());
 });

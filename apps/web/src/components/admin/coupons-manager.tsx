@@ -26,6 +26,7 @@ interface Coupon {
   endsAt: string | null;
   usageLimit: number | null;
   perUserLimit: number | null;
+  firstOrderOnly: boolean;
   usedCount: number;
   active: boolean;
 }
@@ -121,6 +122,7 @@ function Inner() {
                   <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
                     <dt className="text-muted">Min. order</dt><dd className="text-right tabular-nums">{c.minOrder ? formatINR(c.minOrder) : "—"}</dd>
                     <dt className="text-muted">Per customer</dt><dd className="text-right">{c.perUserLimit ? `${c.perUserLimit}×` : "Unlimited"}</dd>
+                    {c.firstOrderOnly ? <><dt className="text-muted">Who</dt><dd className="text-right">First order only</dd></> : null}
                     {c.startsAt ? <><dt className="text-muted">Starts</dt><dd className="text-right">{formatDateTime(c.startsAt)}</dd></> : null}
                     {c.endsAt ? <><dt className="text-muted">Ends</dt><dd className="text-right">{formatDateTime(c.endsAt)}</dd></> : null}
                   </dl>
@@ -179,6 +181,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
     endsAt: toLocalInput(initial?.endsAt ?? null),
     usageLimit: initial?.usageLimit ? String(initial.usageLimit) : "",
     perUserLimit: initial?.perUserLimit ? String(initial.perUserLimit) : "",
+    firstOrderOnly: initial?.firstOrderOnly ?? false,
     active: initial?.active ?? true,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -219,6 +222,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
       startsAt, endsAt,
       usageLimit: usageLimit === null || Number.isNaN(usageLimit) ? null : usageLimit,
       perUserLimit: perUserLimit === null || Number.isNaN(perUserLimit) ? null : perUserLimit,
+      firstOrderOnly: f.firstOrderOnly,
       active: f.active,
     });
     if (!r.success) for (const i of r.error.issues) errs[String(i.path[0])] ??= i.message;
@@ -297,6 +301,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
           <Input id="cp-peruser" inputMode="numeric" value={f.perUserLimit} invalid={!!errors.perUserLimit} onChange={(e) => set({ perUserLimit: e.target.value.replace(/[^\d]/g, "") })} />
         </Field>
       </div>
+      <Toggle checked={f.firstOrderOnly} onChange={(v) => set({ firstOrderOnly: v })} label="First order only" description="Only signed-in customers with no earlier order (cancelled orders don't count)." />
       <Toggle checked={f.active} onChange={(v) => set({ active: v })} label="Active" description="Customers can apply this code at checkout." />
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>

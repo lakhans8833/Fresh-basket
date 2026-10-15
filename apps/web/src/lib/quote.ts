@@ -23,6 +23,7 @@ type VariantRow = {
 type CouponRow = {
   id: string; code: string; kind: "percent" | "flat"; value: number; min_order: number; max_discount: number | null;
   starts_at: Date | null; ends_at: Date | null; usage_limit: number | null; per_user_limit: number | null; used_count: number; active: boolean;
+  first_order_only?: boolean;
 };
 
 /**
@@ -75,8 +76,18 @@ export async function buildQuote(
         );
         usedByUser = Number(u[0]?.n ?? 0);
       }
+      // First-order coupons: count the customer's earlier orders that weren't cancelled.
+      let isFirstOrder: boolean | null = null;
+      if (c.first_order_only && opts.userId) {
+        const { rows: o } = await db.query<{ n: string }>(
+          "select count(*) as n from orders where user_id = $1 and status <> 'cancelled'",
+          [opts.userId],
+        );
+        isFirstOrder = Number(o[0]?.n ?? 0) === 0;
+      }
       couponId = c.id;
       coupon = {
+        firstOrderOnly: Boolean(c.first_order_only), isFirstOrder,
         code: c.code, kind: c.kind, value: c.value, minOrder: c.min_order, maxDiscount: c.max_discount,
         active: c.active, startsAt: c.starts_at, endsAt: c.ends_at, usageLimit: c.usage_limit,
         usedCount: c.used_count, perUserLimit: c.per_user_limit, usedByUser,

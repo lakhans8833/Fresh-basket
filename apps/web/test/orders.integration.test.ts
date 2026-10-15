@@ -166,6 +166,16 @@ describe("inventory", () => {
 });
 
 describe("coupons", () => {
+  it("first-order coupons only work for a customer's first order", async () => {
+    // CUSTOMER already has orders from earlier tests.
+    const items = [{ variantId: v["tomato:1 kg"]!, quantity: 6 }];
+    await expect(placeOrder(CUSTOMER, input({ items, couponCode: "WELCOME50" }))).rejects.toMatchObject({ status: 409 });
+    const q = await buildQuote({ items, couponCode: "WELCOME50", pincode: "560034" }, { userId: CUSTOMER });
+    expect(q.quote.issues.find((i) => i.code === "COUPON_INVALID")).toMatchObject({ reason: "This coupon is only for your first order." });
+    const guest = await buildQuote({ items, couponCode: "WELCOME50", pincode: "560034" }, {});
+    expect(guest.quote.issues.find((i) => i.code === "COUPON_INVALID")).toMatchObject({ reason: "Sign in to use this first-order coupon." });
+  });
+
   it("applies once per user and is released on cancellation", async () => {
     const items = [{ variantId: v["potato:2 kg"]!, quantity: 3 }]; // ₹405
     const { order } = await placeOrder(OTHER, input({ items, couponCode: "WELCOME50" }));

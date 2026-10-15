@@ -98,9 +98,9 @@ select * from (values
 where not exists (select 1 from public.delivery_slots);
 
 -- Coupons (SAMPLE) --------------------------------------------------------------
-insert into public.coupons (code, description, kind, value, min_order, max_discount, per_user_limit) values
-  ('WELCOME50', '₹50 off your first order above ₹299', 'flat', 5000, 29900, null, 1),
-  ('FRESH10', '10% off orders above ₹199, up to ₹75', 'percent', 10, 19900, 7500, null)
+insert into public.coupons (code, description, kind, value, min_order, max_discount, per_user_limit, first_order_only) values
+  ('WELCOME50', '₹50 off your first order above ₹299', 'flat', 5000, 29900, null, 1, true),
+  ('FRESH10', '10% off orders above ₹199, up to ₹75', 'percent', 10, 19900, 7500, null, false)
 on conflict (code) do nothing;
 
 -- Standard pack sizes (100 g, 250 g, 500 g, 1 kg), priced from each sample product's own sizes.

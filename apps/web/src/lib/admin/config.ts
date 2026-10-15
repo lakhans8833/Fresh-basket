@@ -43,21 +43,21 @@ export async function adminDeleteSlot(id: string) {
 /* Coupons */
 export const adminListCoupons = () =>
   query(`select id, code, description, kind, value, min_order as "minOrder", max_discount as "maxDiscount", starts_at as "startsAt",
-                ends_at as "endsAt", usage_limit as "usageLimit", per_user_limit as "perUserLimit", used_count as "usedCount", active
+                ends_at as "endsAt", usage_limit as "usageLimit", per_user_limit as "perUserLimit", first_order_only as "firstOrderOnly", used_count as "usedCount", active
            from coupons order by created_at desc`);
 
 export async function adminSaveCoupon(id: string | null, d: z.output<typeof adminCouponSchema>) {
-  const p = [d.code, d.description ?? null, d.kind, d.value, d.minOrder, d.maxDiscount ?? null, d.startsAt || null, d.endsAt || null, d.usageLimit ?? null, d.perUserLimit ?? null, d.active];
+  const p = [d.code, d.description ?? null, d.kind, d.value, d.minOrder, d.maxDiscount ?? null, d.startsAt || null, d.endsAt || null, d.usageLimit ?? null, d.perUserLimit ?? null, d.active, d.firstOrderOnly ?? false];
   if (id) {
     const r = await queryOne(
-      "update coupons set code=$1, description=$2, kind=$3, value=$4, min_order=$5, max_discount=$6, starts_at=$7, ends_at=$8, usage_limit=$9, per_user_limit=$10, active=$11 where id=$12 returning id",
+      "update coupons set code=$1, description=$2, kind=$3, value=$4, min_order=$5, max_discount=$6, starts_at=$7, ends_at=$8, usage_limit=$9, per_user_limit=$10, active=$11, first_order_only=$12 where id=$13 returning id",
       [...p, id],
     );
     if (!r) throw notFound();
     return r;
   }
   return queryOne(
-    "insert into coupons (code, description, kind, value, min_order, max_discount, starts_at, ends_at, usage_limit, per_user_limit, active) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id",
+    "insert into coupons (code, description, kind, value, min_order, max_discount, starts_at, ends_at, usage_limit, per_user_limit, active, first_order_only) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id",
     p,
   );
 }

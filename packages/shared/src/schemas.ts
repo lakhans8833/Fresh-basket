@@ -194,6 +194,7 @@ export const adminCouponSchema = z
     endsAt: z.string().optional().nullable(),
     usageLimit: z.number().int().min(1).optional().nullable(),
     perUserLimit: z.number().int().min(1).optional().nullable(),
+    firstOrderOnly: z.boolean().default(false),
     active: z.boolean().default(true),
   })
   .refine((c) => c.kind !== "percent" || c.value <= 100, { message: "Percent must be 1–100", path: ["value"] });
