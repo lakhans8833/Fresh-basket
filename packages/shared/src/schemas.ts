@@ -116,6 +116,9 @@ export const adminBannerSchema = z
       .max(200)
       .regex(/^\/(?![\/\\])\S*$/, "Use a page on this website, starting with / (e.g. /deals)"),
     theme: z.enum(BANNER_THEMES).default("green"),
+    placement: z.enum(["strip", "hero"]).default("strip"),
+    badge: trimmed(40).optional().nullable(),
+    ctaLabel: trimmed(30).optional().nullable(),
     active: z.boolean().default(true),
     sortOrder: z.number().int().min(0).max(999).default(0),
     startsAt: z.string().datetime({ offset: true }).optional().nullable(),
