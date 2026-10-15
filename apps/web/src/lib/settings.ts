@@ -10,6 +10,7 @@ type Row = {
   whatsapp: string | null; address: string | null; support_hours: string | null; instagram_url: string | null;
   facebook_url: string | null; youtube_url: string | null; x_url: string | null; cod_enabled: boolean;
   default_min_order: number; slot_days_ahead: number; announcement: string | null;
+  upi_id?: string | null; upi_payee_name?: string | null; upi_qr_url?: string | null;
 };
 
 export const DEFAULT_SETTINGS: StoreSettings = {
@@ -27,6 +28,10 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   defaultMinOrder: 0,
   slotDaysAhead: 3,
   announcement: null,
+  upiId: null,
+  upiPayeeName: null,
+  upiQrUrl: null,
+  paymentLinks: false,
 };
 
 export const getSettings = cache(async (): Promise<StoreSettings> => {
@@ -37,7 +42,7 @@ export const getSettings = cache(async (): Promise<StoreSettings> => {
     // Database not reachable or not migrated yet: keep the shell rendering with defaults (not cached).
     console.error("[settings] could not load store settings — see /api/health", e);
   }
-  return { ...base, onlinePayment: env.payments.online };
+  return { ...base, onlinePayment: env.payments.online, paymentLinks: env.payments.online === "razorpay" };
 });
 
 /** Store settings row, cached across requests (dropped when Admin → Settings is saved). Throws on DB errors. */
@@ -59,13 +64,26 @@ const loadSettings = cached("settings-v1", [CACHE_TAGS.settings], 600, async ():
     defaultMinOrder: r.default_min_order,
     slotDaysAhead: r.slot_days_ahead,
     announcement: r.announcement,
+    upiId: r.upi_id ?? null,
+    upiPayeeName: r.upi_payee_name ?? null,
+    upiQrUrl: r.upi_qr_url ?? null,
   };
 });
 
-/** Payment methods that can actually be used right now — the only ones shown anywhere. */
-export function supportedPaymentMethods(s: StoreSettings): ("cod" | "razorpay" | "mock")[] {
-  const out: ("cod" | "razorpay" | "mock")[] = [];
+/** Payment methods that can actually be used at website checkout right now — the only ones shown there. */
+export function supportedPaymentMethods(s: StoreSettings): ("cod" | "razorpay" | "mock" | "upi")[] {
+  const out: ("cod" | "razorpay" | "mock" | "upi")[] = [];
   if (s.onlinePayment) out.push(s.onlinePayment);
+  if (s.upiId) out.push("upi");
   if (s.codEnabled) out.push("cod");
+  return out;
+}
+
+/** Payment methods for "Order on WhatsApp": cash on delivery, UPI (checked by staff), Razorpay Payment Link. */
+export function whatsappPaymentMethods(s: StoreSettings): ("cod" | "upi" | "razorpay_link")[] {
+  const out: ("cod" | "upi" | "razorpay_link")[] = [];
+  if (s.codEnabled) out.push("cod");
+  if (s.upiId) out.push("upi");
+  if (s.paymentLinks) out.push("razorpay_link");
   return out;
 }

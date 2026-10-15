@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Building2, CheckCircle2, Home, MapPin, NotebookPen, Pencil, Phone, ShieldCheck, ShoppingBasket, UserRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Banknote, Building2, CheckCircle2, CreditCard, ExternalLink, Home, MapPin, NotebookPen, Pencil, Phone, QrCode, ShieldCheck, ShoppingBasket, Truck, UserRound } from "lucide-react";
 import {
-  buildWhatsAppOrderUrl, formatINR, isValidPincode, makeOrderReference, whatsappCustomerSchema,
-  type QuoteIssue, type WhatsAppCustomerInput, type WhatsAppOrder,
+  buildWhatsAppUrl, formatINR, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
+  type QuoteIssue, type WhatsAppCustomer, type WhatsAppCustomerInput,
 } from "@freshbasket/shared";
+import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
+import { useSession } from "../account/session-context";
+import { UpiPayPanel, type UpiInfo } from "../account/upi-pay-panel";
 import { useCart } from "./cart-context";
 import { useQuote } from "./use-quote";
 import { OrderSummary } from "./order-summary";
@@ -23,6 +26,22 @@ import { cn } from "../ui/cn";
 const BLOCKING: QuoteIssue["code"][] = ["OUT_OF_STOCK", "UNAVAILABLE", "INVALID_QUANTITY", "EMPTY_CART", "TOO_MANY_LINES", "BELOW_MIN_ORDER"];
 
 type Form = Required<Pick<WhatsAppCustomerInput, "name" | "phone" | "address" | "city" | "pincode">> & { area: string; notes: string };
+export type WaMethod = "cod" | "upi" | "razorpay_link";
+
+const WA_METHOD_INFO: Record<WaMethod, { title: string; sub: string; icon: typeof Banknote }> = {
+  cod: { title: "Cash on delivery", sub: "Pay in cash when your order arrives", icon: Banknote },
+  upi: { title: "UPI (scan & pay)", sub: "Pay to our UPI ID — we confirm it before packing", icon: QrCode },
+  razorpay_link: { title: "Pay online", sub: "Secure Razorpay link — UPI, cards, net banking", icon: CreditCard },
+};
+
+interface PlacedWaOrder {
+  order: { id: string; orderNumber: string; status: string; paymentMethod: WaMethod; paymentStatus: string; total: number; upiReference: string | null };
+  trackKey: string;
+  trackUrl: string;
+  whatsappUrl: string;
+  payLink: string | null;
+  upi: UpiInfo | null;
+}
 
 function IconInput({
   id, label, icon, error, required, hint, className, ...rest
@@ -48,16 +67,25 @@ function IconInput({
   );
 }
 
-export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { whatsappNumber: string | null; storeName: string; defaultCity: string }) {
+export function WhatsAppOrderView({
+  whatsappNumber, storeName, defaultCity, paymentMethods,
+}: { whatsappNumber: string | null; storeName: string; defaultCity: string; paymentMethods: WaMethod[] }) {
   const router = useRouter();
   const toast = useToast();
   const cart = useCart();
+  const { profile } = useSession();
   const { lines, hydrated, couponCode } = cart;
   const [form, setForm] = useState<Form>({ name: "", phone: "", address: "", area: "", city: defaultCity, pincode: "", notes: "" });
   const [remember, setRemember] = useState(true);
+  const [method, setMethod] = useState<WaMethod | null>(paymentMethods[0] ?? null);
+  const [whatsappUpdates, setWhatsappUpdates] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [sent, setSent] = useState<{ url: string; reference: string } | null>(null);
+  const [review, setReview] = useState<WhatsAppCustomer | null>(null);
+  const [placing, setPlacing] = useState(false);
+  const placingRef = useRef(false);
+  const [placed, setPlaced] = useState<PlacedWaOrder | null>(null);
+  const idemKey = useRef(newIdempotencyKey());
 
   useEffect(() => {
     const saved = loadSavedCustomer();
@@ -78,11 +106,18 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
   const area = data?.area ?? null;
   const delivery: "known" | "confirm" | "unknown" = !pinValid ? "unknown" : area ? "known" : "confirm";
   const blocking = useMemo(() => quote?.issues.filter((i) => BLOCKING.includes(i.code)) ?? [], [quote]);
-  // Show and send items in the order the customer added them.
+  // Show items in the order the customer added them.
   const orderedLines = useMemo(() => {
     const pos = new Map(lines.map((l, i) => [l.variantId, i]));
     return [...(quote?.lines ?? [])].sort((a, b) => (pos.get(a.variantId) ?? 0) - (pos.get(b.variantId) ?? 0));
   }, [quote, lines]);
+  const guestCoupon = !profile && Boolean(couponCode);
+
+  // A new order (different items, details or payment) gets a new key; resubmitting the same one reuses it.
+  const payloadKey = JSON.stringify([lines.map((l) => [l.variantId, l.quantity]), couponCode, form, method]);
+  useEffect(() => {
+    idemKey.current = newIdempotencyKey();
+  }, [payloadKey]);
 
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const value = k === "pincode" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value;
@@ -90,6 +125,7 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
     if (errors[k]) setErrors((x) => ({ ...x, [k]: "" }));
   };
 
+  /** Step 1: check the details, then show the full order summary for the customer to confirm. */
   function submit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -103,31 +139,57 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
     }
     if (!whatsappNumber) return setFormError("WhatsApp ordering isn't set up yet. Please use Proceed to Checkout instead.");
     if (!quote || loading) return setFormError("Prices are still updating — please try again in a moment.");
+    if (!area) return setFormError("We don't deliver to this PIN code yet. Message us on WhatsApp to ask, or try another address.");
     if (blocking.length) return setFormError("Some items in your cart need attention before you can order.");
-
-    const order: WhatsAppOrder = {
-      storeName,
-      reference: makeOrderReference(),
-      customer: parsed.data,
-      lines: orderedLines.map((l) => ({ name: l.productName, variantLabel: l.variantLabel, quantity: l.quantity, unitPrice: l.unitPrice, lineTotal: l.lineTotal })),
-      subtotal: quote.subtotal,
-      discount: quote.discount,
-      couponCode: quote.couponCode,
-      deliveryFee: area ? quote.deliveryFee : null,
-      total: area ? quote.total : quote.subtotal - quote.discount,
-    };
-    let url: string;
-    try {
-      url = buildWhatsAppOrderUrl(whatsappNumber, order);
-    } catch (err) {
-      return setFormError((err as Error).message);
-    }
-    saveCustomer(remember ? parsed.data : null);
-    // Must happen synchronously inside the click so pop-up blockers allow it.
-    const win = window.open(url, "_blank", "noopener,noreferrer");
-    if (!win) window.location.href = url;
-    setSent({ url, reference: order.reference });
+    if (guestCoupon) return setFormError("Coupons need an account. Sign in to use your coupon, or remove it in the cart to order as a guest.");
+    if (!method) return setFormError("Choose how you'll pay.");
+    setReview(parsed.data);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /** Step 2: save the order on our server, then open WhatsApp with its real order ID and totals. */
+  async function confirmOrder() {
+    if (!review || !method || placingRef.current) return;
+    placingRef.current = true;
+    setPlacing(true);
+    setFormError(null);
+    // Open the WhatsApp tab inside the click (pop-up blockers), then point it at the message.
+    const win = window.open("", "_blank");
+    try {
+      if (win) win.opener = null;
+    } catch {
+      /* ignore */
+    }
+    try {
+      const r = await api<PlacedWaOrder>("/api/whatsapp-orders", {
+        method: "POST",
+        json: {
+          items: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+          customer: review,
+          paymentMethod: method,
+          couponCode: profile ? couponCode : null,
+          whatsappUpdates,
+          idempotencyKey: idemKey.current,
+        },
+      });
+      saveCustomer(remember ? review : null);
+      cart.clear();
+      setPlaced(r);
+      setReview(null);
+      if (win && "location" in win) win.location.href = r.whatsappUrl;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      try {
+        win?.close();
+      } catch {
+        /* ignore */
+      }
+      const err = e as ApiError;
+      setFormError(err.message || "Couldn't place the order. Please try again.");
+    } finally {
+      placingRef.current = false;
+      setPlacing(false);
+    }
   }
 
   if (!hydrated) {
@@ -139,37 +201,101 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
     );
   }
 
-  if (sent) {
+  if (placed) {
+    const o = placed.order;
+    const trackPath = (() => {
+      try {
+        const u = new URL(placed.trackUrl);
+        return `${u.pathname}${u.search}`;
+      } catch {
+        return placed.trackUrl;
+      }
+    })();
     return (
-      <div className="container-page py-10">
-        <div className="mx-auto max-w-xl rounded-[var(--radius-card)] border border-line bg-white p-6 text-center shadow-[var(--shadow-card)] sm:p-8" role="status">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-whatsapp text-white"><WhatsAppIcon className="size-9" /></span>
-          <h2 className="mt-4 text-2xl font-bold text-forest-800">Almost done — tap Send in WhatsApp</h2>
-          <p className="mt-2 text-ink-soft">
-            WhatsApp has opened with your order <b className="text-ink">{sent.reference}</b>. Your order reaches us only after you press <b>Send</b> there.
-          </p>
+      <div className="container-page py-8 md:py-10">
+        <div className="mx-auto max-w-2xl rounded-[var(--radius-card)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-8" role="status">
+          <div className="text-center">
+            <span className="mx-auto grid size-16 place-items-center rounded-full bg-whatsapp text-white"><WhatsAppIcon className="size-9" /></span>
+            <h2 className="mt-4 text-2xl font-bold text-forest-800">Order {o.orderNumber} is saved</h2>
+            <p className="mt-2 text-ink-soft">
+              WhatsApp has opened with your order details — press <b>Send</b> there so we can confirm quickly. Total <b className="text-ink">{formatINR(o.total)}</b> · {PAYMENT_METHOD_LABEL[o.paymentMethod]}.
+            </p>
+          </div>
+          {o.paymentMethod === "upi" && placed.upi ? (
+            <UpiPayPanel orderId={o.id} orderNumber={o.orderNumber} trackKey={placed.trackKey} info={placed.upi} reported={o.upiReference} />
+          ) : o.paymentMethod === "razorpay_link" && placed.payLink ? (
+            <Notice tone="warning" className="mt-5" title="Payment pending">
+              Pay {formatINR(o.total)} on the secure Razorpay page. Your order is confirmed automatically once Razorpay confirms the payment.
+              <div className="mt-3">
+                <a href={placed.payLink} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-forest-800 px-5 font-semibold text-white hover:bg-forest-900">
+                  <CreditCard className="size-4" aria-hidden /> Pay {formatINR(o.total)} now <ExternalLink className="size-3.5" aria-hidden />
+                </a>
+              </div>
+            </Notice>
+          ) : (
+            <Notice tone="info" className="mt-5">Cash on delivery — please keep {formatINR(o.total)} ready. Nothing to pay now.</Notice>
+          )}
           <div className="mt-6 flex flex-col gap-3">
-            <a href={sent.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-whatsapp-dark px-5 font-semibold text-white hover:bg-forest-800">
+            <a href={placed.whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-whatsapp-dark px-5 font-semibold text-white hover:bg-forest-800">
               <WhatsAppIcon className="size-5" /> Open WhatsApp again
             </a>
-            <Button
-              variant="outline"
-              size="lg"
-              className="rounded-xl"
-              onClick={() => {
-                cart.clear();
-                toast("Thanks! Your cart has been cleared.");
-                router.push("/");
-              }}
-            >
-              <CheckCircle2 className="size-5 text-leaf-600" aria-hidden /> I&apos;ve sent it — clear my cart
-            </Button>
-            <button type="button" onClick={() => setSent(null)} className="text-sm font-semibold text-forest-800 hover:underline">
-              Edit my details
+            <ButtonLink href={trackPath} variant="outline" size="lg" className="rounded-xl">
+              <Truck className="size-5" aria-hidden /> Track this order
+            </ButtonLink>
+            <button type="button" onClick={() => { toast("Thanks for ordering!"); router.push("/"); }} className="text-sm font-semibold text-forest-800 hover:underline">
+              <CheckCircle2 className="mr-1 inline size-4 text-leaf-600" aria-hidden /> Done — back to the shop
             </button>
           </div>
-          <p className="mt-5 text-xs text-muted">Didn&apos;t open? Make sure WhatsApp is installed, or use WhatsApp Web on a computer.</p>
+          <p className="mt-5 text-center text-xs text-muted">Save the tracking link — it&apos;s also in your WhatsApp message. Didn&apos;t open? Make sure WhatsApp is installed, or use WhatsApp Web on a computer.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (review && quote) {
+    return (
+      <div className="container-page py-8 md:py-10">
+        <section aria-labelledby="review-h" className="mx-auto max-w-2xl rounded-[var(--radius-card)] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-8">
+          <h2 id="review-h" className="text-2xl font-bold text-forest-800">Check your order</h2>
+          <p className="mt-1 text-sm text-ink-soft">This is exactly what we&apos;ll save and send on WhatsApp.</p>
+          <ul className="mt-5 divide-y divide-line rounded-xl border border-line">
+            {orderedLines.map((l) => (
+              <li key={l.variantId} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                <span className="min-w-0"><b className="text-ink">{l.productName}</b> <span className="text-muted">({l.variantLabel}) × {l.quantity}</span></span>
+                <span className="font-semibold tabular-nums">{formatINR(l.lineTotal)}</span>
+              </li>
+            ))}
+          </ul>
+          <dl className="mt-4 space-y-1.5 text-[0.9375rem]">
+            <div className="flex justify-between"><dt className="text-ink-soft">Subtotal</dt><dd className="tabular-nums">{formatINR(quote.subtotal)}</dd></div>
+            {quote.discount > 0 ? <div className="flex justify-between"><dt className="text-ink-soft">Discount ({quote.couponCode})</dt><dd className="tabular-nums text-leaf-600">−{formatINR(quote.discount)}</dd></div> : null}
+            <div className="flex justify-between"><dt className="text-ink-soft">Delivery</dt><dd className="tabular-nums">{quote.deliveryFee ? formatINR(quote.deliveryFee) : "Free"}</dd></div>
+            <div className="flex justify-between border-t border-dashed border-line pt-2 text-lg font-bold"><dt>Total</dt><dd className="tabular-nums text-forest-800">{formatINR(quote.total)}</dd></div>
+          </dl>
+          <div className="mt-5 grid gap-4 rounded-xl bg-sage-50 p-4 text-sm sm:grid-cols-2">
+            <div>
+              <p className="font-semibold text-ink">Deliver to</p>
+              <p className="text-ink-soft">{review.name} · +91 {review.phone}</p>
+              <p className="text-ink-soft">{[review.address, review.area, review.city, review.pincode].filter(Boolean).join(", ")}</p>
+              {review.notes ? <p className="mt-1 text-muted">“{review.notes}”</p> : null}
+            </div>
+            <div>
+              <p className="font-semibold text-ink">Payment</p>
+              <p className="text-ink-soft">{method ? WA_METHOD_INFO[method].title : ""}</p>
+              <p className="text-muted">{method === "cod" ? "Pay when it arrives" : method === "upi" ? "UPI QR shown next — we confirm the payment before packing" : "Secure payment link shown next"}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted">Delivery time is confirmed with you on WhatsApp. Prices and charges are checked again on our server when you confirm.</p>
+          {formError ? <Notice tone="error" className="mt-4">{formError}</Notice> : null}
+          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
+            <Button size="lg" className="rounded-xl sm:flex-1" loading={placing} onClick={confirmOrder}>
+              <WhatsAppIcon className="size-5" /> Confirm &amp; send on WhatsApp
+            </Button>
+            <Button size="lg" variant="outline" className="rounded-xl" disabled={placing} onClick={() => setReview(null)}>
+              <Pencil className="size-4" aria-hidden /> Edit details
+            </Button>
+          </div>
+        </section>
       </div>
     );
   }
@@ -262,7 +388,10 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
                   !pinValid ? "Used to work out delivery charges"
                     : loading ? "Checking delivery…"
                     : area ? <span className="text-leaf-600">Delivery to {area.areaName}: {area.fee ? formatINR(area.fee) : "free"}{area.freeAbove !== null ? `, free above ${formatINR(area.freeAbove)}` : ""}</span>
-                    : <span className="text-amber">Not in our delivery list yet — the seller will confirm on WhatsApp</span>
+                    : <span className="text-amber">
+                        We don&apos;t deliver to this PIN code yet.{" "}
+                        {whatsappNumber ? <a className="font-semibold underline" target="_blank" rel="noopener noreferrer" href={buildWhatsAppUrl(whatsappNumber, `Hi ${storeName}, do you deliver to PIN code ${form.pincode}?`)}>Ask us on WhatsApp</a> : null}
+                      </span>
                 }
               />
             </div>
@@ -287,15 +416,47 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
             </div>
           </fieldset></div>
 
+          <div className="mt-7 border-t border-line pt-6"><fieldset>
+            <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">4</span> Payment</legend>
+            {paymentMethods.length ? (
+              <div role="radiogroup" aria-label="Payment method" className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                {paymentMethods.map((m) => {
+                  const info = WA_METHOD_INFO[m];
+                  const Icon = info.icon;
+                  return (
+                    <label key={m} className={cn("flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", method === m ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
+                      <input type="radio" name="wa-method" className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-forest-800 ring-1 ring-line"><Icon className="size-5" aria-hidden /></span>
+                      <span>
+                        <span className="block font-semibold text-ink">{info.title}</span>
+                        <span className="block text-muted">{info.sub}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <Notice tone="error" className="mt-4">No payment method is available for WhatsApp orders right now. Please use Proceed to Checkout.</Notice>
+            )}
+          </fieldset></div>
+
           <div className="mt-6 space-y-4">
             <Checkbox label="Remember my details on this device" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <Checkbox
+              label="Send me order updates on WhatsApp (confirmed, packed, out for delivery, delivered)"
+              checked={whatsappUpdates}
+              onChange={(e) => setWhatsappUpdates(e.target.checked)}
+            />
+            {guestCoupon ? (
+              <Notice tone="warning">Coupon {couponCode} needs an account. <Link href="/login?next=/order" className="font-semibold underline">Sign in</Link> to use it, or remove it in the cart to order as a guest.</Notice>
+            ) : null}
             {formError ? <Notice tone="error">{formError}</Notice> : null}
             {quoteError ? <Notice tone="error">{quoteError}</Notice> : null}
-            <Button type="submit" size="lg" className="w-full rounded-xl text-lg" disabled={!whatsappNumber || loading || !quote}>
-              <WhatsAppIcon className="size-6" /> Proceed to WhatsApp
+            <Button type="submit" size="lg" className="w-full rounded-xl text-lg" disabled={!whatsappNumber || loading || !quote || !paymentMethods.length}>
+              <WhatsAppIcon className="size-6" /> Review order
             </Button>
             <p className="flex items-center justify-center gap-1.5 text-center text-sm text-leaf-600">
-              <ShieldCheck className="size-4" aria-hidden /> Your order details will be sent to WhatsApp for confirmation.
+              <ShieldCheck className="size-4" aria-hidden /> You&apos;ll see the full summary before anything is sent.
             </p>
           </div>
         </form>
@@ -313,11 +474,11 @@ export function WhatsAppOrderView({ whatsappNumber, storeName, defaultCity }: { 
             {data?.messages._cart && area ? <Notice tone="warning">{data.messages._cart}</Notice> : null}
             <div className="flex items-start gap-3 rounded-xl bg-sage-50 p-3.5 text-sm text-ink-soft">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-whatsapp text-white"><WhatsAppIcon className="size-6" /></span>
-              <p>After you tap the button, WhatsApp opens with your order details. Simply press <b>Send</b> to confirm with us.</p>
+              <p>We save your order with an order ID, then WhatsApp opens with the details. Press <b>Send</b> there so we can confirm quickly.</p>
             </div>
           </OrderSummary>
           <p className="px-1 text-xs leading-relaxed text-muted">
-            Prices come from our live price list. The seller confirms availability and the final amount on WhatsApp before delivery.
+            Prices, delivery charges and the total are calculated on our server when you confirm. Online and UPI payments show as “Payment pending” until the payment is verified.
           </p>
         </aside>
       </div>

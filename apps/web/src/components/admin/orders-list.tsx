@@ -39,7 +39,7 @@ const TABS: { value: OrderStatus | "" | "late"; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const METHOD: Record<PaymentMethod, string> = { cod: "Cash", razorpay: "Online", mock: "Test pay" };
+const METHOD: Record<PaymentMethod, string> = { cod: "Cash", razorpay: "Online", mock: "Test pay", upi: "UPI", razorpay_link: "Pay link" };
 
 export function OrdersList({ initial }: { initial: { status: string; q: string; date: string } }) {
   const router = useRouter();

@@ -3,6 +3,7 @@ import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@fresh
 import { query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
+import { notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
 
 /**
  * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
@@ -51,7 +52,8 @@ export async function adminGetOrder(id: string) {
   );
   const customer = await query(`select email, full_name as "fullName", phone from profiles where id = $1`, [o.userId]);
   const late = await query<{ late: boolean }>(`select ${LATE_SQL} as late from orders o left join delivery_slots s on s.id = o.slot_id where o.id = $1`, [id]);
-  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false };
+  const notifications = await orderNotifications(id);
+  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false, notifications };
 }
 
 export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorId: string, note?: string | null) {
@@ -67,6 +69,8 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
     await c.query("update orders set status = $2 where id = $1", [id, to]);
     await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,$4)", [id, to, note ?? null, `admin:${actorId}`]);
   });
+  // Customer's WhatsApp update (packed / out for delivery / delivered), once per event.
+  scheduleOrderNotification(id, notifyEventForStatus(to));
   return adminGetOrder(id);
 }
 

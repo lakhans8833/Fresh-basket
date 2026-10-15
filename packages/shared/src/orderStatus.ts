@@ -20,8 +20,23 @@ export const PAYMENT_STATUSES = [
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const PAYMENT_METHODS = ["cod", "razorpay", "mock"] as const;
+export const PAYMENT_METHODS = ["cod", "razorpay", "mock", "upi", "razorpay_link"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** How the customer pays. Separate from PAYMENT_STATUS (whether the money has been received). */
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  cod: "Cash on delivery",
+  razorpay: "Online (Razorpay)",
+  mock: "Test payment",
+  upi: "UPI (QR / UPI ID)",
+  razorpay_link: "Razorpay payment link",
+};
+
+/**
+ * Methods whose money is confirmed by a payment provider or by staff, not on delivery.
+ * Orders paid this way wait in "pending_payment" until the payment is verified.
+ */
+export const PREPAID_METHODS: PaymentMethod[] = ["razorpay", "mock", "upi", "razorpay_link"];
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending_payment: "Awaiting payment",

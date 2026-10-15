@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowLeft, Printer, PackageCheck, Truck, Home as HomeIcon, XCircle, Banknote, RotateCcw, Phone, MapPin, CalendarClock, StickyNote, ClipboardList, Clock, User,
+  BadgeCheck, MessageCircle,
 } from "lucide-react";
 import {
-  allowedAdminTransitions, formatINR, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL,
+  allowedAdminTransitions, formatINR, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL,
   type Order, type OrderStatus,
 } from "@freshbasket/shared";
+import { Checkbox, Input } from "../ui/form";
 import { api } from "@/lib/client/api";
 import { Button } from "../ui/button";
 import { Notice } from "../ui/feedback";
@@ -26,6 +28,53 @@ interface AdminOrder extends Order {
   customer: { email: string | null; fullName: string | null; phone: string | null } | null;
   /** Still "placed" after its delivery slot ended. */
   late?: boolean;
+  /** WhatsApp order-update log (one row per event). */
+  notifications?: { event: string; status: string; recipient: string | null; error: string | null; attempts: number; updatedAt: string }[];
+}
+
+const NOTIFY_LABEL: Record<string, string> = { confirmed: "Order confirmed", packed: "Packed", out_for_delivery: "Out for delivery", delivered: "Delivered" };
+
+/** Admin confirms a UPI payment after checking the bank / UPI business app. Never automatic. */
+function UpiVerifyCard({ order, onDone }: { order: AdminOrder; onDone: (o: AdminOrder) => void }) {
+  const { role } = useAdmin();
+  const toast = useToast();
+  const [ref, setRef] = useState(order.upiReference ?? "");
+  const [checked, setChecked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function submit() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api<{ order: AdminOrder }>(`/api/admin/orders/${order.id}`, { method: "PATCH", json: { confirmUpi: { reference: ref, amountReceived: true } } });
+      onDone(r.order);
+      toast("UPI payment confirmed — order is now placed");
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card className="mb-6 border-2 border-[#f0d9a6] bg-[#fffaf0] p-4 sm:p-5" aria-labelledby="upi-verify-h">
+      <h2 id="upi-verify-h" className="flex items-center gap-2 text-lg font-semibold text-forest-900"><BadgeCheck className="size-5" aria-hidden /> Verify UPI payment</h2>
+      <p className="mt-1 text-sm text-ink-soft">
+        {order.upiReference ? <>Customer says they paid with reference <b>{order.upiReference}</b>.</> : <>The customer hasn&apos;t sent a UPI reference yet.</>}{" "}
+        Check your bank or UPI business app for <b>{formatINR(order.total)}</b> with this reference before confirming. A screenshot or UTR alone is not proof.
+      </p>
+      {role === "admin" ? (
+        <div className="mt-3 flex flex-col gap-3">
+          <label className="text-sm font-medium text-ink-soft" htmlFor="upi-utr">UTR / reference you found in the bank statement</label>
+          <Input id="upi-utr" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={40} className="max-w-xs" autoComplete="off" />
+          <Checkbox checked={checked} onChange={(e) => setChecked(e.target.checked)} label={`I checked: ${formatINR(order.total)} for this order has arrived in our account.`} />
+          {err ? <Notice tone="error">{err}</Notice> : null}
+          <div><Button variant="dark" loading={busy} disabled={!checked || !ref.trim()} onClick={submit}><BadgeCheck className="size-4" aria-hidden /> Mark UPI payment received</Button></div>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted">Ask an admin to confirm the payment.</p>
+      )}
+    </Card>
+  );
 }
 
 const ACTION: Record<OrderStatus, { label: string; icon: typeof PackageCheck; help: string }> = {
@@ -127,6 +176,9 @@ export function AdminOrderDetail({ id }: { id: string }) {
         />
 
         {actionError && !pending ? <Notice tone="error" className="mb-5">{actionError}</Notice> : null}
+        {o.paymentMethod === "upi" && (o.paymentStatus === "pending" || o.paymentStatus === "failed") && (o.status === "pending_payment" || o.status === "cancelled") ? (
+          <UpiVerifyCard order={o} onDone={(n) => setData({ order: n })} />
+        ) : null}
 
         {/* Actions */}
         {forward.length || canCancel || canCollect || canRefund || o.paymentStatus === "cod_pending" || o.status === "pending_payment" ? (
@@ -156,7 +208,9 @@ export function AdminOrderDetail({ id }: { id: string }) {
                 </Button>
               ) : null}
             </div>
-            {o.status === "pending_payment" ? (
+            {o.status === "pending_payment" && o.paymentMethod === "upi" ? (
+              <p className="mt-3 text-sm text-muted">Waiting for the customer&apos;s UPI payment. Confirm it above once you see the money in your account.</p>
+            ) : o.status === "pending_payment" ? (
               <p className="mt-3 text-sm text-muted">
                 Waiting for the customer&apos;s online payment. It moves to “Order placed” automatically once the payment gateway confirms it — it can&apos;t be marked paid by hand.
               </p>
@@ -257,8 +311,11 @@ export function AdminOrderDetail({ id }: { id: string }) {
             <Card aria-labelledby="pay-h" className="p-5">
               <h2 id="pay-h" className="text-lg font-semibold text-forest-900">Payment</h2>
               <dl className="mt-3 space-y-1.5 text-sm">
-                <Row label="Method" value={o.paymentMethod === "cod" ? "Cash on delivery" : o.paymentMethod === "mock" ? "Test payment (dev)" : "Online (Razorpay)"} />
+                <Row label="Method" value={PAYMENT_METHOD_LABEL[o.paymentMethod]} />
                 <Row label="Status" value={PAYMENT_STATUS_LABEL[o.paymentStatus]} />
+                <Row label="Ordered via" value={o.channel === "whatsapp" ? "WhatsApp" : "Website"} />
+                {o.upiReference ? <Row label="UPI reference" value={<code className="text-xs">{o.upiReference}</code>} /> : null}
+                {o.paymentLinkUrl ? <Row label="Payment link" value={<a href={o.paymentLinkUrl} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-leaf-600 underline">{o.paymentLinkUrl}</a>} /> : null}
                 {o.razorpayOrderId ? <Row label="Gateway order" value={<code className="text-xs">{o.razorpayOrderId}</code>} /> : null}
               </dl>
               {o.payments.length ? (
@@ -278,6 +335,25 @@ export function AdminOrderDetail({ id }: { id: string }) {
               ) : (
                 <p className="mt-3 text-sm text-muted">No gateway payments recorded{o.paymentMethod === "cod" ? " (cash order)" : ""}.</p>
               )}
+            </Card>
+
+            <Card aria-labelledby="wa-h" className="p-5">
+              <h2 id="wa-h" className="flex items-center gap-2 text-lg font-semibold text-forest-900"><MessageCircle className="size-5" aria-hidden /> WhatsApp updates</h2>
+              <p className="mt-1 text-sm text-muted">{o.whatsappUpdates ? "Customer opted in to order updates on WhatsApp." : "Customer did not opt in — no WhatsApp updates are sent."}</p>
+              {o.notifications?.length ? (
+                <ul className="mt-3 space-y-2 text-sm">
+                  {o.notifications.map((n) => (
+                    <li key={n.event} className="rounded-xl border border-line px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-ink">{NOTIFY_LABEL[n.event] ?? n.event}</span>
+                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", n.status === "sent" ? "bg-lime-100 text-forest-800" : n.status === "failed" ? "bg-danger-bg text-danger" : "bg-sage-100 text-ink-soft")}>{n.status}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted">{formatDateTime(n.updatedAt)}{n.attempts > 1 ? ` · ${n.attempts} attempts` : ""}</p>
+                      {n.error ? <p className="mt-0.5 break-words text-xs text-danger">{n.error}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </Card>
           </div>
         </div>
@@ -387,7 +463,7 @@ function PackingSlip({ order: o, storeName }: { order: AdminOrder; storeName: st
         </div>
         <div>
           <p className="font-bold">Payment</p>
-          <p>{o.paymentMethod === "cod" && o.paymentStatus === "cod_pending" ? `CASH ON DELIVERY — collect ${formatINR(o.total)}` : PAYMENT_STATUS_LABEL[o.paymentStatus]}</p>
+          <p>{o.paymentMethod === "cod" && o.paymentStatus === "cod_pending" ? `CASH ON DELIVERY — collect ${formatINR(o.total)}` : `${PAYMENT_METHOD_LABEL[o.paymentMethod]} — ${PAYMENT_STATUS_LABEL[o.paymentStatus]}`}</p>
           {o.customerNote ? <p className="mt-2"><b>Note:</b> {o.customerNote}</p> : null}
         </div>
       </div>
