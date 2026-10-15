@@ -145,15 +145,24 @@ export const adminProductSchema = z.object({
   active: z.boolean().default(true),
   images: z.array(z.object({ url: z.string().min(1).max(500), alt: trimmed(120).optional().nullable() })).max(8).default([]),
   variants: z.array(adminVariantSchema).min(1, "Add at least one weight option").max(10),
+  /**
+   * Stock by weight: total stock in grams shared by all weight packs (each pack's stock is derived).
+   * null = keep stock per pack (e.g. "1 bunch"). Leave out to keep what's saved.
+   */
+  stockGrams: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
 });
 export type AdminProductInput = z.infer<typeof adminProductSchema>;
 
-export const adminInventoryPatchSchema = z.object({
-  updates: z
-    .array(z.object({ variantId: uuid, price: z.number().int().min(0).optional(), stock: z.number().int().min(0).optional(), active: z.boolean().optional() }))
-    .min(1)
-    .max(200),
-});
+export const adminInventoryPatchSchema = z
+  .object({
+    updates: z
+      .array(z.object({ variantId: uuid, price: z.number().int().min(0).optional(), stock: z.number().int().min(0).optional(), active: z.boolean().optional() }))
+      .max(200)
+      .default([]),
+    /** Stock-by-weight products: new total in grams (each weight pack's stock is derived from it). */
+    products: z.array(z.object({ productId: uuid, stockGrams: z.number().int().min(0).max(1_000_000_000) })).max(200).default([]),
+  })
+  .refine((b) => b.updates.length + b.products.length > 0, { message: "Nothing to update" });
 
 export const adminOrderStatusSchema = z.object({
   status: z.enum(ORDER_STATUSES),

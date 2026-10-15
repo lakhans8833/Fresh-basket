@@ -129,7 +129,7 @@ describe("duplicate orders", () => {
 describe("inventory", () => {
   it("never oversells under concurrent checkouts", async () => {
     const id = v["spinach:250 g"]!;
-    await query("update product_variants set stock = 4 where id = $1", [id]);
+    await query("update products set stock_grams = 1000 where slug = 'spinach'"); // 4 × 250 g
     const attempts = Array.from({ length: 10 }, () =>
       placeOrder(CUSTOMER, input({ items: [{ variantId: id, quantity: 1 }, { variantId: v["potato:1 kg"]!, quantity: 2 }] }))
         .then(() => "ok")
@@ -139,6 +139,46 @@ describe("inventory", () => {
     expect(results.filter((r) => r === "ok")).toHaveLength(4);
     expect(results.filter((r) => r === 409)).toHaveLength(6);
     expect(await stock(id)).toBe(0);
+  });
+
+  it("sells every weight pack from one total in grams", async () => {
+    const grams = async () => Number((await queryOne<{ g: string }>("select stock_grams as g from products where slug = 'pumpkin'"))!.g);
+    await query("update products set stock_grams = 3000 where slug = 'pumpkin'"); // 3 kg
+    expect(await stock(v["pumpkin:500 g"]!)).toBe(6);
+    expect(await stock(v["pumpkin:1 kg"]!)).toBe(3);
+
+    // A mixed cart shares the same kilos: 2 × 1 kg + 2 × 500 g = 3 kg, all of it.
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["pumpkin:1 kg"]!, quantity: 2 }, { variantId: v["pumpkin:500 g"]!, quantity: 2 }] }));
+    expect(await grams()).toBe(0);
+    expect(await stock(v["pumpkin:500 g"]!)).toBe(0);
+    expect(await stock(v["pumpkin:1 kg"]!)).toBe(0);
+
+    // Cancelling gives the grams back, so every size is available again.
+    await customerCancel(CUSTOMER, order.id);
+    expect(await grams()).toBe(3000);
+    expect(await stock(v["pumpkin:500 g"]!)).toBe(6);
+
+    // 2 × 1 kg + 3 × 500 g = 3.5 kg > 3 kg: refused, nothing taken.
+    await expect(
+      placeOrder(CUSTOMER, input({ items: [{ variantId: v["pumpkin:1 kg"]!, quantity: 2 }, { variantId: v["pumpkin:500 g"]!, quantity: 3 }] })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await grams()).toBe(3000);
+  });
+
+  it("never oversells a weight total when different sizes are ordered at once", async () => {
+    await query("update products set stock_grams = 2000 where slug = 'potato'"); // 2 kg
+    const sizes = ["potato:500 g", "potato:1 kg", "potato:2 kg"];
+    const attempts = Array.from({ length: 12 }, (_, i) =>
+      placeOrder(CUSTOMER, input({ items: [{ variantId: v[sizes[i % 3]!]!, quantity: 1 }, { variantId: v["onion:1 kg"]!, quantity: 1 + (i % 4) }] }))
+        .then(() => (i % 3 === 0 ? 500 : i % 3 === 1 ? 1000 : 2000))
+        .catch((e) => { expect((e as { status?: number }).status).toBe(409); return 0; }),
+    );
+    const sold = (await Promise.all(attempts)).reduce((a, b) => a + b, 0);
+    const left = Number((await queryOne<{ g: string }>("select stock_grams as g from products where slug = 'potato'"))!.g);
+    expect(sold).toBeLessThanOrEqual(2000);
+    expect(sold + left).toBe(2000);
+    expect(await stock(v["potato:500 g"]!)).toBe(Math.floor(left / 500));
+    await query("update products set stock_grams = 80000 where slug = 'potato'"); // restock for later tests
   });
 
   it("restocks when a customer cancels before packing, and blocks cancel after", async () => {
@@ -255,7 +295,7 @@ describe("payments", () => {
     const order = (await placeOrder(CUSTOMER, input({ paymentMethod: "mock", items: [{ variantId: id, quantity: 2 }] }))).order;
     await query("update orders set reservation_expires_at = now() - interval '1 minute' where id = $1", [order.id]);
     await releaseExpired();
-    await query("update product_variants set stock = 0 where id = $1", [id]);
+    await query("update products set stock_grams = 0 where slug = 'broccoli'");
     expect(await captured(order.id, "evt_late2", order.total)).toBe("refund_required");
     expect((await getOrderById(order.id))?.paymentStatus).toBe("refund_pending");
     await adminUpdatePaymentStatus(order.id, "refunded", ADMIN);

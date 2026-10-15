@@ -81,6 +81,17 @@ from (values
 join public.products p on p.slug = v.slug
 where not exists (select 1 from public.product_variants x where x.product_id = p.id);
 
+-- Stock by weight: products whose packs are all weights keep one total in grams (SAMPLE stock).
+update public.products p
+   set stock_grams = s.total
+  from (
+    select v.product_id, max(v.stock::bigint * pack_label_grams(v.label)) as total
+      from public.product_variants v
+     group by v.product_id
+    having bool_and(pack_label_grams(v.label) is not null)
+  ) s
+ where s.product_id = p.id and p.stock_grams is null;
+
 -- Delivery (SAMPLE PIN codes) ---------------------------------------------------
 insert into public.delivery_areas (pincode, area_name, city, fee, free_above, min_order) values
   ('560034', 'Koramangala', 'Bengaluru', 2500, 49900, 9900),

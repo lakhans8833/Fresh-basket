@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight, ImagePlus, Plus, Trash2, X, Archive, Save, ExternalLink, Scale } from "lucide-react";
-import { adminProductSchema, type AdminProductInput } from "@freshbasket/shared";
+import { adminProductSchema, packGrams, type AdminProductInput } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
 import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea, inputClass } from "../ui/form";
@@ -32,6 +32,8 @@ interface LoadedProduct {
   active: boolean;
   images: { url: string; alt: string | null }[];
   variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean; hasOrders: boolean }[];
+  /** Total stock in grams for products sold by weight (null = stock per pack). */
+  stockGrams?: number | null;
 }
 interface CategoryOpt { id: string; name: string; active: boolean }
 
@@ -148,6 +150,16 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), active: v.active, hasOrders: v.hasOrders }))
       : [emptyVariant()],
   );
+  // Stock by weight: one total in kg shared by every weight pack (used when all options are weights).
+  const [stockKg, setStockKg] = useState(() => {
+    if (initial?.stockGrams != null) return String(initial.stockGrams / 1000);
+    const vs = initial?.variants ?? [];
+    if (!vs.length || vs.some((v) => !packGrams(v.label))) return "";
+    return String(Math.max(...vs.map((v) => v.stock * (packGrams(v.label) ?? 0))) / 1000);
+  });
+  const byWeight = variants.length > 0 && variants.every((v) => packGrams(v.label) !== null);
+  const stockKgNum = /^\d+(\.\d{1,3})?$/.test(stockKg.trim()) ? Number(stockKg.trim()) : null;
+  const totalGramsNow = byWeight && stockKgNum !== null ? Math.round(stockKgNum * 1000) : null;
   const [uploading, setUploading] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -242,7 +254,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       else if (Number.isNaN(price)) errs[`variants.${i}.price`] = "Use a rupee amount like 32 or 32.50";
       if (mrp !== null && Number.isNaN(mrp)) errs[`variants.${i}.mrp`] = "Use a rupee amount";
       else if (mrp !== null && price !== null && !Number.isNaN(price) && mrp < price) errs[`variants.${i}.mrp`] = "MRP should be at least the price";
-      if (stock === null || Number.isNaN(stock)) errs[`variants.${i}.stock`] = "Whole number";
+      if (!byWeight && (stock === null || Number.isNaN(stock))) errs[`variants.${i}.stock`] = "Whole number";
       return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, sortOrder: i, active: v.active };
     });
     const raw = {
@@ -250,7 +262,9 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       storageTips: storageTips.trim() || null, shelfLife: shelfLife.trim() || null, origin: origin.trim() || null,
       images: images.map((i) => ({ url: i.url, alt: i.alt.trim() || null })),
       variants: vs,
+      stockGrams: byWeight ? totalGramsNow : null,
     };
+    if (byWeight && totalGramsNow === null) errs.stockGrams = "Enter kilos like 25 or 2.5";
     const r = adminProductSchema.safeParse(raw);
     if (!r.success) {
       for (const iss of r.error.issues) {
@@ -458,9 +472,33 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
           </Card>
 
           <Card aria-labelledby="variants-h">
-            <CardHeader id="variants-h" title="Weight options" description="Each option has its own price and stock. Prices in rupees." />
+            <CardHeader
+              id="variants-h"
+              title="Weight options"
+              description={byWeight ? "Each option has its own price. Stock is one total in kg shared by all sizes. Prices in rupees." : "Each option has its own price and stock. Prices in rupees."}
+            />
             <div className="p-5 sm:p-6">
               {err("variants") ? <Notice tone="error" className="mb-4">{err("variants")}</Notice> : null}
+              {byWeight ? (
+                <div className="mb-5 max-w-xs">
+                  <Field
+                    label="Total stock (kg)"
+                    htmlFor="p-stock-kg"
+                    error={err("stockGrams")}
+                    hint="Every size is sold from this total — e.g. 25 kg = 250 × 100 g or 25 × 1 kg."
+                  >
+                    <Input
+                      id="p-stock-kg"
+                      inputMode="decimal"
+                      value={stockKg}
+                      onChange={(ev) => { setStockKg(ev.target.value.replace(/[^\d.]/g, "")); touch(); }}
+                      placeholder="25"
+                      invalid={!!err("stockGrams")}
+                      className="tabular-nums"
+                    />
+                  </Field>
+                </div>
+              ) : null}
               <div className="hidden grid-cols-[minmax(7rem,1.2fr)_1fr_1fr_0.8fr_auto_auto] gap-3 px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted md:grid">
                 <span>Label</span><span>Price</span><span>MRP <span className="normal-case tracking-normal">(optional)</span></span><span>Stock</span><span>Active</span><span className="sr-only">Remove</span>
               </div>
@@ -478,9 +516,17 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                       <VCell label="MRP (optional)" id={`v-mrp-${v.key}`} error={e("mrp")}>
                         <MoneyInput id={`v-mrp-${v.key}`} value={v.mrp} onChange={(ev) => setVariant(v.key, { mrp: ev.target.value })} placeholder="—" invalid={!!e("mrp")} />
                       </VCell>
-                      <VCell label="Stock" id={`v-stock-${v.key}`} error={e("stock")}>
-                        <Input id={`v-stock-${v.key}`} inputMode="numeric" value={v.stock} onChange={(ev) => setVariant(v.key, { stock: ev.target.value.replace(/[^\d]/g, "") })} invalid={!!e("stock")} className="tabular-nums" />
-                      </VCell>
+                      {byWeight ? (
+                        <VCell label="Stock" id={`v-stock-${v.key}`}>
+                          <p id={`v-stock-${v.key}`} className="flex h-11 items-center whitespace-nowrap text-sm tabular-nums text-ink-soft">
+                            {totalGramsNow === null ? "—" : `= ${Math.floor(totalGramsNow / (packGrams(v.label) ?? 1))} packs`}
+                          </p>
+                        </VCell>
+                      ) : (
+                        <VCell label="Stock" id={`v-stock-${v.key}`} error={e("stock")}>
+                          <Input id={`v-stock-${v.key}`} inputMode="numeric" value={v.stock} onChange={(ev) => setVariant(v.key, { stock: ev.target.value.replace(/[^\d]/g, "") })} invalid={!!e("stock")} className="tabular-nums" />
+                        </VCell>
+                      )}
                       <div className="flex items-center md:h-11">
                         <Toggle checked={v.active} onChange={(val) => setVariant(v.key, { active: val })} label={<span className="md:sr-only">Active</span>} id={`v-active-${v.key}`} />
                       </div>
@@ -505,7 +551,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
               <Button type="button" variant="outline" size="sm" className="ml-2 mt-4" onClick={() => { setVariants(withStandardSizes(variants)); touch(); }}>
                 <Scale className="size-4" aria-hidden /> Add 100 g, 250 g, 500 g, 1 kg
               </Button>
-              <p className="mt-2 text-xs text-muted">New sizes are priced from your nearest existing size (per-gram rate, rounded up to the next rupee) and start with stock 0. Enter real stock for each size — the same kilos can&apos;t be sold once per size.</p>
+              <p className="mt-2 text-xs text-muted">New sizes are priced from your nearest existing size (per-gram rate, rounded up to the next rupee). When every option is a weight, all sizes share the total stock above; otherwise new sizes start with stock 0.</p>
             </div>
           </Card>
         </div>

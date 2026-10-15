@@ -24,6 +24,9 @@ interface Row {
   active: boolean;
   productActive: boolean;
   categoryName: string;
+  /** Stock-by-weight products: total in grams (null = each pack has its own stock). */
+  productStockGrams: number | null;
+  packGrams: number | null;
 }
 type Edit = { price?: string; stock?: string; active?: boolean };
 type Filter = "all" | "low" | "out" | "inactive";
@@ -35,6 +38,8 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
   const { role } = useAdmin();
   const { data, error, reload } = useAdminData<{ rows: Row[] }>("/api/admin/inventory");
   const [edits, setEdits] = useState<Record<string, Edit>>({});
+  // Stock-by-weight products: edited total in kg, by product id.
+  const [totals, setTotals] = useState<Record<string, string>>({});
   const [q, setQ] = useState(initialQ);
   const [filter, setFilter] = useState<Filter>((["all", "low", "out", "inactive"] as const).find((f) => f === initialFilter) ?? "all");
   const [saving, setSaving] = useState(false);
@@ -42,9 +47,23 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
+  const isWeight = (r: Row) => r.productStockGrams !== null && r.packGrams !== null && r.packGrams > 0;
+  const kgText = (grams: number) => String(Math.round(grams) / 1000);
+  /** Total grams for a stock-by-weight product, including an unsaved edit (null if the edit is invalid). */
+  function totalGrams(r: Row): number | null {
+    const t = totals[r.productId];
+    if (t === undefined) return r.productStockGrams;
+    return /^\d+(\.\d{1,3})?$/.test(t.trim()) ? Math.round(Number(t) * 1000) : null;
+  }
+
   // Effective value of a row, including unsaved edits.
   function eff(r: Row) {
     const e = edits[r.variantId] ?? {};
+    if (isWeight(r)) {
+      const g = totalGrams(r) ?? r.productStockGrams ?? 0;
+      const stock = Math.floor(g / r.packGrams!);
+      return { priceText: e.price ?? paiseToInput(r.price), stockText: String(stock), stock, active: e.active ?? r.active };
+    }
     const stockText = e.stock ?? String(r.stock);
     const stock = /^\d+$/.test(stockText) ? Number(stockText) : r.stock;
     return { priceText: e.price ?? paiseToInput(r.price), stockText, stock, active: e.active ?? r.active };
@@ -72,8 +91,23 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     }
     return { updates, invalid };
   }, [rows, edits]);
+  const { productUpdates, invalidTotals } = useMemo(() => {
+    const productUpdates: { productId: string; stockGrams: number }[] = [];
+    const invalidTotals = new Set<string>();
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!isWeight(r) || seen.has(r.productId) || totals[r.productId] === undefined) continue;
+      seen.add(r.productId);
+      const g = totalGrams(r);
+      if (g === null) invalidTotals.add(r.productId);
+      else if (g !== r.productStockGrams) productUpdates.push({ productId: r.productId, stockGrams: g });
+    }
+    return { productUpdates, invalidTotals };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- derived from rows + totals only
+  }, [rows, totals]);
   const changed = new Set(updates.map((u) => u.variantId));
-  const dirty = updates.length > 0 || invalid.size > 0;
+  const changedProducts = new Set(productUpdates.map((u) => u.productId));
+  const dirty = updates.length > 0 || invalid.size > 0 || productUpdates.length > 0 || invalidTotals.size > 0;
 
   useEffect(() => {
     if (!dirty) return;
@@ -108,20 +142,22 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
 
   async function save() {
     setSaveError(null);
-    if (invalid.size) {
-      setSaveError("Some prices or stock counts aren't valid numbers. Fix the highlighted cells.");
+    if (invalid.size || invalidTotals.size) {
+      setSaveError("Some prices or stock values aren't valid numbers (total stock: kg, e.g. 25 or 2.5). Fix the highlighted cells.");
       return;
     }
-    if (!updates.length) return;
+    if (!updates.length && !productUpdates.length) return;
     setSaving(true);
     try {
       // The API accepts up to 200 rows per request.
-      for (let i = 0; i < updates.length; i += 200) {
-        await api("/api/admin/inventory", { method: "PATCH", json: { updates: updates.slice(i, i + 200) } });
+      for (let i = 0; i < Math.max(updates.length, productUpdates.length); i += 200) {
+        await api("/api/admin/inventory", { method: "PATCH", json: { updates: updates.slice(i, i + 200), products: productUpdates.slice(i, i + 200) } });
       }
-      toast(`Saved ${updates.length} item${updates.length === 1 ? "" : "s"}`);
+      const n = updates.length + productUpdates.length;
+      toast(`Saved ${n} change${n === 1 ? "" : "s"}`);
       await reload();
       setEdits({});
+      setTotals({});
     } catch (e) {
       setSaveError(errorMessage(e));
     } finally {
@@ -140,7 +176,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     <>
       <PageHeader
         title="Inventory"
-        description="Update prices and stock for every weight option at once. Changes are saved together."
+        description="Update prices and stock at once. Products sold by weight have one total stock in kg — every pack size (100 g, 250 g, 500 g, 1 kg…) is worked out from it. Changes are saved together."
       />
 
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -195,13 +231,41 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {visible.map((r) => {
+                {visible.map((r, i) => {
                   const v = eff(r);
+                  const weight = isWeight(r);
+                  const firstOfProduct = i === 0 || visible[i - 1]!.productId !== r.productId;
+                  const totalBad = invalidTotals.has(r.productId);
+                  const header = weight && firstOfProduct ? (
+                    <tr key={`${r.productId}-total`} className={cn("bg-sage-50/70", changedProducts.has(r.productId) && "bg-lime-50")}>
+                      <td className="px-4 py-2" colSpan={3}>
+                        <div className="font-semibold text-ink">{r.productName}</div>
+                        <div className="text-xs text-muted">Sold by weight — one stock for all pack sizes</div>
+                      </td>
+                      <td className="px-2 py-2" colSpan={3}>
+                        <label className="flex items-center gap-2 text-sm">
+                          <span className="whitespace-nowrap font-medium text-ink-soft">Total stock</span>
+                          <span className="relative">
+                            <input
+                              aria-label={`Total stock for ${r.productName}, in kg`}
+                              inputMode="decimal"
+                              value={totals[r.productId] ?? kgText(r.productStockGrams ?? 0)}
+                              onChange={(e) => setTotals((t) => ({ ...t, [r.productId]: e.target.value.replace(/[^\d.]/g, "") }))}
+                              aria-invalid={totalBad || undefined}
+                              className={cn(inputClass, "h-9 w-28 rounded-lg pl-2.5 pr-8 text-sm tabular-nums")}
+                            />
+                            <span aria-hidden className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted">kg</span>
+                          </span>
+                        </label>
+                      </td>
+                    </tr>
+                  ) : null;
                   const priceBad = invalid.has(`${r.variantId}:price`);
                   const stockBad = invalid.has(`${r.variantId}:stock`);
                   const isChanged = changed.has(r.variantId);
                   const live = v.active && r.productActive;
                   return (
+                    [header,
                     <tr key={r.variantId} className={cn(isChanged ? "bg-lime-50" : live && v.stock === 0 ? "bg-danger-bg/50" : live && v.stock <= LOW ? "bg-[#fdf6e7]/60" : "", !live && "text-muted")}>
                       <td className="px-4 py-1.5">
                         <div className="font-medium text-ink">{r.productName}</div>
@@ -222,6 +286,9 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                         </div>
                       </td>
                       <td className="px-2 py-1.5">
+                        {weight ? (
+                          <span className="block px-1 text-sm tabular-nums text-ink-soft" title="Worked out from the product's total stock">= {v.stock} <span className="text-xs text-muted">packs</span></span>
+                        ) : (
                         <input
                           aria-label={`Stock for ${r.productName} ${r.label}`}
                           inputMode="numeric"
@@ -230,6 +297,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                           aria-invalid={stockBad || undefined}
                           className={cn(inputClass, "h-9 rounded-lg px-2.5 text-sm tabular-nums")}
                         />
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         <input
@@ -253,7 +321,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                           <Badge tone="green">In stock</Badge>
                         )}
                       </td>
-                    </tr>
+                    </tr>]
                   );
                 })}
               </tbody>
@@ -271,10 +339,10 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
         aria-hidden={!dirty}
       >
         <span className="text-sm" aria-live="polite">
-          {invalid.size ? `${invalid.size} cell${invalid.size === 1 ? "" : "s"} need fixing` : `${updates.length} unsaved change${updates.length === 1 ? "" : "s"}`}
+          {invalid.size + invalidTotals.size ? `${invalid.size + invalidTotals.size} cell${invalid.size + invalidTotals.size === 1 ? "" : "s"} need fixing` : `${updates.length + productUpdates.length} unsaved change${updates.length + productUpdates.length === 1 ? "" : "s"}`}
         </span>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={() => { setEdits({}); setSaveError(null); }} disabled={saving} tabIndex={dirty ? 0 : -1}>
+          <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={() => { setEdits({}); setTotals({}); setSaveError(null); }} disabled={saving} tabIndex={dirty ? 0 : -1}>
             <RotateCcw className="size-4" aria-hidden /> Discard
           </Button>
           <Button size="sm" variant="lime" onClick={save} loading={saving} tabIndex={dirty ? 0 : -1}>

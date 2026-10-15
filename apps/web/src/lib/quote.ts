@@ -19,6 +19,8 @@ export interface QuoteContext {
 type VariantRow = {
   id: string; label: string; price: number; stock: number; active: boolean;
   product_id: string; product_name: string; product_active: boolean; image_url: string | null;
+  /** Product total for stock-by-weight products (pg bigint arrives as a string), else null. */
+  stock_grams: string | number | null; grams: number | null;
 };
 type CouponRow = {
   id: string; code: string; kind: "percent" | "flat"; value: number; min_order: number; max_discount: number | null;
@@ -42,9 +44,18 @@ export async function buildQuote(
   for (const it of input.items) qty.set(it.variantId, (qty.get(it.variantId) ?? 0) + it.quantity);
   const ids = [...qty.keys()].sort(); // consistent lock order avoids deadlocks
 
+  // Lock order everywhere: products first, then their packs (take_stock / return_stock and the
+  // stock-by-weight triggers update a product's packs while holding the product row).
+  if (opts.lock && ids.length) {
+    await db.query(
+      `select p.id from products p where p.id in (select product_id from product_variants where id = any($1::uuid[])) order by p.id for update`,
+      [ids],
+    );
+  }
   const { rows: vrows } = ids.length
     ? await db.query<VariantRow>(
         `select v.id, v.label, v.price, v.stock, v.active, p.id as product_id, p.name as product_name,
+                p.stock_grams, pack_label_grams(v.label) as grams,
                 (p.active and c.active) as product_active,
                 (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image_url
            from product_variants v join products p on p.id = v.product_id join categories c on c.id = p.category_id
@@ -54,10 +65,22 @@ export async function buildQuote(
     : { rows: [] as VariantRow[] };
   const byId = new Map(vrows.map((r) => [r.id, r]));
 
+  // Stock by weight: several pack sizes of one product share its total grams, so each line can
+  // only use what the earlier lines of the same product left (e.g. 20 kg total, 15 × 1 kg in the
+  // cart → at most 10 × 500 g more).
+  const gramsLeft = new Map<string, number>();
+  const available = (r: VariantRow): number => {
+    if (r.stock_grams === null || r.stock_grams === undefined || !r.grams) return r.stock;
+    const left = gramsLeft.get(r.product_id) ?? Number(r.stock_grams);
+    const packs = Math.floor(left / r.grams);
+    gramsLeft.set(r.product_id, Math.max(0, left - Math.min(qty.get(r.id)!, packs) * r.grams));
+    return packs;
+  };
+
   const lines: PricedLineInput[] = ids.map((id) => {
     const r = byId.get(id);
     return r
-      ? { variantId: id, productName: r.product_name, variantLabel: r.label, unitPrice: r.price, quantity: qty.get(id)!, stock: r.stock, active: r.active && r.product_active }
+      ? { variantId: id, productName: r.product_name, variantLabel: r.label, unitPrice: r.price, quantity: qty.get(id)!, stock: available(r), active: r.active && r.product_active }
       : { variantId: id, productName: "Unavailable item", variantLabel: "", unitPrice: 0, quantity: qty.get(id)!, stock: 0, active: false };
   });
 

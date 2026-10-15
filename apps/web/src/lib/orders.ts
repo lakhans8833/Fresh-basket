@@ -231,9 +231,10 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
 
       for (const line of ctx.quote.lines) {
         const meta = ctx.variants.get(line.variantId)!;
-        // Guarded decrement: succeeds only if enough stock remains (rows are already locked).
-        const upd = await c.query("update product_variants set stock = stock - $2 where id = $1 and stock >= $2", [line.variantId, line.quantity]);
-        if (upd.rowCount !== 1) throw new OrderRejected("An item just went out of stock.", { [line.variantId]: "Out of stock." });
+        // Guarded take: from the product's total grams for weight packs, else from the pack itself.
+        // Succeeds only if enough stock remains (product + pack rows are already locked).
+        const took = await c.query<{ ok: boolean }>("select take_stock($1, $2) as ok", [line.variantId, line.quantity]);
+        if (!took.rows[0]?.ok) throw new OrderRejected("An item just went out of stock.", { [line.variantId]: "Out of stock." });
         await c.query(
           `insert into order_items (order_id, product_id, variant_id, product_name, variant_label, unit_price, quantity, line_total, image_url)
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,

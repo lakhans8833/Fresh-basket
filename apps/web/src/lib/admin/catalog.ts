@@ -2,7 +2,8 @@ import "server-only";
 import type { z } from "zod";
 import type { adminCategorySchema, AdminProductInput } from "@freshbasket/shared";
 import { query, queryOne, tx } from "../db";
-import { conflict, notFound } from "../http";
+import { badRequest, conflict, notFound } from "../http";
+import { packGrams } from "@freshbasket/shared";
 
 export async function adminListCategories() {
   return query(
@@ -49,7 +50,7 @@ export async function adminListProducts(q?: string | null) {
 export async function adminGetProduct(id: string) {
   const p = await queryOne(
     `select id, slug, name, category_id as "categoryId", description, highlights, storage_tips as "storageTips", shelf_life as "shelfLife", origin,
-            seasonal, featured, active from products where id = $1`,
+            seasonal, featured, active, stock_grams::float8 as "stockGrams" from products where id = $1`,
     [id],
   );
   if (!p) throw notFound();
@@ -122,6 +123,13 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
       [productId, keep],
     );
     await c.query("update product_variants set active = false where product_id = $1 and not (id = any($2::uuid[]))", [productId, keep]);
+    if (d.stockGrams !== undefined) {
+      if (d.stockGrams !== null && d.variants.some((v) => packGrams(v.label) === null)) {
+        throw badRequest("Total stock in kg only works when every option is a weight like “500 g” or “1 kg”.");
+      }
+      // Setting a total re-derives every weight pack's stock (database trigger).
+      await c.query("update products set stock_grams = $1 where id = $2", [d.stockGrams, productId]);
+    }
     return { id: productId };
   });
 }
@@ -139,21 +147,30 @@ export async function adminDeleteProduct(id: string) {
 export async function adminInventory() {
   return query(
     `select v.id as "variantId", p.id as "productId", p.name as "productName", v.label, v.price, v.stock, v.active,
-            p.active as "productActive", c.name as "categoryName"
+            p.active as "productActive", c.name as "categoryName",
+            p.stock_grams::float8 as "productStockGrams", pack_label_grams(v.label) as "packGrams"
        from product_variants v join products p on p.id = v.product_id join categories c on c.id = p.category_id
       order by p.name, v.sort_order`,
   );
 }
-
-export async function adminPatchInventory(updates: { variantId: string; price?: number; stock?: number; active?: boolean }[]) {
+export async function adminPatchInventory(
+  updates: { variantId: string; price?: number; stock?: number; active?: boolean }[],
+  products: { productId: string; stockGrams: number }[] = [],
+) {
   return tx(async (c) => {
+    // Products first (their packs are recomputed by a trigger), then packs — same lock order as checkout.
+    for (const pr of [...products].sort((a, b) => a.productId.localeCompare(b.productId))) {
+      await c.query("update products set stock_grams = $2 where id = $1 and stock_grams is not null", [pr.productId, pr.stockGrams]);
+    }
     for (const u of updates) {
+      // For stock-by-weight packs the database derives `stock` from the product total, so a
+      // stock value sent here is ignored for them (price / active still apply).
       await c.query(
         `update product_variants set price = coalesce($2, price), stock = coalesce($3, stock), active = coalesce($4, active) where id = $1`,
         [u.variantId, u.price ?? null, u.stock ?? null, u.active ?? null],
       );
     }
-    return { updated: updates.length };
+    return { updated: updates.length + products.length };
   });
 }
 

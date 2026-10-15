@@ -9,6 +9,6 @@ export const GET = route(async () => {
 });
 export const PATCH = route(async (req) => {
   await requireStaff();
-  const { updates } = await parseBody(req, adminInventoryPatchSchema);
-  return json(await adminPatchInventory(updates));
+  const { updates, products } = await parseBody(req, adminInventoryPatchSchema);
+  return json(await adminPatchInventory(updates, products));
 });
