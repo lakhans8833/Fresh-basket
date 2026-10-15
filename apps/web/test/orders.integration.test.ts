@@ -13,6 +13,7 @@ import { verifyCheckoutSignature, verifyWebhookSignature } from "@/lib/payments/
 import { adminGetOrder, adminListOrders, adminStats, adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
 import { listAddresses, saveAddress } from "@/lib/account";
 import { commonFreeAbove } from "@/lib/delivery";
+import { adminDeleteBanner, adminSaveBanner, listActiveBanners } from "@/lib/banners";
 import { buildQuote } from "@/lib/quote";
 import { adminConfirmEmail, adminListUsers, adminResendConfirmation, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
@@ -539,6 +540,25 @@ describe("free delivery before a PIN code is chosen", () => {
       expect(await commonFreeAbove()).toBeNull();
     } finally {
       for (const r of before) await query("update delivery_areas set free_above = $2 where pincode = $1", [r.pincode, r.free_above]);
+    }
+  });
+});
+
+describe("hero slider banners", () => {
+  it("keeps hero slides and offer-strip banners apart", async () => {
+    const base = { subtitle: null, imageUrl: null, linkUrl: "/shop", theme: "green" as const, active: true, sortOrder: 1, startsAt: null, endsAt: null };
+    const hero = await adminSaveBanner(null, { ...base, title: "Weekend mango sale", placement: "hero", badge: "This weekend", ctaLabel: "See mangoes" });
+    const strip = await adminSaveBanner(null, { ...base, title: "Strip offer", placement: "strip", badge: null, ctaLabel: null });
+    try {
+      const heroes = await listActiveBanners(4, "hero");
+      expect(heroes.map((b) => b.title)).toContain("Weekend mango sale");
+      expect(heroes.map((b) => b.title)).not.toContain("Strip offer");
+      expect(heroes.find((b) => b.id === hero.id)).toMatchObject({ badge: "This weekend", ctaLabel: "See mangoes", placement: "hero" });
+      expect((await listActiveBanners()).map((b) => b.title)).toContain("Strip offer");
+      expect((await listActiveBanners()).map((b) => b.title)).not.toContain("Weekend mango sale");
+    } finally {
+      await adminDeleteBanner(hero.id);
+      await adminDeleteBanner(strip.id);
     }
   });
 });

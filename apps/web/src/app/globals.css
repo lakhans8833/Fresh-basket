@@ -147,3 +147,15 @@ input[type="search"]::-webkit-search-decoration {
   -webkit-appearance: none;
   appearance: none;
 }
+
+/* Home hero slider: the active dot fills up while a slide is showing (see hero-carousel.tsx). */
+.hero-progress {
+  width: 0;
+  animation-name: hero-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes hero-progress {
+  from { width: 0; }
+  to { width: 100%; }
+}

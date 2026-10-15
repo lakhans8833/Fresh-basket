@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { buildWhatsAppUrl, type PromoBanner } from "@freshbasket/shared";
+import { buildWhatsAppUrl, formatINR, type PromoBanner } from "@freshbasket/shared";
 import { bestSavingPct, bestSellerIds, dealsFrom, listBuyAgain, listCategories, listProducts, priceBucketsFrom } from "@/lib/catalog";
 import { listActiveBanners } from "@/lib/banners";
 import { getSession } from "@/lib/auth";
@@ -20,13 +20,14 @@ export default async function HomePage() {
   const session = await getSession().catch(() => null);
   // One catalogue read for the whole page (deals, price ranges, rails are all derived from it),
   // so the home page needs only a handful of database round trips.
-  const [categories, all, bestIds, areas, slots, adminBanners, buyAgain] = await Promise.all([
+  const [categories, all, bestIds, areas, slots, adminBanners, heroBanners, buyAgain] = await Promise.all([
     safe(listCategories(), []),
     safe(listProducts({}), []),
     safe(bestSellerIds(8), []),
     safe(listActiveDeliveryAreas(), []),
     safe(listActiveSlots(), []),
     safe(listActiveBanners(), []),
+    safe(listActiveBanners(4, "hero"), []),
     session ? safe(listBuyAgain(session.userId, 8), { products: [], lastVariant: {} }) : Promise.resolve({ products: [], lastVariant: {} }),
   ]);
   const byId = new Map(all.map((p) => [p.id, p]));
@@ -62,7 +63,12 @@ export default async function HomePage() {
   if (whatsapp && autoBanners.length < 4) autoBanners.push({ id: "auto-wa", title: "Order on WhatsApp", subtitle: "Fill your cart and send it to us in one tap", linkUrl: "/cart", theme: "green", imageUrl: "/images/site/hero-shopping-basket.webp" });
   const banners = adminBanners.length ? adminBanners : autoBanners.slice(0, 4);
 
-  const slides: HeroSlide[] = [
+  // Free delivery is promised in the hero only when every delivery area has the same amount set.
+  const freeAboves = [...new Set(areas.map((a) => a.freeAbove))];
+  const freeAbove = freeAboves.length === 1 ? freeAboves[0] : null;
+  const pinCount = areas.length;
+
+  const allSlides: HeroSlide[] = [
     {
       id: "fresh",
       badge: `Delivering in ${area}`,
@@ -74,27 +80,51 @@ export default async function HomePage() {
       imageAlt: "A basket of fresh vegetables — limes, spring onions, ginger, chillies and greens",
       script: storeConfig.secondaryTagline,
     },
-    whatsapp
-      ? {
+    // Slides added in Admin → Banners ("Home hero slider").
+    ...heroBanners.map((b): HeroSlide => ({
+      id: `banner-${b.id}`,
+      badge: b.badge || storeConfig.serviceArea,
+      title: [b.title, ""],
+      subtitle: b.subtitle ?? "",
+      cta: { href: b.linkUrl, label: b.ctaLabel || "Shop now" },
+      image: b.imageUrl ?? "/images/site/banner-market.webp",
+      imageAlt: "",
+    })),
+    ...(freeAbove != null && freeAbove > 0
+      ? [{
+          id: "free-delivery",
+          badge: `${pinCount} delivery ${pinCount === 1 ? "area" : "areas"}`,
+          title: ["Free Delivery", `on Orders Above ${formatINR(freeAbove)}`] as [string, string],
+          subtitle: "Fill your basket and the delivery charge disappears at checkout.",
+          cta: { href: "/shop", label: "Fill my basket" },
+          secondary: { href: "/delivery-policy", label: "Delivery areas" },
+          image: "/images/site/banner-market.webp",
+          imageAlt: "Fresh vegetables at a market stall",
+        } satisfies HeroSlide]
+      : []),
+    ...(whatsapp
+      ? [{
           id: "whatsapp",
           badge: "Easy ordering",
-          title: ["Order on WhatsApp", "in One Tap"],
+          title: ["Order on WhatsApp", "in One Tap"] as [string, string],
           subtitle: "Fill your cart, add your address and send the order to us on WhatsApp.",
           cta: { href: "/shop", label: "Start shopping" },
-          secondary: { href: "/help", label: "How it works" },
+          secondary: { href: "/cart", label: "Order on WhatsApp" },
           image: "/images/site/hero-shopping-basket.webp",
           imageAlt: "A shopping basket filled with fresh vegetables",
-        }
-      : {
-          id: "weights",
-          badge: "Your choice",
-          title: ["Pick Your Pack Size", "& Delivery Slot"],
-          subtitle: "Buy just what you need — 250 g, 500 g, 1 kg and more.",
-          cta: { href: "/shop", label: "Start shopping" },
-          image: "/images/site/hero-shopping-basket.webp",
-          imageAlt: "A shopping basket filled with fresh vegetables",
-        },
+        } satisfies HeroSlide]
+      : []),
+    {
+      id: "weights",
+      badge: "Your choice",
+      title: ["Pick Your Pack Size", "& Delivery Slot"],
+      subtitle: "Buy just what you need — 250 g, 500 g, 1 kg and more.",
+      cta: { href: "/shop", label: "Start shopping" },
+      image: "/images/site/banner-roots.webp",
+      imageAlt: "Fresh root vegetables",
+    },
   ];
+  const slides = allSlides.slice(0, 7);
 
   return (
     <>

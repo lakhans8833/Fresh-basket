@@ -90,6 +90,11 @@ export interface PromoBanner {
   imageUrl: string | null;
   linkUrl: string;
   theme: "green" | "lime" | "amber" | "ivory";
+  /** "strip" = offer cards under the hero; "hero" = a slide in the home page hero slider. */
+  placement?: "strip" | "hero";
+  /** Hero slides: small badge above the title, and the button text. */
+  badge?: string | null;
+  ctaLabel?: string | null;
 }
 
 export interface DeliveryArea {
