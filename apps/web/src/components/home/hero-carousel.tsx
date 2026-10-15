@@ -24,7 +24,8 @@ const FADE_MS = 600;
 
 /**
  * Home hero slider.
- * - Auto-plays every 5 s and loops (last → first) with a 600 ms cross-fade.
+ * - Auto-plays every 5 s and loops (last → first): the slide scrolls out to the left as the next
+ *   one scrolls in from the right (600 ms); going back scrolls the other way.
  * - Pauses while the mouse is over it, while it's touched or swiped, while keyboard focus is inside,
  *   and while the tab is hidden; starts a fresh 5 s again once released.
  * - No auto-play for people who prefer reduced motion (they still get arrows, dots and swipe).
@@ -33,6 +34,9 @@ const FADE_MS = 600;
 export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   const count = slides.length;
   const [index, setIndex] = useState(0);
+  // Slide animation: the current slide scrolls out to one side while the next scrolls in from the other.
+  // "park" = the incoming slide is first placed off-screen (no animation), then both move together.
+  const [move, setMove] = useState<{ from: number; to: number; dir: 1 | -1; stage: "park" | "run" } | null>(null);
   const [hovered, setHovered] = useState(false);
   const [touching, setTouching] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -66,16 +70,26 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
   }, [running]);
 
   const go = useCallback(
-    (i: number) => {
-      setIndex(((i % count) + count) % count);
+    (i: number, dir?: 1 | -1) => {
+      const to = ((i % count) + count) % count;
       setCycle((c) => c + 1);
+      if (to === index) return;
+      const d: 1 | -1 = dir ?? (i > index ? 1 : -1);
+      setMove({ from: index, to, dir: d, stage: "park" });
+      // Two frames later the parked slide is on screen edge; then animate both.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          setIndex(to);
+          setMove({ from: index, to, dir: d, stage: "run" });
+        }),
+      );
     },
-    [count],
+    [count, index],
   );
 
   useEffect(() => {
     if (!running) return;
-    const t = setTimeout(() => go(index + 1), SLIDE_MS);
+    const t = setTimeout(() => go(index + 1, 1), SLIDE_MS);
     return () => clearTimeout(t);
   }, [running, index, cycle, go]);
 
@@ -93,8 +107,8 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
       }}
       onKeyDown={(e) => {
-        if (e.key === "ArrowRight") go(index + 1);
-        else if (e.key === "ArrowLeft") go(index - 1);
+        if (e.key === "ArrowRight") go(index + 1, 1);
+        else if (e.key === "ArrowLeft") go(index - 1, -1);
       }}
       onTouchStart={(e) => {
         setTouching(true);
@@ -108,7 +122,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           const dx = t.clientX - s.x;
           const dy = t.clientY - s.y;
           // A clear sideways swipe changes slide; vertical scrolling is left alone.
-          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.2) go(index + (dx < 0 ? 1 : -1));
+          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.2) go(index + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
         }
         touchStart.current = null;
         setTouching(false);
@@ -122,6 +136,18 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       <div className="grid overflow-hidden" aria-live={running ? "off" : "polite"}>
         {slides.map((s, i) => {
           const active = i === index;
+          // Where each slide sits (in % of the width) and whether it animates there.
+          let x = 100;
+          let animate = false;
+          let visible = active;
+          if (move?.stage === "park") {
+            if (i === move.to) { x = move.dir * 100; visible = true; }
+            else if (i === move.from) { x = 0; visible = true; }
+          } else if (move?.stage === "run" && (i === move.to || i === move.from)) {
+            x = i === move.to ? 0 : -move.dir * 100;
+            animate = true;
+            visible = true;
+          } else if (active) x = 0;
           return (
             <div
               key={s.id}
@@ -130,10 +156,14 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
               aria-label={`${i + 1} of ${count}`}
               aria-hidden={!active}
               inert={!active}
-              style={{ transitionDuration: reduced ? "0ms" : `${FADE_MS}ms` } as CSSProperties}
+              style={{
+                transform: `translateX(${x}%)`,
+                transition: animate && !reduced ? `transform ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)` : "none",
+                visibility: visible ? "visible" : "hidden",
+              } as CSSProperties}
               className={cn(
-                "relative col-start-1 row-start-1 overflow-hidden bg-gradient-to-r from-[#f1f8e8] via-[#eef6e2] to-[#e2efd3] transition-[opacity,transform] ease-out",
-                active ? "z-10 translate-x-0 opacity-100" : "pointer-events-none z-0 translate-x-3 opacity-0",
+                "relative col-start-1 row-start-1 overflow-hidden bg-gradient-to-r from-[#f1f8e8] via-[#eef6e2] to-[#e2efd3] will-change-transform",
+                active ? "z-10" : "pointer-events-none z-0",
               )}
             >
               <div className="absolute inset-0 md:left-[34%]">
@@ -179,10 +209,10 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       </div>
       {count > 1 ? (
         <>
-          <button type="button" onClick={() => go(index - 1)} aria-label="Previous slide" className="absolute left-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
+          <button type="button" onClick={() => go(index - 1, -1)} aria-label="Previous slide" className="absolute left-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
             <ChevronLeft className="size-5" />
           </button>
-          <button type="button" onClick={() => go(index + 1)} aria-label="Next slide" className="absolute right-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
+          <button type="button" onClick={() => go(index + 1, 1)} aria-label="Next slide" className="absolute right-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
             <ChevronRight className="size-5" />
           </button>
           <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/75 py-1.5 pl-2.5 pr-1.5 backdrop-blur">
