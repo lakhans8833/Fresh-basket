@@ -293,7 +293,14 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-28">
-          <OrderSummary quote={quote} delivery={data?.area ? "known" : "unknown"} freeAbove={data?.area?.freeAbove} loading={loading}>
+          <OrderSummary
+            quote={quote}
+            delivery={data?.area ? "known" : "unknown"}
+            freeAbove={data?.area?.freeAbove}
+            freeAboveFallback={data?.commonFreeAbove}
+            localLines={lines.map((l) => ({ quantity: l.quantity, unitPrice: l.priceHint }))}
+            loading={loading}
+          >
             <div className="space-y-4">
               <ul className="max-h-48 space-y-2 overflow-auto pr-1 text-sm" aria-label="Items">
                 {lines.map((l) => (

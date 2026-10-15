@@ -110,7 +110,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
                       {msgEl}
                       <div className="mt-2 flex items-center justify-between gap-3">
                         {stepper}
-                        <span className="font-bold tabular-nums text-ink">{p ? formatINR(p.lineTotal) : "—"}</span>
+                        <span className="font-bold tabular-nums text-ink">{formatINR(p ? p.lineTotal : unit * l.quantity)}</span>
                       </div>
                     </div>
                   </div>
@@ -128,7 +128,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
                     </div>
                     <p className="text-ink"><span className="font-semibold tabular-nums">{formatINR(unit)}</span> <span className="text-xs text-muted">/{l.variantLabel}</span></p>
                     <div className="flex justify-center">{stepper}</div>
-                    <span className="text-right font-bold tabular-nums text-ink">{p ? formatINR(p.lineTotal) : "—"}</span>
+                    <span className="text-right font-bold tabular-nums text-ink">{formatINR(p ? p.lineTotal : unit * l.quantity)}</span>
                     <div className="flex justify-center">{removeBtn}</div>
                   </div>
                 </li>
@@ -147,6 +147,8 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
             quote={quote}
             delivery={location && data?.area ? "known" : "unknown"}
             freeAbove={data?.area?.freeAbove}
+            freeAboveFallback={data?.commonFreeAbove}
+            localLines={lines.map((l) => ({ quantity: l.quantity, unitPrice: priced.get(l.variantId)?.unitPrice ?? l.priceHint }))}
             loading={loading}
           >
             <div className="space-y-4">

@@ -12,6 +12,7 @@ import { processPaymentEvent, normaliseRazorpayEvent } from "@/lib/payments/proc
 import { verifyCheckoutSignature, verifyWebhookSignature } from "@/lib/payments/razorpay";
 import { adminGetOrder, adminListOrders, adminStats, adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
 import { listAddresses, saveAddress } from "@/lib/account";
+import { commonFreeAbove } from "@/lib/delivery";
 import { buildQuote } from "@/lib/quote";
 import { adminConfirmEmail, adminListUsers, adminResendConfirmation, adminSetRole } from "@/lib/admin/users";
 import { payToken } from "@/lib/tokens";
@@ -523,5 +524,21 @@ describe("review fixes", () => {
     const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["onion:1 kg"]!, quantity: 7 }] }));
     expect(await getMyOrder(ADMIN, order.id)).toBeNull();
     expect(await getMyOrder(CUSTOMER, order.id)).not.toBeNull();
+  });
+});
+
+describe("free delivery before a PIN code is chosen", () => {
+  it("uses the free-delivery amount only when every active area shares it", async () => {
+    const before = await query<{ pincode: string; free_above: number | null }>("select pincode, free_above from delivery_areas");
+    try {
+      await query("update delivery_areas set free_above = 49900");
+      expect(await commonFreeAbove()).toBe(49900);
+      await query("update delivery_areas set free_above = 59900 where pincode = '560038'");
+      expect(await commonFreeAbove()).toBeNull();
+      await query("update delivery_areas set free_above = null");
+      expect(await commonFreeAbove()).toBeNull();
+    } finally {
+      for (const r of before) await query("update delivery_areas set free_above = $2 where pincode = $1", [r.pincode, r.free_above]);
+    }
   });
 });
