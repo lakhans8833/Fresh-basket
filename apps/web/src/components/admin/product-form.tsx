@@ -160,6 +160,9 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     return String(Math.max(...vs.map((v) => v.stock * (packGrams(v.label) ?? 0))) / 1000);
   });
   const byWeight = variants.length > 0 && variants.every((v) => packGrams(v.label) !== null);
+  // Only send the total when it was edited here (or the stock mode changes), so saving a description
+  // never overwrites sales that happened since this page was opened.
+  const [stockTouched, setStockTouched] = useState(false);
   const stockKgNum = /^\d+(\.\d{1,3})?$/.test(stockKg.trim()) ? Number(stockKg.trim()) : null;
   const totalGramsNow = byWeight && stockKgNum !== null ? Math.round(stockKgNum * 1000) : null;
   const [uploading, setUploading] = useState(0);
@@ -264,9 +267,11 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       storageTips: storageTips.trim() || null, shelfLife: shelfLife.trim() || null, origin: origin.trim() || null, nutrition: nutrition.trim() || null,
       images: images.map((i) => ({ url: i.url, alt: i.alt.trim() || null })),
       variants: vs,
-      stockGrams: byWeight ? totalGramsNow : null,
+      stockGrams: byWeight
+        ? (stockTouched || initial?.stockGrams == null ? totalGramsNow : undefined)
+        : (initial?.stockGrams != null ? null : undefined),
     };
-    if (byWeight && totalGramsNow === null) errs.stockGrams = "Enter kilos like 25 or 2.5";
+    if (byWeight && (stockTouched || initial?.stockGrams == null) && totalGramsNow === null) errs.stockGrams = "Enter kilos like 25 or 2.5";
     const r = adminProductSchema.safeParse(raw);
     if (!r.success) {
       for (const iss of r.error.issues) {
@@ -502,7 +507,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                       id="p-stock-kg"
                       inputMode="decimal"
                       value={stockKg}
-                      onChange={(ev) => { setStockKg(ev.target.value.replace(/[^\d.]/g, "")); touch(); }}
+                      onChange={(ev) => { setStockKg(ev.target.value.replace(/[^\d.]/g, "")); setStockTouched(true); touch(); }}
                       placeholder="25"
                       invalid={!!err("stockGrams")}
                       className="tabular-nums"

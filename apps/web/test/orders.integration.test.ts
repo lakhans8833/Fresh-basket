@@ -183,6 +183,31 @@ describe("inventory", () => {
     await query("update products set stock_grams = 80000 where slug = 'potato'"); // restock for later tests
   });
 
+  it("returns the grams that were sold even if the pack is renamed later", async () => {
+    const grams = async () => Number((await queryOne<{ g: string }>("select stock_grams as g from products where slug = 'cucumber'"))!.g);
+    await query("update products set stock_grams = 10000 where slug = 'cucumber'");
+    const id = v["cucumber:500 g"]!;
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: id, quantity: 4 }] })); // 2 kg
+    expect(await grams()).toBe(8000);
+    await query("update product_variants set label = '1 kg' where id = $1", [id]); // admin renames the pack
+    await customerCancel(CUSTOMER, order.id);
+    expect(await grams()).toBe(10000); // not 12000
+    await query("update product_variants set label = '500 g' where id = $1", [id]);
+  });
+
+  it("doesn't deadlock when cancellations and checkouts touch the same products", async () => {
+    await query("update products set stock_grams = 200000 where slug in ('tomato', 'onion')");
+    // Variant ids sort differently from product ids for many pairs; run both directions repeatedly.
+    const items = [{ variantId: v["tomato:500 g"]!, quantity: 1 }, { variantId: v["onion:1 kg"]!, quantity: 2 }];
+    const placed = await Promise.all(Array.from({ length: 6 }, (_, i) => placeOrder(CUSTOMER, input({ items: items.map((x) => ({ ...x, quantity: x.quantity + i })) }))));
+    const results = await Promise.allSettled([
+      ...placed.map((p) => customerCancel(CUSTOMER, p.order.id)),
+      ...Array.from({ length: 6 }, (_, i) => placeOrder(CUSTOMER, input({ items: [...items].reverse().map((x) => ({ ...x, quantity: x.quantity + 10 + i })) }))),
+    ]);
+    const failed = results.filter((r) => r.status === "rejected").map((r) => String((r as PromiseRejectedResult).reason?.code ?? (r as PromiseRejectedResult).reason));
+    expect(failed).toEqual([]);
+  });
+
   it("restocks when a customer cancels before packing, and blocks cancel after", async () => {
     const id = v["carrot:1 kg"]!;
     const before = await stock(id);

@@ -1,5 +1,6 @@
 import "server-only";
 import { pool, tx } from "../db";
+import { CACHE_TAGS, invalidate } from "../cache";
 
 export type PaymentProvider = "razorpay" | "mock";
 
@@ -31,6 +32,16 @@ export type ProcessResult =
  * (duplicates return "duplicate"), then updates the order inside the same transaction.
  */
 export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<ProcessResult> {
+  return afterPayment(await processPaymentEventTx(ev));
+}
+
+/** A late payment re-takes stock: drop the cached catalogue so the shop shows it right away. */
+function afterPayment(result: ProcessResult): ProcessResult {
+  if (result === "paid_late") invalidate(CACHE_TAGS.catalog);
+  return result;
+}
+
+async function processPaymentEventTx(ev: NormalisedPaymentEvent): Promise<ProcessResult> {
   return tx(async (c) => {
     const ins = await c.query(
       `insert into payment_events (provider, event_id, event_type, payload) values ($1,$2,$3,$4)
@@ -76,13 +87,14 @@ export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<P
 export async function markPaidFromVerifiedPayment(args: {
   orderId: string; provider: PaymentProvider; providerOrderId: string; paymentId: string; amount: number;
 }): Promise<ProcessResult> {
-  return tx(async (c) => {
+  const result = await tx(async (c) => {
     const { rows } = await c.query<{ result: ProcessResult }>(
       "select mark_order_paid($1, $2, $3, $4, $5, 'client_verify') as result",
       [args.orderId, args.provider, args.providerOrderId, args.paymentId, args.amount],
     );
     return rows[0]!.result;
   });
+  return afterPayment(result);
 }
 
 /** Normalise a Razorpay webhook body. */

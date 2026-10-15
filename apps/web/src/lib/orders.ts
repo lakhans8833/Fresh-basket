@@ -6,6 +6,7 @@ import {
   type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput,
 } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
+import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
 import { conflict, badRequest, notFound, HttpError } from "./http";
 import { buildQuote, quoteMessages } from "./quote";
@@ -109,7 +110,10 @@ export class OrderRejected extends HttpError {
 
 export async function releaseExpired(): Promise<number> {
   const rows = await query<{ n: number }>("select release_expired_reservations() as n");
-  return rows[0]?.n ?? 0;
+  const n = rows[0]?.n ?? 0;
+  // Stock came back: drop the cached catalogue (this also runs from GET requests, e.g. Admin → Orders).
+  if (n > 0) invalidate(CACHE_TAGS.catalog);
+  return n;
 }
 
 /**

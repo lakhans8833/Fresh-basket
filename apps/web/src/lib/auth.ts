@@ -60,13 +60,17 @@ async function resolveUserId(): Promise<{ id: string; email: string | null } | n
   }
 
   if (env.auth.mode === "supabase") {
-    if (bearer) return verifyAccessToken(bearer);
+    // Admin pages and APIs ask Supabase Auth itself, so a signed-out-everywhere, banned or deleted
+    // staff account stops working at once (not only when its access token expires).
+    const path = h.get(PATH_HEADER) ?? "";
+    const strict = /^\/(api\/)?admin(\/|$|\?)/.test(path);
+    if (bearer) return verifyAccessToken(bearer, strict);
     // Cookie sessions: the proxy (src/proxy.ts) has already refreshed the session if needed and
     // passes the current access token in an internal header. Only verify it here — never refresh
     // in route handlers / server components, or parallel requests would reuse one refresh token
     // and Supabase would revoke the whole session.
     const token = h.get(ACCESS_HEADER);
-    return token ? verifyAccessToken(token) : null;
+    return token ? verifyAccessToken(token, strict) : null;
   }
   return null;
 }
@@ -77,8 +81,12 @@ let verifier: ReturnType<typeof createClient> | null = null;
  * public signing keys (cached), falling back to Supabase Auth for legacy shared-secret projects.
  * Never refreshes anything (see src/proxy.ts).
  */
-async function verifyAccessToken(token: string): Promise<{ id: string; email: string | null } | null> {
+async function verifyAccessToken(token: string, strict = false): Promise<{ id: string; email: string | null } | null> {
   verifier ??= createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (strict) {
+    const { data } = await verifier.auth.getUser(token);
+    return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
+  }
   const { data } = await verifier.auth.getClaims(token);
   const c = data?.claims;
   return c?.sub ? { id: c.sub, email: typeof c.email === "string" && c.email ? c.email : null } : null;
