@@ -1549,6 +1549,16 @@ end $$;
 
 revoke all on function public.mark_order_paid(uuid, text, text, text, integer, text) from public, anon, authenticated;
 
+-- ===== supabase/migrations/20261016000009_hero_banners.sql =====
+-- Banners can now also be slides in the home page hero slider (Admin → Banners → "Where to show").
+-- Existing banners stay in the offer strip. Additive only.
+alter table public.promo_banners add column if not exists placement text not null default 'strip';
+alter table public.promo_banners drop constraint if exists promo_banners_placement_check;
+alter table public.promo_banners add constraint promo_banners_placement_check check (placement in ('strip', 'hero'));
+-- Hero-only extras: the small badge above the title and the button text.
+alter table public.promo_banners add column if not exists badge text check (badge is null or char_length(badge) <= 40);
+alter table public.promo_banners add column if not exists cta_label text check (cta_label is null or char_length(cta_label) <= 30);
+create index if not exists promo_banners_placement_idx on public.promo_banners (placement, sort_order, created_at);
 
 -- ===== supabase/migrations/20261017000001_whatsapp_bookings.sql =====
 -- WhatsApp bookings: an order request saved on the server BEFORE WhatsApp opens.
@@ -1640,3 +1650,4 @@ revoke all on public.whatsapp_bookings, public.whatsapp_booking_items, public.wh
 -- UPI QR payments: the shop's UPI ID and payee name (Admin → Settings).
 alter table public.store_settings add column if not exists upi_id text;
 alter table public.store_settings add column if not exists upi_payee_name text;
+

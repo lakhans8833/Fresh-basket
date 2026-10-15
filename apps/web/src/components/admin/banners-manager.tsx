@@ -98,6 +98,7 @@ function Inner() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted">
                   {b.live ? <Badge tone="green">Showing now</Badge> : b.active ? <Badge tone="amber">Scheduled / ended</Badge> : <Badge tone="red">Hidden</Badge>}
+                  <Badge tone={b.placement === "hero" ? "dark" : "neutral"}>{b.placement === "hero" ? "Hero slider" : "Offer strip"}</Badge>
                   <span>→ {b.linkUrl}</span>
                   <span>· sort {b.sortOrder}</span>
                   {b.startsAt ? <span>· from {fmt(b.startsAt)}</span> : null}
@@ -143,6 +144,9 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
   const [theme, setTheme] = useState<PromoBanner["theme"]>(initial?.theme ?? "green");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null);
   const [active, setActive] = useState(initial?.active ?? true);
+  const [placement, setPlacement] = useState<"strip" | "hero">(initial?.placement ?? "strip");
+  const [badge, setBadge] = useState(initial?.badge ?? "");
+  const [ctaLabel, setCtaLabel] = useState(initial?.ctaLabel ?? "");
   const [sortOrder, setSortOrder] = useState(String(initial?.sortOrder ?? nextSort));
   const [startsAt, setStartsAt] = useState(toLocalInput(initial?.startsAt ?? null));
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? null));
@@ -171,6 +175,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
     setFormError(null);
     const raw = {
       title, subtitle: subtitle.trim() || null, imageUrl, linkUrl: linkUrl.trim(), theme, active,
+      placement, badge: placement === "hero" ? badge.trim() || null : null, ctaLabel: placement === "hero" ? ctaLabel.trim() || null : null,
       sortOrder: /^\d+$/.test(sortOrder) ? Number(sortOrder) : -1,
       startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt),
     };
@@ -204,6 +209,28 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
         <p className="mb-1.5 text-sm font-medium text-ink-soft">Preview</p>
         <div className="max-w-sm"><PromoCard banner={{ title, subtitle: subtitle || null, imageUrl, linkUrl, theme }} asPreview /></div>
       </div>
+      <fieldset>
+        <legend className="mb-1.5 text-sm font-medium text-ink-soft">Where to show</legend>
+        <div className="flex flex-wrap gap-2">
+          {([["strip", "Offer strip (cards under the slider)"], ["hero", "Home hero slider (big slide)"]] as const).map(([v, label]) => (
+            <label key={v} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", placement === v ? "border-forest-800 bg-lime-50" : "border-line")}>
+              <input type="radio" name="placement" value={v} checked={placement === v} onChange={() => setPlacement(v)} className="sr-only" />
+              {label}
+            </label>
+          ))}
+        </div>
+        {placement === "hero" ? <p className="mt-1.5 text-xs text-muted">Hero slides appear after the first slide and auto-play every 5 seconds. Use a wide photo (landscape).</p> : null}
+      </fieldset>
+      {placement === "hero" ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Badge (optional)" htmlFor="b-badge" hint="Small label above the title, e.g. “This weekend”">
+            <Input id="b-badge" value={badge} maxLength={40} onChange={(e) => setBadge(e.target.value)} />
+          </Field>
+          <Field label="Button text (optional)" htmlFor="b-cta" hint="Default: “Shop now”">
+            <Input id="b-cta" value={ctaLabel} maxLength={30} onChange={(e) => setCtaLabel(e.target.value)} />
+          </Field>
+        </div>
+      ) : null}
       <Field label="Title" htmlFor="b-title" error={errors.title} hint="Short and clear, e.g. “Fresh fruits — up to 20% off”. Only promise offers you have set up.">
         <Input id="b-title" value={title} maxLength={60} invalid={!!errors.title} autoFocus onChange={(e) => setTitle(e.target.value)} />
       </Field>
