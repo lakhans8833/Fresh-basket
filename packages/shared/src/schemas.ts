@@ -70,7 +70,7 @@ export const newsletterSchema = z.object({ email: z.email().max(160) });
 export const contactSchema = z.object({
   name: trimmed(80).min(2, "Enter your name"),
   email: z.email("Enter a valid email").max(160),
-  phone: z.string().optional().nullable(),
+  phone: z.string().trim().max(20, "Phone number is too long").optional().nullable(),
   orderNumber: trimmed(40).optional().nullable(),
   message: trimmed(2000).min(10, "Tell us a little more (10+ characters)"),
 });
@@ -157,7 +157,7 @@ export type AdminProductInput = z.infer<typeof adminProductSchema>;
 export const adminInventoryPatchSchema = z
   .object({
     updates: z
-      .array(z.object({ variantId: uuid, price: z.number().int().min(0).optional(), stock: z.number().int().min(0).optional(), active: z.boolean().optional() }))
+      .array(z.object({ variantId: uuid, price: z.number().int().min(0).max(10_000_000).optional(), stock: z.number().int().min(0).max(1_000_000).optional(), active: z.boolean().optional() }))
       .max(200)
       .default([]),
     /** Stock-by-weight products: new total in grams (each weight pack's stock is derived from it). */
@@ -183,8 +183,8 @@ export const adminDeliveryAreaSchema = z.object({
 export const adminSlotSchema = z
   .object({
     label: trimmed(40).min(2),
-    startTime: z.string().regex(/^\d{2}:\d{2}$/),
-    endTime: z.string().regex(/^\d{2}:\d{2}$/),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 09:30"),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 18:00"),
     cutoffMinutes: z.number().int().min(0).max(24 * 60),
     capacity: z.number().int().min(1).max(10_000),
     sortOrder: z.number().int().min(0).max(99).default(0),

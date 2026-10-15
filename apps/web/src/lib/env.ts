@@ -64,7 +64,8 @@ export const env = {
   payments: {
     online: (razorpayKeyId && razorpayKeySecret && razorpayWebhookSecret
       ? "razorpay"
-      : devFeaturesAllowed && read("PAYMENTS_MOCK") !== "false"
+      : // Test payments never on a Vercel production deploy, even with ALLOW_DEV_MODE (they'd mark orders paid for free).
+        devFeaturesAllowed && read("PAYMENTS_MOCK") !== "false" && read("VERCEL_ENV") !== "production"
         ? "mock"
         : null) as "razorpay" | "mock" | null,
     razorpayKeyId,

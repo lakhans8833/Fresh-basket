@@ -26,8 +26,13 @@ export async function preparePayment(order: Order & { razorpayOrderId?: string |
     if (!rzpId) {
       try {
         const r = await createRazorpayOrder({ amount: order.total, receipt: order.orderNumber, orderId: order.id });
-        rzpId = r.id;
-        await query("update orders set razorpay_order_id = $2 where id = $1 and razorpay_order_id is null", [order.id, rzpId]);
+        const saved = await query<{ id: string }>(
+          "update orders set razorpay_order_id = $2 where id = $1 and razorpay_order_id is null returning razorpay_order_id as id",
+          [order.id, r.id],
+        );
+        // Two requests raced (retry / pay page): always hand out the ONE gateway order we saved, so the
+        // customer can't pay against an order id we don't know about.
+        rzpId = saved[0]?.id ?? (await query<{ id: string | null }>("select razorpay_order_id as id from orders where id = $1", [order.id]))[0]?.id ?? r.id;
       } catch (e) {
         console.error("[razorpay] create order failed", e);
         await cancelOrder(order.id, "system", "Could not start online payment");

@@ -51,6 +51,10 @@ export function route<C = unknown>(fn: Handler<C>): Handler<C> {
       if (pgCode === "42501") {
         return NextResponse.json({ error: "You don't have access to this.", code: "FORBIDDEN" }, { status: 403 });
       }
+      if (pgCode === "22P02") {
+        // Malformed id in the URL (e.g. not a UUID): treat as "not found", not a server error.
+        return NextResponse.json({ error: "Not found.", code: "NOT_FOUND" }, { status: 404 });
+      }
       if (pgCode === "23505") {
         return NextResponse.json({ error: "That already exists.", code: "DUPLICATE" }, { status: 409 });
       }

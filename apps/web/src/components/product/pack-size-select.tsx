@@ -38,7 +38,7 @@ export function PackSizeSelect({
   if (!selected) return null;
 
   if (variants.length <= 1) {
-    if (compact) return <p className={cn("relative z-10 text-xs text-muted", className)}>{selected.label}</p>;
+    if (compact) return <p className={cn("relative z-10 inline-flex h-7 items-center rounded-full bg-sage-50 px-2.5 text-xs text-ink-soft", className)}>{selected.label}</p>;
     return (
       <p className={cn("relative z-10 flex h-9 items-center rounded-lg bg-sage-50 px-3 text-sm text-ink-soft", className)}>
         {selected.label}

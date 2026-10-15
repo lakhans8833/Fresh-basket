@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { LoginForm } from "@/components/account/login-form";
+import { safeNextPath } from "@/lib/safe-next";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 function safeNext(n: string | undefined) {
-  return n && n.startsWith("/") && !n.startsWith("//") ? n : "/account";
+  return safeNextPath(n);
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {

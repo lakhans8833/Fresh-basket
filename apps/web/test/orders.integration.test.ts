@@ -503,3 +503,25 @@ describe("product reviews", () => {
     expect((await reviewEligibility(CUSTOMER, product.id)).mine).toMatchObject({ rating: 2, status: "hidden" });
   });
 });
+
+describe("review fixes", () => {
+  it("a late payment never revives an order the customer cancelled", async () => {
+    const order = (await placeOrder(CUSTOMER, input({ paymentMethod: "mock", items: [{ variantId: v["onion:1 kg"]!, quantity: 6 }] }))).order;
+    await customerCancel(CUSTOMER, order.id);
+    const r = await processPaymentEvent({
+      provider: "mock", eventId: `evt_cancelled_${order.id}`, type: "payment.captured", rawType: "payment.captured",
+      providerOrderId: null, paymentId: `pay_${order.id.slice(0, 8)}`, amount: order.total, orderId: order.id, payload: {},
+    });
+    expect(r).toBe("refund_required");
+    expect(await getOrderById(order.id)).toMatchObject({ status: "cancelled", paymentStatus: "refund_pending" });
+  });
+
+  it("staff see only their own addresses and orders through the customer pages", async () => {
+    await saveAddress(CUSTOMER, null, { ...address, label: "Customer home", isDefault: true });
+    const mine = await listAddresses(ADMIN);
+    expect(mine.every((a) => a.label !== "Customer home")).toBe(true);
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["onion:1 kg"]!, quantity: 7 }] }));
+    expect(await getMyOrder(ADMIN, order.id)).toBeNull();
+    expect(await getMyOrder(CUSTOMER, order.id)).not.toBeNull();
+  });
+});
