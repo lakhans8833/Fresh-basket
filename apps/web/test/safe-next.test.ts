@@ -8,7 +8,7 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/admin/orders?status=late", "/admin")).toBe("/admin/orders?status=late");
   });
   it("blocks redirects to other sites", () => {
-    for (const bad of ["//evil.com", "/\\evil.com", "\\\\evil.com", "https://evil.com", "javascript:alert(1)", "/\tevil", "", null, undefined]) {
+    for (const bad of ["//evil.com", "/.//evil.com", "/x/..//evil.com", "/%2e//evil.com", "/\\evil.com", "\\\\evil.com", "https://evil.com", "javascript:alert(1)", "/\tevil", "", null, undefined]) {
       expect(safeNextPath(bad as string)).toBe("/account");
     }
   });

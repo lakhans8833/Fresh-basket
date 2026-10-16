@@ -133,6 +133,9 @@ export const adminVariantSchema = z.object({
   price: z.number().int().min(0).max(10_000_000),
   mrp: z.number().int().min(0).max(10_000_000).optional().nullable(),
   stock: z.number().int().min(0).max(1_000_000),
+  /** Stock shown when the form was opened. The server applies only the change (stock - stockLoaded),
+   *  so orders placed while the form was open aren't undone. Leave out to set stock as given. */
+  stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
   sortOrder: z.number().int().min(0).max(99).default(0),
   active: z.boolean().default(true),
 });

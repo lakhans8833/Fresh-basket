@@ -102,8 +102,12 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
     for (const [i, v] of d.variants.entries()) {
       if (v.id) {
         const r = await c.query(
-          "update product_variants set label=$1, price=$2, mrp=$3, stock=$4, sort_order=$5, active=$6 where id=$7 and product_id=$8",
-          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId],
+          // Stock: apply only what the admin changed, on top of today's stock (sales meanwhile stay counted).
+          `update product_variants set label=$1, price=$2, mrp=$3,
+                  stock = case when $9::int is null then $4 else greatest(0, stock + ($4 - $9::int)) end,
+                  sort_order=$5, active=$6
+            where id=$7 and product_id=$8`,
+          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, v.stockLoaded ?? null],
         );
         if (r.rowCount === 1) {
           keep.push(v.id);

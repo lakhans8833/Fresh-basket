@@ -38,7 +38,7 @@ interface LoadedProduct {
 }
 interface CategoryOpt { id: string; name: string; active: boolean }
 
-type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; active: boolean; hasOrders: boolean };
+type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean };
 type ImageRow = { key: string; url: string; alt: string };
 
 let keySeq = 0;
@@ -149,7 +149,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [images, setImages] = useState<ImageRow[]>(() => (initial?.images ?? []).map((i) => ({ key: k(), url: i.url, alt: i.alt ?? "" })));
   const [variants, setVariants] = useState<VariantRow[]>(() =>
     initial?.variants.length
-      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), active: v.active, hasOrders: v.hasOrders }))
+      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders }))
       : [emptyVariant()],
   );
   // Stock by weight: one total in kg shared by every weight pack (used when all options are weights).
@@ -260,7 +260,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       if (mrp !== null && Number.isNaN(mrp)) errs[`variants.${i}.mrp`] = "Use a rupee amount";
       else if (mrp !== null && price !== null && !Number.isNaN(price) && mrp < price) errs[`variants.${i}.mrp`] = "MRP should be at least the price";
       if (!byWeight && (stock === null || Number.isNaN(stock))) errs[`variants.${i}.stock`] = "Whole number";
-      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, sortOrder: i, active: v.active };
+      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active };
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,

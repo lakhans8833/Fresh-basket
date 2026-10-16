@@ -1,6 +1,6 @@
 import "server-only";
 import { query, queryOne, tx } from "./db";
-import { forbidden, notFound } from "./http";
+import { conflict, forbidden, notFound } from "./http";
 
 export type ReviewStatus = "pending" | "approved" | "hidden";
 
@@ -139,11 +139,20 @@ export async function adminListReviews(status?: string | null): Promise<AdminRev
   }));
 }
 
-export async function adminSetReviewStatus(id: string, status: ReviewStatus) {
+export async function adminSetReviewStatus(id: string, status: ReviewStatus, seenUpdatedAt?: string) {
   return tx(async (c) => {
-    const { rows } = await c.query<{ id: string }>("update product_reviews set status = $2, updated_at = now() where id = $1 returning id", [id, status]);
+    const cur = await c.query<{ updated_at: Date }>("select updated_at from product_reviews where id = $1 for update", [id]);
+    if (!cur.rows[0]) throw notFound("Review not found.");
+    // Compare at millisecond precision (the admin page received an ISO string).
+    if (seenUpdatedAt && cur.rows[0].updated_at.getTime() !== new Date(seenUpdatedAt).getTime()) {
+      throw conflict("The customer changed this review just now. Please read the new text and try again.");
+    }
+    const { rows } = await c.query<{ id: string; updated_at: Date }>(
+      "update product_reviews set status = $2, updated_at = now() where id = $1 returning id, updated_at",
+      [id, status],
+    );
     if (!rows[0]) throw notFound("Review not found.");
-    return { id, status };
+    return { id, status, updatedAt: iso(rows[0].updated_at) };
   });
 }
 

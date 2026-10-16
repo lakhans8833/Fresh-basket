@@ -139,6 +139,10 @@ export const GUEST_PAYMENT_HOLD_MINUTES = 3 * 60;
 const GUEST_OPEN_LIMIT = 2;
 /** WhatsApp cash orders the store hasn't confirmed within this time are cancelled and their stock released. */
 export const CONFIRM_HOLD_MINUTES = 24 * 60;
+/** Guests (no account, unverified mobile) get a shorter wait, so fake orders can't hold stock for long. */
+export const GUEST_CONFIRM_HOLD_MINUTES = 12 * 60;
+/** Most unconfirmed guest orders allowed shop-wide at once (stops a flood of fake orders with random numbers). */
+const GUEST_UNCONFIRMED_SHOP_LIMIT = 40;
 
 function holdMinutesFor(method: PaymentMethod): number | null {
   if (method === "cod") return null;
@@ -188,7 +192,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   const prepaid = PREPAID_METHODS.includes(o.paymentMethod);
   const firstStatus = prepaid ? "pending_payment" : o.needsConfirmation ? "pending_confirmation" : "placed";
   const hold = o.needsConfirmation && !prepaid
-    ? CONFIRM_HOLD_MINUTES
+    ? (o.userId ? CONFIRM_HOLD_MINUTES : GUEST_CONFIRM_HOLD_MINUTES)
     : o.holdMinutes !== undefined && o.paymentMethod !== "cod" ? o.holdMinutes : holdMinutesFor(o.paymentMethod);
   const { rows: orows } = await c.query<{ id: string }>(
     `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
@@ -417,6 +421,12 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
         if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_LIMIT) {
           throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
         }
+        const shop = await c.query<{ n: number }>(
+          "select count(*)::int as n from orders where user_id is null and status = 'pending_confirmation'",
+        );
+        if ((shop.rows[0]?.n ?? 0) >= GUEST_UNCONFIRMED_SHOP_LIMIT) {
+          throw new HttpError(503, "We're getting a lot of orders right now. Please sign in to order, or try again in a little while.", "BUSY");
+        }
       }
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
@@ -464,7 +474,13 @@ export async function customerCancel(userId: string, orderId: string) {
   const order = await getMyOrder(userId, orderId);
   if (!order) throw notFound("Order not found.");
   if (!canCustomerCancel(order.status)) throw conflict("This order can no longer be cancelled. Please contact support.");
-  await cancelOrder(orderId, "customer", "Cancelled by customer");
+  // Re-check under a row lock: staff may have packed it a moment ago.
+  await tx(async (c) => {
+    const { rows } = await c.query<{ status: OrderStatus }>("select status from orders where id = $1 for update", [orderId]);
+    if (!rows[0] || !canCustomerCancel(rows[0].status)) throw conflict("This order was just packed and can no longer be cancelled. Please contact support.");
+    await c.query("select cancel_order($1, $2, $3)", [orderId, "customer", "Cancelled by customer"]);
+  });
+  cancelPaymentLinkFor(orderId);
   return getMyOrder(userId, orderId);
 }
 

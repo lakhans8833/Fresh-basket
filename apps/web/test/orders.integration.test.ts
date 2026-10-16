@@ -502,11 +502,42 @@ describe("product reviews", () => {
     expect(shown.reviews[0]).toMatchObject({ rating: 4, comment: "Fresh and sweet", author: "Test" });
 
     // Editing sends it back for approval; hiding removes it from the page.
+    const seen = (await adminListReviews("approved")).find((x) => x.id === r.id)!.updatedAt;
+    await new Promise((res) => setTimeout(res, 5));
     await submitReview(CUSTOMER, product.id, 2, null);
+    // The admin's page still shows the old text: publishing that version is refused.
+    await expect(adminSetReviewStatus(r.id, "approved", seen)).rejects.toMatchObject({ status: 409 });
     expect((await getProductReviews(product.id)).count).toBe(0);
     await adminSetReviewStatus(r.id, "hidden");
     expect((await getProductReviews(product.id)).count).toBe(0);
     expect((await reviewEligibility(CUSTOMER, product.id)).mine).toMatchObject({ rating: 2, status: "hidden" });
+  });
+});
+
+describe("admin product save keeps sales made while the form was open", () => {
+  it("applies only the stock change the admin made", async () => {
+    const { adminGetProduct, adminSaveProduct } = await import("@/lib/admin/catalog");
+    const { adminProductSchema } = await import("@freshbasket/shared");
+    // A product sold per pack ("1 bunch"): stock is kept per size, not derived from a weight total.
+    const pid = (await queryOne<{ id: string }>("select p.id from products p where exists (select 1 from product_variants v where v.product_id = p.id and v.active) order by p.name desc limit 1"))!.id;
+    await query("update products set stock_grams = null where id = $1", [pid]);
+    await query("update product_variants set stock = 40 where product_id = $1", [pid]);
+    const row = (await queryOne<{ id: string; product_id: string; stock: number }>(
+      "select v.id, v.product_id, v.stock from product_variants v where v.product_id = $1 and v.active order by v.sort_order limit 1", [pid],
+    ))!;
+    const loaded = (await adminGetProduct(row.product_id)) as unknown as Record<string, unknown> & { variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean }[]; images: { url: string; alt: string | null }[] };
+    const body = (stockFor: (v: { id: string; stock: number }) => number) => adminProductSchema.parse({
+      ...loaded,
+      images: loaded.images.map((i) => ({ url: i.url, alt: i.alt ?? undefined })),
+      variants: loaded.variants.map((v, i) => ({ id: v.id, label: v.label, price: v.price, mrp: v.mrp, stock: stockFor(v), stockLoaded: v.stock, sortOrder: i, active: v.active })),
+    });
+    // 3 sold while the form is open; the admin only fixes the price → stock stays reduced.
+    await query("update product_variants set stock = stock - 3 where id = $1", [row.id]);
+    await adminSaveProduct(row.product_id, body((v) => v.stock));
+    expect((await queryOne<{ stock: number }>("select stock from product_variants where id = $1", [row.id]))!.stock).toBe(row.stock - 3);
+    // The admin adds 10 on the (stale) form → today's stock + 10.
+    await adminSaveProduct(row.product_id, body((v) => (v.id === row.id ? v.stock + 10 : v.stock)));
+    expect((await queryOne<{ stock: number }>("select stock from product_variants where id = $1", [row.id]))!.stock).toBe(row.stock - 3 + 10);
   });
 });
 
@@ -611,6 +642,7 @@ describe("WhatsApp orders", () => {
       expect(o.status).toBe("placed");
       expect(o.deliveryDate).toBe(istDateString(new Date()));
       expect(o.events.at(-1)!.note).toMatch(/new delivery time/);
+      expect(o.slotLabel).toBe("Delivery time confirmed on WhatsApp");
     } finally {
       await query("update store_settings set upi_id = null");
     }
