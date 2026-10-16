@@ -8,7 +8,7 @@ import {
   buildWhatsAppUrl, formatINR, formatSlotTime, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
   type QuoteIssue, type SlotOption, type WhatsAppCustomer, type WhatsAppCustomerInput,
 } from "@freshbasket/shared";
-import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
+import { api, ApiError, isDefiniteRejection, newIdempotencyKey } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
 import { UpiPayPanel, type UpiInfo } from "../account/upi-pay-panel";
 import { useCart } from "./cart-context";
@@ -226,7 +226,7 @@ export function WhatsAppOrderView({
       // The server definitely rejected it (4xx, e.g. slot full, order cancelled): the next attempt is a new
       // order with a new key. Offline (status 0), rate limit or a server error (5xx) keeps the key, because
       // the order may already be saved — a retry then returns that same order instead of a second one.
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429) idemKey.current = newIdempotencyKey();
+      if (isDefiniteRejection(err)) idemKey.current = newIdempotencyKey();
       const slotFull = Boolean((err.details as { messages?: Record<string, string> } | undefined)?.messages?._slot);
       if (slotFull) {
         // That slot filled up meanwhile: back to the form with fresh slots so another can be picked.

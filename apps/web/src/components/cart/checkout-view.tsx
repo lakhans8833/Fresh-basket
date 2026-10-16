@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, CreditCard, FlaskConical, Lock, MapPin, Plus, ShoppingBasket, CalendarClock, QrCode } from "lucide-react";
 import { formatINR, formatSlotTime, pincodeStateMessage, stateMatchesPincode, type Address, type PlaceOrderResponse, type SlotOption } from "@freshbasket/shared";
-import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
+import { api, ApiError, isDefiniteRejection, newIdempotencyKey } from "@/lib/client/api";
 import { useCart } from "./cart-context";
 import { useQuote } from "./use-quote";
 import { OrderSummary } from "./order-summary";
@@ -162,6 +162,10 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       }
     } catch (e) {
       const err = e as ApiError;
+      // The basket is kept on every error. A NEW idempotency key is made only when the server definitely
+      // didn't keep this attempt (ORDER_CANCELLED, or a 4xx rejection), so the next tap is a fresh order.
+      // Offline / timeouts / ambiguous 5xx keep the key: a retry then returns the order if it was saved.
+      if (isDefiniteRejection(err)) idemKey.current = newIdempotencyKey();
       const messages = (err.details as { messages?: Record<string, string> } | undefined)?.messages;
       setPlaceError({ message: err.message, messages });
       placingRef.current = false;

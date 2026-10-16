@@ -25,11 +25,7 @@ export const POST = route(async (req) => {
 
   const session = await getSession().catch(() => null);
   const { order, created } = await placeWhatsAppOrder(session?.userId ?? null, input);
-  // A retry that matches an order which has since been cancelled (payment link failed, hold expired)
-  // must not show it as a fresh, working order.
-  if (!created && order.status === "cancelled") {
-    throw new HttpError(409, `Order ${order.orderNumber} was cancelled. Please place the order again.`, "ORDER_CANCELLED");
-  }
+  // (A retry matching an order cancelled meanwhile gets ORDER_CANCELLED from placeWhatsAppOrder.)
   const payLink = await ensurePaymentLink(order);
   const trackUrl = trackUrlFor(order.id);
 

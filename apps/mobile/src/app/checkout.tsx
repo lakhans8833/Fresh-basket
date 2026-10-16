@@ -38,6 +38,9 @@ const PAYMENT_LABEL: Record<PaymentMethod, { title: string; sub: string }> = {
   razorpay: { title: "Pay online (UPI, cards, net banking)", sub: "Secure checkout opens in a browser window" },
   mock: { title: "Test payment — development only, no real money", sub: "Simulates an online payment" },
   cod: { title: "Cash on delivery", sub: "Pay when your order arrives" },
+  // WhatsApp-order methods (not offered at the app checkout; listed so every method has a label).
+  upi: { title: "UPI", sub: "Pay to the store's UPI ID" },
+  razorpay_link: { title: "Payment link", sub: "Secure Razorpay payment link" },
 };
 
 export default function Checkout() {
@@ -223,7 +226,16 @@ export default function Checkout() {
         await openPayPage(res.payment.payUrl);
       }
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
+      // The basket is kept on every error. A new idempotency key only when the server definitely didn't
+      // keep this attempt (ORDER_CANCELLED or a 4xx rejection); offline / 5xx keep it so a retry can't
+      // create a second order.
+      if (e instanceof ApiError && (e.code === "ORDER_CANCELLED" || (e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429))) {
+        idem.current = { sig: payloadSignature, key: randomId() };
+      }
+      if (e instanceof ApiError && e.code === "ORDER_CANCELLED") {
+        setRejections([]);
+        setPlaceError(e.message || "That order was cancelled. Your basket is unchanged — please place the order again.");
+      } else if (e instanceof ApiError && e.status === 409) {
         const lines = rejectionMessages(e.details, nameOf);
         setRejections(lines);
         setPlaceError(e.message || "We couldn't place your order.");

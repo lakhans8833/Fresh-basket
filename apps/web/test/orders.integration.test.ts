@@ -637,11 +637,11 @@ describe("WhatsApp orders", () => {
       await releaseExpired();
       const r = await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, "498765432101");
       expect(r.result).toBe("paid_late");
-      await new Promise((res) => setTimeout(res, 300)); // reschedule runs right after
+      // Rescheduled inside mark_order_paid, in the same transaction (no background step).
       const o = (await getOrderById(order.id))!;
       expect(o.status).toBe("placed");
       expect(o.deliveryDate).toBe(istDateString(new Date()));
-      expect(o.events.at(-1)!.note).toMatch(/new delivery time/);
+      expect(o.events.some((e) => /date had passed.*new delivery time/.test(e.note ?? ""))).toBe(true);
       expect(o.slotLabel).toBe("Delivery time confirmed on WhatsApp");
     } finally {
       await query("update store_settings set upi_id = null");

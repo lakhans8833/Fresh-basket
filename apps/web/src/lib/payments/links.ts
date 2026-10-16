@@ -67,7 +67,7 @@ export async function ensurePaymentLink(order: Order): Promise<string | null> {
     console.error("[razorpay] payment link failed", e);
     // Cancel first while the claim is still held, so no other request starts a link for this order.
     await cancelOrder(order.id, "system", "Could not create the payment link");
-    throw new HttpError(502, "We couldn't create the payment link. Your order was cancelled — please try again or choose another payment method.");
+    throw new HttpError(502, "We couldn't create the payment link. Your order was cancelled — please try again or choose another payment method.", "ORDER_CANCELLED");
   }
   const saved = await queryOne<{ id: string }>(
     `update orders set razorpay_payment_link_id = $2, razorpay_payment_link_url = $3

@@ -259,7 +259,27 @@ const isIdempotencyConflict = (e: unknown) =>
  * - The slot row is locked so slot capacity is enforced.
  * - (user_id, idempotency_key) is unique, so retries return the original order.
  */
+/**
+ * A retry (same idempotency key, or an identical resubmit) that matches an order which has since been
+ * cancelled — e.g. starting the online payment failed — must not look like a successful order (the
+ * client would clear the basket). It gets an explicit ORDER_CANCELLED conflict instead; the client
+ * keeps the basket and makes a new idempotency key for the customer's next deliberate attempt.
+ */
+function rejectIfCancelled(r: { order: Order; created: boolean }) {
+  if (!r.created && r.order.status === "cancelled") {
+    throw new HttpError(409, `Order ${r.order.orderNumber} was cancelled. Your basket is unchanged — please place the order again.`, "ORDER_CANCELLED", {
+      orderId: r.order.id,
+      orderNumber: r.order.orderNumber,
+    });
+  }
+  return r;
+}
+
 export async function placeOrder(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
+  return rejectIfCancelled(await placeOrderOnce(userId, input));
+}
+
+async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
   const settings = await getSettings();
   const methods = supportedPaymentMethods(settings);
   if (!methods.includes(input.paymentMethod)) {
@@ -367,6 +387,10 @@ export async function placeOrder(userId: string, input: PlaceOrderInput): Promis
  * Coupons need an account (per-customer limits can't be checked for guests).
  */
 export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
+  return rejectIfCancelled(await placeWhatsAppOrderOnce(userId, input));
+}
+
+async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
   const settings = await getSettings();
   if (!whatsappPaymentMethods(settings).includes(input.paymentMethod)) {
     throw badRequest("That payment method isn't available right now.");
