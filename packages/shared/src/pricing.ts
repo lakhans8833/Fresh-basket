@@ -74,6 +74,14 @@ export interface Quote {
   ok: boolean;
 }
 
+/**
+ * The one minimum-order rule: the store-wide minimum (Admin → Settings) is a floor for every delivery
+ * area, and an area may set a higher minimum of its own. 0 means "no minimum".
+ */
+export function effectiveMinOrder(areaMinOrder: Paise | null | undefined, storeMinOrder: Paise | null | undefined): Paise {
+  return Math.max(0, areaMinOrder ?? 0, storeMinOrder ?? 0);
+}
+
 export function couponProblem(c: CouponRule, subtotal: Paise, now: Date): string | null {
   if (!c.active) return "This coupon is not active.";
   if (c.startsAt && now < c.startsAt) return "This coupon is not active yet.";

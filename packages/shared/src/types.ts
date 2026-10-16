@@ -116,7 +116,14 @@ export interface DeliveryArea {
   city: string;
   fee: Paise;
   freeAbove: Paise | null;
+  /**
+   * The minimum order customers must reach here. In everything the shop shows (PIN check, cart,
+   * checkout, delivery policy) this is the EFFECTIVE minimum: the higher of the area's own minimum and
+   * the store-wide minimum (Admin → Settings) — the same rule checkout enforces (effectiveMinOrder).
+   */
   minOrder: Paise;
+  /** The area's own minimum as set in Admin → Delivery (before the store-wide minimum is applied). */
+  areaMinOrder?: Paise;
   active: boolean;
 }
 
@@ -189,6 +196,8 @@ export interface QuoteResponse {
   area: DeliveryArea | null;
   /** Free-delivery amount shared by every active delivery area (shown before a PIN code is chosen); null if they differ or none is set. */
   commonFreeAbove?: number | null;
+  /** Effective minimum order: the area's (see DeliveryArea.minOrder) once a PIN is known, else the store-wide one. */
+  minOrder?: number;
 }
 
 export interface PlaceOrderResponse {

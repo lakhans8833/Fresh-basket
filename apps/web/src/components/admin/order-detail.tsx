@@ -30,6 +30,7 @@ interface AdminOrder extends Order {
   late?: boolean;
   /** WhatsApp order-update log (one row per event). */
   notifications?: { event: string; status: string; recipient: string | null; error: string | null; attempts: number; updatedAt: string }[];
+  notificationSetup?: { configured: boolean; allEventsReady: boolean; missing: string[] };
 }
 
 const NOTIFY_LABEL: Record<string, string> = { confirmed: "Order confirmed", packed: "Packed", out_for_delivery: "Out for delivery", delivered: "Delivered" };
@@ -343,6 +344,11 @@ export function AdminOrderDetail({ id }: { id: string }) {
             <Card aria-labelledby="wa-h" className="p-5">
               <h2 id="wa-h" className="flex items-center gap-2 text-lg font-semibold text-forest-900"><MessageCircle className="size-5" aria-hidden /> WhatsApp updates</h2>
               <p className="mt-1 text-sm text-muted">{o.whatsappUpdates ? "Customer opted in to order updates on WhatsApp." : "Customer did not opt in — no WhatsApp updates are sent."}</p>
+              {o.notificationSetup && !o.notificationSetup.allEventsReady ? (
+                <p className="mt-2 rounded-lg bg-sage-50 px-3 py-2 text-xs text-ink-soft">
+                  {o.notificationSetup.configured ? "Some updates are not set up." : "Automatic updates are off on this server."} Missing: {o.notificationSetup.missing.join(", ")}.
+                </p>
+              ) : null}
               {o.notifications?.length ? (
                 <ul className="mt-3 space-y-2 text-sm">
                   {o.notifications.map((n) => (

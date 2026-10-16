@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { MapPin, Clock, Pencil, Plus, Trash2 } from "lucide-react";
-import { adminDeliveryAreaSchema, adminSlotSchema, formatINR, formatSlotTime } from "@freshbasket/shared";
+import { adminDeliveryAreaSchema, adminSlotSchema, effectiveMinOrder, formatINR, formatSlotTime } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
@@ -42,7 +42,20 @@ function issuesToErrors(issues: { path: PropertyKey[]; message: string }[], labe
 
 function AreasSection() {
   const toast = useToast();
-  const { data, error, reload } = useAdminData<{ areas: Area[] }>("/api/admin/delivery/areas");
+  const { data, error, reload } = useAdminData<{
+    areas: Area[];
+    storeMinOrder?: number;
+    serviceArea?: { name: string; state: string };
+    mismatches?: { id: string; pincode: string; city: string; pinState: string }[];
+  }>("/api/admin/delivery/areas");
+  const storeMin = data?.storeMinOrder ?? 0;
+  const mismatch = new Map((data?.mismatches ?? []).map((m) => [m.id, m]));
+  /** What customers must actually order here: the higher of this area's minimum and the store-wide one. */
+  const minText = (a: Area) => {
+    const eff = effectiveMinOrder(a.minOrder, storeMin);
+    if (!eff) return "None";
+    return storeMin > a.minOrder ? `${formatINR(eff)} (store-wide)` : formatINR(eff);
+  };
   const [editing, setEditing] = useState<Area | "new" | null>(null);
   const [deleting, setDeleting] = useState<Area | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,6 +86,19 @@ function AreasSection() {
         actions={<Button size="sm" onClick={() => setEditing("new")}><Plus className="size-4" aria-hidden /> Add area</Button>}
       />
       {listError ? <Notice tone="error" className="m-5">{listError}</Notice> : null}
+      {data ? (
+        <p className="border-b border-line px-5 py-3 text-sm text-ink-soft">
+          <b>Minimum order rule:</b> customers must reach the <b>higher</b> of the area&apos;s own minimum and the store-wide minimum
+          {storeMin ? <> (currently <b>{formatINR(storeMin)}</b>, set in <a href="/admin/settings" className="font-semibold text-leaf-600 underline">Settings</a>)</> : " (none set in Settings)"}. The Min. order column shows what customers see at checkout.
+        </p>
+      ) : null}
+      {mismatch.size ? (
+        <Notice tone="warning" className="m-5" title="Some active areas are outside your service area">
+          Your store serves {data?.serviceArea?.name} ({data?.serviceArea?.state}), but {mismatch.size} active area{mismatch.size === 1 ? " has a PIN code" : "s have PIN codes"} in{" "}
+          {[...new Set([...mismatch.values()].map((m) => m.pinState))].join(" / ")}. Customers there can currently check out. Please confirm which areas you really deliver to —
+          nothing is paused or deleted automatically. (The service area name comes from NEXT_PUBLIC_SERVICE_AREA / NEXT_PUBLIC_DEFAULT_STATE.)
+        </Notice>
+      ) : null}
       {error && !data ? (
         <div className="p-5"><LoadError message={error} onRetry={reload} /></div>
       ) : !data ? (
@@ -102,10 +128,10 @@ function AreasSection() {
                 {areas.map((a) => (
                   <tr key={a.id} className={cn(!a.active && "text-muted")}>
                     <td className="px-5 py-3 font-semibold tabular-nums text-forest-900">{a.pincode}</td>
-                    <td className="px-3 py-3">{a.areaName}<span className="text-muted">, {a.city}</span></td>
+                    <td className="px-3 py-3">{a.areaName}<span className="text-muted">, {a.city}</span>{mismatch.has(a.id) ? <span className="ml-2"><Badge tone="amber">PIN in {mismatch.get(a.id)!.pinState}</Badge></span> : null}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{a.fee ? formatINR(a.fee) : "Free"}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{a.freeAbove !== null ? formatINR(a.freeAbove) : "—"}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{a.minOrder ? formatINR(a.minOrder) : "—"}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{minText(a)}</td>
                     <td className="px-3 py-3">{a.active ? <Badge tone="green">Delivering</Badge> : <Badge>Paused</Badge>}</td>
                     <td className="px-5 py-3">
                       <RowActions name={`${a.areaName} (${a.pincode})`} onEdit={() => setEditing(a)} onDelete={() => { setListError(null); setDeleting(a); }} />
@@ -121,8 +147,9 @@ function AreasSection() {
                 <div className="min-w-0">
                   <p className="font-semibold text-forest-900"><span className="tabular-nums">{a.pincode}</span> · {a.areaName}</p>
                   <p className="text-sm text-muted">
-                    Fee {a.fee ? formatINR(a.fee) : "free"}{a.freeAbove !== null ? `, free above ${formatINR(a.freeAbove)}` : ""} · min {formatINR(a.minOrder)}
+                    Fee {a.fee ? formatINR(a.fee) : "free"}{a.freeAbove !== null ? `, free above ${formatINR(a.freeAbove)}` : ""} · min {minText(a)}
                   </p>
+                  {mismatch.has(a.id) ? <div className="mt-1"><Badge tone="amber">PIN in {mismatch.get(a.id)!.pinState}</Badge></div> : null}
                   <div className="mt-1">{a.active ? <Badge tone="green">Delivering</Badge> : <Badge>Paused</Badge>}</div>
                 </div>
                 <RowActions name={`${a.areaName} (${a.pincode})`} onEdit={() => setEditing(a)} onDelete={() => { setListError(null); setDeleting(a); }} />
@@ -215,7 +242,7 @@ function AreaForm({ initial, onCancel, onSaved }: { initial: Area | null; onCanc
         <Field label="Free delivery above" htmlFor="a-free" error={errors.freeAbove} hint="Optional">
           <MoneyInput id="a-free" value={f.freeAbove} invalid={!!errors.freeAbove} onChange={(e) => set({ freeAbove: e.target.value })} placeholder="—" />
         </Field>
-        <Field label="Minimum order" htmlFor="a-min" error={errors.minOrder}>
+        <Field label="Minimum order" htmlFor="a-min" error={errors.minOrder} hint="0 = only the store-wide minimum (Settings) applies. Customers must reach the higher of the two.">
           <MoneyInput id="a-min" value={f.minOrder} invalid={!!errors.minOrder} onChange={(e) => set({ minOrder: e.target.value })} />
         </Field>
         <div className="flex items-end pb-2.5"><Toggle checked={f.active} onChange={(v) => set({ active: v })} label="Delivering here" /></div>

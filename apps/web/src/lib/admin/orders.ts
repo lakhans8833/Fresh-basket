@@ -3,8 +3,10 @@ import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@fresh
 import { pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
-import { notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
+import { notificationSetup, notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
 import { cancelPaymentLinkFor } from "../payments/link-cancel";
+import { getSettings, supportGaps } from "../settings";
+import { serviceAreaMismatches, toArea } from "../delivery";
 
 /**
  * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
@@ -78,7 +80,7 @@ export async function adminGetOrder(id: string) {
   const customer = await query(`select email, full_name as "fullName", phone from profiles where id = $1`, [o.userId]);
   const late = await query<{ late: boolean }>(`select ${LATE_SQL} as late from orders o left join delivery_slots s on s.id = o.slot_id where o.id = $1`, [id]);
   const notifications = await orderNotifications(id);
-  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false, notifications };
+  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false, notifications, notificationSetup: notificationSetup() };
 }
 
 export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorId: string, note?: string | null) {
@@ -159,5 +161,13 @@ export async function adminStats() {
     ),
     query(`select * from (${LOW_STOCK_SQL}) ls order by "out" desc, "productName", label limit 10`),
   ]);
-  return { ...counts[0], recent: await hydrateOrders(pool, recentRows), lowStock };
+  const [settings, areaRows] = await Promise.all([
+    getSettings(),
+    query<Parameters<typeof toArea>[0]>("select * from delivery_areas where active"),
+  ]);
+  return {
+    ...counts[0], recent: await hydrateOrders(pool, recentRows), lowStock, notificationSetup: notificationSetup(),
+    supportGaps: supportGaps(settings),
+    areaMismatches: serviceAreaMismatches(areaRows.map(toArea)),
+  };
 }

@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import {
-  computeQuote, describeIssue, formatINR,
+  computeQuote, describeIssue, effectiveMinOrder, formatINR,
   type CouponRule, type DeliveryArea, type PricedLineInput, type Quote, type QuoteResponse,
 } from "@freshbasket/shared";
 import { pool } from "./db";
@@ -14,6 +14,8 @@ export interface QuoteContext {
   area: DeliveryArea | null;
   couponId: string | null;
   variants: Map<string, { productId: string; productName: string; label: string; imageUrl: string | null }>;
+  /** Store-wide minimum (applies before a PIN code is known, and as a floor for every area). */
+  storeMinOrder: number;
 }
 
 type VariantRow = {
@@ -133,7 +135,7 @@ export async function buildQuote(
     lines,
     coupon,
     couponCodeRequested: code,
-    delivery: area ? { fee: area.fee, freeAbove: area.freeAbove, minOrder: Math.max(area.minOrder, globalMin) } : null,
+    delivery: area ? { fee: area.fee, freeAbove: area.freeAbove, minOrder: effectiveMinOrder(area.minOrder, globalMin) } : null,
     deliveryRequired: opts.deliveryRequired ?? Boolean(input.pincode),
   });
   if (!quote.couponCode) couponId = null;
@@ -141,7 +143,7 @@ export async function buildQuote(
   const variants = new Map(
     vrows.map((r) => [r.id, { productId: r.product_id, productName: r.product_name, label: r.label, imageUrl: r.image_url }]),
   );
-  return { quote, area, couponId, variants };
+  return { quote, area, couponId, variants, storeMinOrder: globalMin };
 }
 
 export function quoteMessages(quote: Quote): Record<string, string> {
@@ -154,5 +156,5 @@ export function quoteMessages(quote: Quote): Record<string, string> {
 }
 
 export function toQuoteResponse(ctx: QuoteContext): QuoteResponse {
-  return { quote: ctx.quote, messages: quoteMessages(ctx.quote), area: ctx.area };
+  return { quote: ctx.quote, messages: quoteMessages(ctx.quote), area: ctx.area, minOrder: ctx.area ? ctx.area.minOrder : ctx.storeMinOrder };
 }

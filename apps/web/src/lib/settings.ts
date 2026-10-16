@@ -87,3 +87,13 @@ export function whatsappPaymentMethods(s: StoreSettings): ("cod" | "upi" | "razo
   if (s.paymentLinks) out.push("razorpay_link");
   return out;
 }
+
+/** Customer-support details still empty in Admin → Settings (shown to staff as a setup notice; never invented). */
+export function supportGaps(s: StoreSettings): string[] {
+  const gaps: string[] = [];
+  if (!s.supportPhone) gaps.push("Phone");
+  if (!s.whatsapp) gaps.push("WhatsApp number");
+  if (!s.supportEmail) gaps.push("Email");
+  if (!s.supportHours) gaps.push("Support hours");
+  return gaps;
+}

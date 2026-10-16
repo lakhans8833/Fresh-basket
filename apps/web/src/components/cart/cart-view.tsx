@@ -163,7 +163,14 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
                 </button>
               </div>
               <CouponForm applied={quote?.couponCode ?? null} error={messages._coupon} />
-              {messages._cart && location ? <Notice tone="warning">{messages._cart}</Notice> : null}
+              {messages._cart && location ? (
+                <Notice tone="warning">{messages._cart}</Notice>
+              ) : !location && quote && data?.minOrder && quote.subtotal - quote.discount < data.minOrder ? (
+                // Before a PIN code is known, the store-wide minimum still applies (areas can only raise it).
+                <Notice tone="warning">Minimum order is {formatINR(data.minOrder)}. Add {formatINR(data.minOrder - (quote.subtotal - quote.discount))} more to check out.</Notice>
+              ) : data?.minOrder ? (
+                <p className="text-xs text-muted">Minimum order {formatINR(data.minOrder)}{location ? ` for ${location.areaName}` : ""}.</p>
+              ) : null}
               {whatsappEnabled ? (
                 <>
                   <Button size="lg" className="w-full rounded-xl text-lg" disabled={!canContinue} onClick={() => router.push("/order")}>

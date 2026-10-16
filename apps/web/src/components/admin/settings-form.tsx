@@ -234,7 +234,7 @@ function Editor({ initial }: { initial: StoreSettings }) {
         <div className="space-y-5 p-5 sm:p-6">
           <Toggle checked={f.codEnabled} onChange={(v) => set({ codEnabled: v })} label="Cash on delivery" description="Let customers pay in cash when the order arrives." />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Default minimum order" htmlFor="st-min" error={errors.defaultMinOrder} hint="Used where a delivery area has no minimum of its own">
+            <Field label="Default minimum order" htmlFor="st-min" error={errors.defaultMinOrder} hint="Store-wide minimum for every delivery area. If an area sets a higher minimum, the higher one applies. 0 = no store-wide minimum.">
               <MoneyInput id="st-min" value={f.defaultMinOrder} invalid={!!errors.defaultMinOrder} onChange={(e) => set({ defaultMinOrder: e.target.value })} />
             </Field>
             <Field label="Days of slots to show" htmlFor="st-days" error={errors.slotDaysAhead} hint="How far ahead customers can book (1–14)">

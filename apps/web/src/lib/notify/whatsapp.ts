@@ -158,3 +158,29 @@ export async function orderNotifications(orderId: string) {
     [orderId],
   );
 }
+
+const TEMPLATE_ENV: Record<NotifyEvent, string> = {
+  confirmed: "WHATSAPP_TEMPLATE_ORDER_CONFIRMED",
+  packed: "WHATSAPP_TEMPLATE_ORDER_PACKED",
+  out_for_delivery: "WHATSAPP_TEMPLATE_OUT_FOR_DELIVERY",
+  delivered: "WHATSAPP_TEMPLATE_ORDER_DELIVERED",
+};
+
+/**
+ * What the admin panel shows about automatic order updates: which events will be sent, and the exact
+ * settings (env var NAMES only — never values) still missing on the server.
+ */
+export function notificationSetup(cfg: WhatsAppCloudConfig = env.whatsappCloud) {
+  const missing: string[] = [];
+  if (!cfg.accessToken) missing.push("WHATSAPP_CLOUD_ACCESS_TOKEN");
+  if (!cfg.phoneNumberId) missing.push("WHATSAPP_CLOUD_PHONE_NUMBER_ID");
+  const events = (Object.keys(TEMPLATE_ENV) as NotifyEvent[]).map((e) => ({ event: e, ready: whatsappNotificationsEnabled(cfg) && Boolean(cfg.templates[e]) }));
+  for (const e of Object.keys(TEMPLATE_ENV) as NotifyEvent[]) if (!cfg.templates[e]) missing.push(TEMPLATE_ENV[e]);
+  return {
+    channel: "whatsapp" as const,
+    configured: whatsappNotificationsEnabled(cfg),
+    allEventsReady: events.every((e) => e.ready),
+    events,
+    missing,
+  };
+}
