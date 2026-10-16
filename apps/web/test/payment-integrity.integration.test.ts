@@ -155,6 +155,33 @@ describe("2. Razorpay preparation is coordinated in the database", () => {
     expect((await getOrderById(order.id))!.status).toBe("cancelled");
   });
 
+  it("no database connection is held while Razorpay answers", async () => {
+    const orders = await Promise.all([1, 2, 3, 4, 5, 6].map(async () => (await placeOrder(CUSTOMER, input())).order));
+    gateway.delayMs = 400;
+    const preps = Promise.all(orders.map((o) => preparePayment(o)));
+    await new Promise((r) => setTimeout(r, 200)); // all six are inside the gateway call now
+    expect(pool.totalCount - pool.idleCount).toBe(0); // nothing checked out of the pool
+    expect(pool.waitingCount).toBe(0);
+    const res = await preps;
+    expect(res.every((r) => r?.provider === "razorpay")).toBe(true);
+    expect(gateway.calls).toBe(6);
+  });
+
+  it("a stale claim left by a request that died is taken over; a fresh one is waited for", async () => {
+    const { order } = await placeOrder(CUSTOMER, input());
+    await query("update orders set payment_prep_token = $2, payment_prep_at = now() - interval '2 minutes' where id = $1", [order.id, randomUUID()]);
+    expect(await preparePayment(order)).toMatchObject({ provider: "razorpay" });
+    expect(gateway.calls).toBe(1);
+
+    const { order: o2 } = await placeOrder(CUSTOMER, input());
+    await query("update orders set payment_prep_token = $2, payment_prep_at = now() where id = $1", [o2.id, randomUUID()]);
+    const waiting = preparePayment(o2);
+    await new Promise((r) => setTimeout(r, 400));
+    await query("update orders set razorpay_order_id = 'order_other_instance', payment_prep_token = null where id = $1", [o2.id]);
+    await expect(waiting).resolves.toMatchObject({ razorpayOrderId: "order_other_instance" });
+    expect(gateway.calls).toBe(1); // the waiter reused the other instance's gateway order
+  });
+
   it("an expired order is never prepared", async () => {
     const { order } = await placeOrder(CUSTOMER, input());
     await expire(order.id);
