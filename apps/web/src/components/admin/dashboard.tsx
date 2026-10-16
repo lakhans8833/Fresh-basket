@@ -119,7 +119,8 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
               ) : null}
               {data.notificationSetup && !data.notificationSetup.allEventsReady ? (
                 <Notice tone="info" title={data.notificationSetup.configured ? "Some WhatsApp order updates are off" : "Automatic WhatsApp order updates are off"}>
-                  Customers who opt in get updates only for events that are set up. Missing server settings: {data.notificationSetup.missing.map((m) => <code key={m} className="mr-1 rounded bg-white px-1 text-xs">{m}</code>)}
+                  Customers who opt in get updates only for events that are set up. Missing server settings:
+                  <span className="mt-1 flex flex-wrap gap-1">{data.notificationSetup.missing.map((m) => <code key={m} className="break-all rounded bg-white px-1 text-xs">{m}</code>)}</span>
                 </Notice>
               ) : null}
             </section>
@@ -199,7 +200,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                           <span className="text-xs text-muted">{v.label ?? "All sizes (shared stock)"}</span>
                         </span>
                         <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums", v.out ? "bg-danger-bg text-danger" : "bg-[#fdf6e7] text-[#7a5212]")}>
-                          {v.stockGrams !== null ? (v.out ? `Out · ${formatWeight(v.stockGrams)} left` : `${formatWeight(v.stockGrams)} left`) : v.out ? "Out of stock" : `${v.stock} left`}
+                          {v.stockGrams !== null ? (v.out ? (v.stockGrams > 0 ? `Out · ${formatWeight(v.stockGrams)} left` : "Out of stock") : `${formatWeight(v.stockGrams)} left`) : v.out ? "Out of stock" : `${v.stock} left`}
                         </span>
                       </Link>
                     </li>

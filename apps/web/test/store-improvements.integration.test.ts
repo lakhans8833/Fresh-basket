@@ -88,10 +88,10 @@ describe("shared weight stock (Mint, 2 kg)", () => {
 
   it("the dashboard judges low stock per product for shared stock (one row, in grams)", async () => {
     await query("update products set stock_grams = 300 where id = $1", [mint]); // makes 3 × 100 g: low, not out
-    let row = ((await adminStats()) as { lowStock: { productId: string; variantId: string | null; stockGrams: number | null; out: boolean }[] }).lowStock.filter((r) => r.productId === mint);
+    let row = ((await adminStats()) as unknown as { lowStock: { productId: string; variantId: string | null; stockGrams: number | null; out: boolean }[] }).lowStock.filter((r) => r.productId === mint);
     expect(row).toEqual([expect.objectContaining({ variantId: null, stockGrams: 300, out: false })]);
     await query("update products set stock_grams = 3000 where id = $1", [mint]); // 30 × 100 g: fine (the 1 kg size making only 3 is not "low")
-    row = ((await adminStats()) as { lowStock: { productId: string }[] }).lowStock.filter((r) => r.productId === mint);
+    row = ((await adminStats()) as unknown as { lowStock: typeof row }).lowStock.filter((r) => r.productId === mint);
     expect(row).toEqual([]);
   });
 });

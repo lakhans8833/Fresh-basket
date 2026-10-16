@@ -171,3 +171,4 @@ with sync_playwright() as p:
 failed = [n for n, ok in results if not ok]
 print(f"\n{len(results) - len(failed)}/{len(results)} checks passed")
 sys.exit(1 if failed else 0)
+

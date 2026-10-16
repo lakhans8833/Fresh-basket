@@ -22,7 +22,7 @@ const OTP_EXP = Number(process.env.OTP_EXP ?? 3600); // Supabase default: 3600 s
 const MAX_FREQUENCY = Number(process.env.MAX_FREQUENCY ?? 60); // Supabase default: 60 s
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 
-const users = new Map(); // email -> { id, email }
+const users = new Map(); // email -> { id, email, password?, confirmed }
 const codes = new Map(); // email -> { code, exp, used }
 const lastSent = new Map(); // email -> ms
 const refresh = new Map();
@@ -58,7 +58,7 @@ async function ensureUser(email, fullName) {
     "insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, $2, $3, now()) on conflict (email) do update set email = excluded.email returning id",
     [randomUUID(), email, JSON.stringify(fullName ? { full_name: fullName } : {})],
   ).catch(async () => db.query("select id from auth.users where email = $1", [email]));
-  const u = { id: rows[0].id, email };
+  const u = { id: rows[0].id, email, confirmed: true };
   users.set(email, u);
   return u;
 }
@@ -90,14 +90,46 @@ http.createServer((req, res) => {
         codes.set(email, { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), exp: Date.now() + OTP_EXP * 1000, used: false });
         return send(res, 200, {});
       }
+      // Password sign-up (email confirmation ON): the account exists but can't sign in until the
+      // "Confirm signup" code is verified (type "signup").
+      if (url.pathname === "/auth/v1/signup" && req.method === "POST") {
+        const email = String(body.email ?? "").toLowerCase();
+        const existing = users.get(email);
+        if (existing?.confirmed) return send(res, 200, { ...userJson(existing), identities: [] }); // GoTrue: no email sent
+        const u = existing ?? await ensureUser(email, body.data?.full_name);
+        u.confirmed = false;
+        u.password = body.password;
+        lastSent.set(email, Date.now());
+        codes.set(email, { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), exp: Date.now() + OTP_EXP * 1000, used: false, type: "signup" });
+        return send(res, 200, { ...userJson(u), email_confirmed_at: null, identities: [{ id: u.id, provider: "email" }] });
+      }
+      if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
+        const u = users.get(String(body.email ?? "").toLowerCase());
+        if (!u || u.password !== body.password) return send(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
+        if (!u.confirmed) return send(res, 400, { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" });
+        return send(res, 200, session(u));
+      }
+      if (url.pathname === "/auth/v1/resend" && req.method === "POST") {
+        const email = String(body.email ?? "").toLowerCase();
+        const u = users.get(email);
+        const since = (Date.now() - (lastSent.get(email) ?? 0)) / 1000;
+        if (since < MAX_FREQUENCY) return send(res, 429, { code: 429, error_code: "over_email_send_rate_limit", msg: `For security purposes, you can only request this after ${Math.ceil(MAX_FREQUENCY - since)} seconds.` });
+        if (u && !u.confirmed) {
+          lastSent.set(email, Date.now());
+          codes.set(email, { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), exp: Date.now() + OTP_EXP * 1000, used: false, type: "signup" });
+        }
+        return send(res, 200, {});
+      }
       if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
         stats.verifyRequests++;
         const email = String(body.email ?? "").toLowerCase();
         const c = codes.get(email);
-        if (body.type !== "email" || !c || c.used || c.exp < Date.now() || c.code !== body.token) {
+        const typeOk = c && (c.type === "signup" ? body.type === "signup" || body.type === "email" : body.type === "email");
+        if (!typeOk || !c || c.used || c.exp < Date.now() || c.code !== body.token) {
           return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Token has expired or is invalid" });
         }
         c.used = true;
+        users.get(email).confirmed = true;
         return send(res, 200, session(users.get(email)));
       }
       if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "refresh_token") {
