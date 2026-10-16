@@ -7,6 +7,8 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const ACCESS_HEADER = "x-fb-sb-access-token";
 /** Internal header with the requested path + query, so server layouts can build ?next= links. */
 const PATH_HEADER = "x-fb-path";
+/** Set when Supabase Auth couldn't be reached to check a session cookie (outage ≠ signed out). */
+const AUTH_UNAVAILABLE_HEADER = "x-fb-auth-unavailable";
 // Server-to-server endpoints authenticated by signature/secret instead of cookies.
 const ORIGIN_EXEMPT = ["/api/webhooks/", "/api/cron/"];
 
@@ -69,6 +71,7 @@ export async function proxy(req: NextRequest) {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const forwarded = new Headers(req.headers);
   forwarded.delete(ACCESS_HEADER); // never trust a client-supplied value
+  forwarded.delete(AUTH_UNAVAILABLE_HEADER);
   forwarded.set(PATH_HEADER, pathname + req.nextUrl.search);
   if (!url || !key) return withCors(req, NextResponse.next({ request: { headers: forwarded } }));
 
@@ -88,16 +91,24 @@ export async function proxy(req: NextRequest) {
   // asymmetric signing keys this is a local signature check (public keys cached for 10 min), so
   // most requests make no call to Supabase Auth at all; with a legacy shared secret it falls
   // back to asking Supabase Auth (getUser).
-  const { data } = await sb.auth.getClaims();
+  const { data, error } = await sb.auth.getClaims();
   if (data?.claims?.sub) {
     const { data: s } = await sb.auth.getSession(); // already fresh — no second refresh
     if (s.session?.access_token) forwarded.set(ACCESS_HEADER, s.session.access_token);
+  } else if (error && isRetryable(error) && req.cookies.getAll().some((c) => /^sb-.+-auth-token/.test(c.name))) {
+    // A session cookie exists but Supabase couldn't be reached (network / 5xx) to refresh or verify
+    // it. Tell the routes, so /api/me answers "try again" instead of "signed out".
+    forwarded.set(AUTH_UNAVAILABLE_HEADER, "1");
   }
   // Cookies changed by the refresh must be visible to the route as well.
   if (toSet.length) forwarded.set("cookie", req.cookies.toString());
   const res = NextResponse.next({ request: { headers: forwarded } });
   for (const c of toSet) res.cookies.set(c.name, c.value, c.options);
   return withCors(req, res);
+}
+
+function isRetryable(e: { name?: string; status?: number }) {
+  return e.name === "AuthRetryableFetchError" || e.status === 0 || (typeof e.status === "number" && e.status >= 500);
 }
 
 export const config = {

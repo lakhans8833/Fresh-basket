@@ -12,7 +12,7 @@ import { ProductImage } from "../product/product-image";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
 import { slugify } from "./product-form";
-import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Thumb, Toggle, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
+import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Thumb, Toggle, useEditorDialogBusy, useEditorDialogMarkDirty, type EditorDialogHandle } from "./ui";
 
 interface Cat {
   id: string;
@@ -141,6 +141,7 @@ function CategoryForm({ initial, nextSort, onCancel, onSaved }: { initial: Cat |
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEditorDialogBusy(saving);
+  const markDirty = useEditorDialogMarkDirty();
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -211,7 +212,7 @@ function CategoryForm({ initial, nextSort, onCancel, onSaved }: { initial: Cat |
               {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {imageUrl ? "Replace" : "Upload"}
             </Button>
             {imageUrl ? (
-              <Button type="button" size="sm" variant="ghost" onClick={() => setImageUrl(null)}><X className="size-4" aria-hidden /> Remove</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setImageUrl(null); markDirty(); }}><X className="size-4" aria-hidden /> Remove</Button>
             ) : null}
           </div>
         </div>

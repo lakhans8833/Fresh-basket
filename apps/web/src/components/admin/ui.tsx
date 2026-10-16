@@ -67,7 +67,7 @@ export function paymentTone(s: PaymentStatus): Tone {
 export function LateBadge() {
   return (
     <Badge tone="red" className="uppercase tracking-wide">
-      <span title="Delivery slot has ended and the order is still not packed">Late</span>
+      <span title="Delivery slot has ended and the order isn't delivered yet">Late</span>
     </Badge>
   );
 }
@@ -153,6 +153,14 @@ export function ConfirmDialog({
         e.preventDefault();
         if (!busy) onClose();
       }}
+      // Repeated Escape can close it natively: keep the page's state in step (re-open while busy).
+      onClose={() => {
+        const d = ref.current;
+        if (open && d && !d.open) {
+          if (busy) d.showModal();
+          else onClose();
+        }
+      }}
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-[var(--radius-card)] border border-line bg-white p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40 backdrop:backdrop-blur-[2px]"
     >
       <form
@@ -176,12 +184,16 @@ export function ConfirmDialog({
 
 /** Generic "slide-over"-ish editor panel rendered as a modal dialog for create/edit forms. */
 /** Lets a form inside an EditorDialog report "saving…" so the dialog can't be closed meanwhile. */
-const EditorDialogCtx = createContext<{ setBusy: (b: boolean) => void } | null>(null);
+const EditorDialogCtx = createContext<{ setBusy: (b: boolean) => void; markDirty: () => void } | null>(null);
 export function useEditorDialogBusy(busy: boolean) {
   const ctx = useContext(EditorDialogCtx);
   useEffect(() => {
     ctx?.setBusy(busy);
   }, [ctx, busy]);
+}
+/** For edits that aren't typing into a field (chips, "Remove image" buttons): count as unsaved. */
+export function useEditorDialogMarkDirty(): () => void {
+  return useContext(EditorDialogCtx)?.markDirty ?? (() => {});
 }
 
 export interface EditorDialogHandle {
@@ -226,7 +238,7 @@ export function EditorDialog({
     else onClose();
   };
   useImperativeHandle(controlRef, () => ({ requestClose }));
-  const ctx = useMemo(() => ({ setBusy: setChildBusy }), []);
+  const ctx = useMemo(() => ({ setBusy: setChildBusy, markDirty: () => setDirty(true) }), []);
   return (
     <dialog
       ref={ref}
@@ -234,6 +246,15 @@ export function EditorDialog({
       onCancel={(e) => {
         e.preventDefault();
         requestClose();
+      }}
+      // A repeated Escape can make the browser close the modal even though cancel was prevented.
+      // While the page still wants it open, put it back (draft and prompt intact).
+      onClose={() => {
+        const d = ref.current;
+        if (open && d && !d.open) {
+          d.showModal();
+          if (dirty) setConfirming(true);
+        }
       }}
       className={cn(
         "m-auto max-h-[calc(100dvh-2rem)] rounded-[var(--radius-card)] border border-line bg-ivory p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40 backdrop:backdrop-blur-[2px]",
@@ -244,7 +265,7 @@ export function EditorDialog({
         <EditorDialogCtx.Provider value={ctx}>
           <div className="p-5 sm:p-6" onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
             <h2 id={titleId} className="text-xl font-semibold text-forest-900">{title}</h2>
-            {confirming ? <DiscardPrompt onKeep={() => setConfirming(false)} onDiscard={() => { setConfirming(false); onClose(); }} /> : null}
+            {confirming && !isBusy ? <DiscardPrompt onKeep={() => setConfirming(false)} onDiscard={() => { setConfirming(false); onClose(); }} /> : null}
             <div className="mt-4">{children}</div>
           </div>
         </EditorDialogCtx.Provider>

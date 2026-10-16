@@ -434,6 +434,7 @@ function ActionDialog({
       ref={ref}
       aria-labelledby={titleId}
       onCancel={(e) => { e.preventDefault(); if (!busy) onClose(); }}
+      onClose={() => { const d = ref.current; if (open && d && !d.open) { if (busy) d.showModal(); else onClose(); } }}
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-[var(--radius-card)] border border-line bg-white p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40"
     >
       <form className="p-6" onSubmit={(e) => { e.preventDefault(); onConfirm(); }}>

@@ -6,7 +6,8 @@ import type { CartLine } from "../cart/cart-context";
 export interface BuyAgainResult {
   items: {
     variantId: string; productSlug: string; productName: string; variantLabel: string; imageUrl: string | null;
-    quantity: number; requested: number; price: number; oldPrice: number;
+    /** How many to add now (on top of what's already in the cart: `inCart`). */
+    quantity: number; requested: number; inCart: number; price: number; oldPrice: number;
   }[];
   skipped: { productName: string; variantLabel: string; reason: "unavailable" | "out_of_stock" }[];
 }
@@ -30,12 +31,14 @@ export async function buyAgain(
   order: { id: string; orderNumber: string },
   cart: { lines: CartLine[]; add: (line: Omit<CartLine, "quantity">, qty?: number) => void },
 ): Promise<number> {
-  const r = await api<BuyAgainResult>(`/api/orders/${order.id}/reorder`, { method: "POST" });
+  const r = await api<BuyAgainResult>(`/api/orders/${order.id}/reorder`, {
+    method: "POST",
+    json: { cart: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) },
+  });
   let added = 0;
   for (const it of r.items) {
-    const existing = cart.lines.find((l) => l.variantId === it.variantId)?.quantity ?? 0;
-    if (it.quantity > existing) {
-      cart.add({ variantId: it.variantId, productName: it.productName, productSlug: it.productSlug, variantLabel: it.variantLabel, imageUrl: it.imageUrl, priceHint: it.price }, it.quantity - existing);
+    if (it.quantity > 0) {
+      cart.add({ variantId: it.variantId, productName: it.productName, productSlug: it.productSlug, variantLabel: it.variantLabel, imageUrl: it.imageUrl, priceHint: it.price }, it.quantity);
     }
     added++;
   }
@@ -43,7 +46,7 @@ export async function buyAgain(
     orderNumber: order.orderNumber,
     added,
     changed: r.items.filter((i) => i.price !== i.oldPrice).map((i) => ({ name: `${i.productName} (${i.variantLabel})`, oldPrice: i.oldPrice, price: i.price })),
-    reduced: r.items.filter((i) => i.quantity < i.requested).map((i) => ({ name: `${i.productName} (${i.variantLabel})`, requested: i.requested, quantity: i.quantity })),
+    reduced: r.items.filter((i) => i.inCart + i.quantity < i.requested).map((i) => ({ name: `${i.productName} (${i.variantLabel})`, requested: i.requested, quantity: i.inCart + i.quantity })),
     skipped: r.skipped.map((s) => ({ name: `${s.productName} (${s.variantLabel})`, reason: s.reason })),
   };
   try {

@@ -6,13 +6,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { addDays, istDateString, productStockSummary, type PlaceOrderInput } from "@freshbasket/shared";
+import { addDays, adminVariantSchema, istDateString, productStockSummary, whatsappOrderSchema, type PlaceOrderInput } from "@freshbasket/shared";
 import { pool, query, queryOne } from "@/lib/db";
-import { placeOrder, reorderItems } from "@/lib/orders";
+import { placeOrder, placeWhatsAppOrder, reorderItems } from "@/lib/orders";
 import { buildQuote, toQuoteResponse } from "@/lib/quote";
 import { getArea, serviceAreaMismatches } from "@/lib/delivery";
 import { adminListProducts } from "@/lib/admin/catalog";
-import { adminStats } from "@/lib/admin/orders";
+import { adminGetOrder, adminStats, adminUpdateOrderStatus } from "@/lib/admin/orders";
+import { adminSaveProduct } from "@/lib/admin/catalog";
 import { notificationSetup } from "@/lib/notify/whatsapp";
 
 const CUSTOMER = "00000000-0000-4000-8000-0000000000c1";
@@ -182,5 +183,96 @@ describe("order notifications status for the admin", () => {
     expect(partial.missing).not.toContain("WHATSAPP_CLOUD_ACCESS_TOKEN");
     const ready = notificationSetup({ accessToken: "t", phoneNumberId: "p", apiVersion: "v21.0", apiBase: "x", language: "en", templates: { confirmed: "a", packed: "b", out_for_delivery: "c", delivered: "d" } });
     expect(ready).toMatchObject({ allEventsReady: true, missing: [] });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Regressions found in the deep check
+// ---------------------------------------------------------------------------------------------
+const ADMIN = "00000000-0000-4000-8000-0000000000a1";
+
+describe("deep-check regressions", () => {
+  it("a switched-off size in the basket doesn't use up the shared stock of the sizes still on sale", async () => {
+    await query("update products set stock_grams = 1000 where id = $1", [mint]);
+    await query("update product_variants set active = false where id = $1", [pack["250 g"]]);
+    try {
+      const ctx = await buildQuote({ items: [{ variantId: pack["500 g"]!, quantity: 2 }, { variantId: pack["250 g"]!, quantity: 4 }], pincode: "560034" });
+      expect(ctx.quote.issues).toContainEqual({ code: "UNAVAILABLE", variantId: pack["250 g"] });
+      expect(ctx.quote.issues.find((i) => i.code === "OUT_OF_STOCK")).toBeUndefined(); // 2 × 500 g fit in 1 kg
+      expect(ctx.quote.lines.find((l) => l.variantId === pack["500 g"])!.maxQuantity).toBe(2);
+    } finally {
+      await query("update product_variants set active = true where id = $1", [pack["250 g"]]);
+    }
+  });
+
+  it("Buy again tops up the CURRENT cart within the shared stock (never past the total)", async () => {
+    await query("update products set stock_grams = 5000 where id = $1", [mint]);
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: pack["500 g"]!, quantity: 4 }] }));
+    await query("update products set stock_grams = 2000 where id = $1", [mint]);
+    // Cart already holds 2 × 1 kg = all 2 kg.
+    const full = await reorderItems(CUSTOMER, order.id, [{ variantId: pack["1 kg"]!, quantity: 2 }]);
+    expect(full.items).toEqual([]);
+    expect(full.skipped).toEqual([expect.objectContaining({ reason: "out_of_stock" })]);
+    // Cart holds 1 × 1 kg → 1 kg left → at most 2 × 500 g more.
+    const some = await reorderItems(CUSTOMER, order.id, [{ variantId: pack["1 kg"]!, quantity: 1 }]);
+    expect(some.items[0]).toMatchObject({ variantId: pack["500 g"], quantity: 2, requested: 4, inCart: 0 });
+    // The same pack already in the cart is topped up, not doubled.
+    const same = await reorderItems(CUSTOMER, order.id, [{ variantId: pack["500 g"]!, quantity: 3 }]);
+    expect(same.items[0]).toMatchObject({ quantity: 1, inCart: 3 });
+  });
+
+  it("saving a weight product that has a HIDDEN non-weight size keeps its shared total", async () => {
+    const extra = (await queryOne<{ id: string }>("insert into product_variants (product_id, label, price, active, sort_order) values ($1, '1 bunch', 1500, false, 9) returning id", [mint]))!.id;
+    try {
+      await query("update products set stock_grams = 2000 where id = $1", [mint]);
+      const p = (await queryOne<{ slug: string; name: string; category_id: string }>("select slug, name, category_id from products where id = $1", [mint]))!;
+      const vs = await query<{ id: string; label: string; price: number; stock: number; active: boolean }>("select id, label, price, stock, active from product_variants where product_id = $1 order by sort_order", [mint]);
+      await adminSaveProduct(mint, {
+        name: p.name, slug: p.slug, categoryId: p.category_id, description: "Updated description", highlights: [], seasonal: false, featured: false, active: true,
+        storageTips: null, shelfLife: null, origin: null, nutrition: null, images: [],
+        variants: vs.map((v, i) => ({ id: v.id, label: v.label, price: v.price, mrp: null, stock: v.stock, active: v.active, sortOrder: i + 1 })),
+        stockGrams: 2000,
+      } as Parameters<typeof adminSaveProduct>[1]);
+      expect(await grams()).toBe(2000);
+    } finally {
+      await query("delete from product_variants where id = $1", [extra]);
+    }
+  });
+
+  it("pack labels with a non-breaking space are read as weights by the database and normalised on save", async () => {
+    expect((await queryOne<{ g: number }>("select pack_label_grams($1) as g", ["500\u00a0g"]))!.g).toBe(500);
+    expect(adminVariantSchema.parse({ label: "500\u00a0g", price: 100, stock: 0, active: true }).label).toBe("500 g");
+  });
+
+  it("unconfirmed WhatsApp orders are not 'overdue'; confirming a slot-less order after its day moves it to today", async () => {
+    const wa = whatsappOrderSchema.parse({
+      items: [{ variantId: pack["1 kg"]!, quantity: 2 }],
+      customer: { name: "Guest Buyer", phone: `97${String(Date.now()).slice(-8)}`, address: "House 9, Lane 3", area: "", city: "Bengaluru", pincode: "560034", notes: "" },
+      paymentMethod: "cod", idempotencyKey: randomUUID(),
+    });
+    await query("update products set stock_grams = 9000 where id = $1", [mint]);
+    const { order } = await placeWhatsAppOrder(null, wa);
+    expect(order.status).toBe("pending_confirmation");
+    await query("update orders set delivery_date = delivery_date - 1 where id = $1", [order.id]); // placed late last night
+    expect((await adminGetOrder(order.id)).late).toBe(false); // waiting for confirmation ≠ overdue
+    await adminUpdateOrderStatus(order.id, "placed", ADMIN);
+    const confirmed = await adminGetOrder(order.id);
+    expect(confirmed.deliveryDate).toBe(istDateString(new Date()));
+    expect(confirmed.late).toBe(false);
+  });
+
+  it("a guest retry with the same key but another mobile number gets a clear 409 (not a raw database error)", async () => {
+    const key = randomUUID();
+    const base = { items: [{ variantId: pack["1 kg"]!, quantity: 2 }], paymentMethod: "cod", idempotencyKey: key };
+    const c = (phone: string) => ({ name: "Guest Buyer", phone, address: "House 10, Lane 4", area: "", city: "Bengaluru", pincode: "560034", notes: "" });
+    await placeWhatsAppOrder(null, whatsappOrderSchema.parse({ ...base, customer: c(`96${String(Date.now()).slice(-8)}`) }));
+    await expect(placeWhatsAppOrder(null, whatsappOrderSchema.parse({ ...base, customer: c(`95${String(Date.now()).slice(-8)}`) }))).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("dashboard recent orders carry the full order (channel, item preference)", async () => {
+    await query("update products set stock_grams = 9000 where id = $1", [mint]);
+    const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: pack["1 kg"]!, quantity: 2 }], unavailableItems: "remove" }));
+    const recent = ((await adminStats()) as unknown as { recent: { id: string; channel: string; unavailableItems: string | null }[] }).recent.find((o) => o.id === order.id)!;
+    expect(recent).toMatchObject({ channel: "web", unavailableItems: "remove" });
   });
 });

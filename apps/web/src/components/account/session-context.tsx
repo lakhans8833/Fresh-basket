@@ -107,7 +107,8 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
   }, [profile]);
 
   const logout = useCallback(async () => {
-    await getBrowserSupabase()?.auth.signOut();
+    // This device only — signing out on the phone must not end the desktop session.
+    await getBrowserSupabase()?.auth.signOut({ scope: "local" });
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     setProfile(null);
   }, []);

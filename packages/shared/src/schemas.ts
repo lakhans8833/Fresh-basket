@@ -131,7 +131,9 @@ export type AdminBannerInput = z.infer<typeof adminBannerSchema>;
 
 export const adminVariantSchema = z.object({
   id: uuid.optional(),
-  label: trimmed(30).min(1),
+  // Any run of spaces (incl. non-breaking spaces pasted from websites) becomes one plain space, so the
+  // site and the database read "500 g" the same way.
+  label: trimmed(30).min(1).transform((s) => s.replace(/\s+/g, " ")),
   price: z.number().int().min(0).max(10_000_000),
   mrp: z.number().int().min(0).max(10_000_000).optional().nullable(),
   stock: z.number().int().min(0).max(1_000_000),

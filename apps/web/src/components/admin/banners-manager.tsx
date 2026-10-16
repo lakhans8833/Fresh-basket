@@ -12,7 +12,7 @@ import { cn } from "../ui/cn";
 import { PromoCard } from "../home/promo-strip";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
-import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
+import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle, useEditorDialogBusy, useEditorDialogMarkDirty, type EditorDialogHandle } from "./ui";
 
 interface Banner extends PromoBanner {
   active: boolean;
@@ -155,6 +155,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEditorDialogBusy(saving);
+  const markDirty = useEditorDialogMarkDirty();
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -247,7 +248,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
       </datalist>
       <div className="flex flex-wrap gap-1.5">
         {LINK_SUGGESTIONS.map((s) => (
-          <button key={s.value} type="button" onClick={() => setLinkUrl(s.value)} className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", linkUrl === s.value ? "border-forest-800 bg-forest-800 text-white" : "border-line text-ink-soft hover:border-forest-700/40")}>
+          <button key={s.value} type="button" onClick={() => { setLinkUrl(s.value); markDirty(); }} className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", linkUrl === s.value ? "border-forest-800 bg-forest-800 text-white" : "border-line text-ink-soft hover:border-forest-700/40")}>
             {s.label}
           </button>
         ))}
@@ -270,7 +271,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
           <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => fileRef.current?.click()}>
             {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {imageUrl ? "Replace" : "Upload"}
           </Button>
-          {imageUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => setImageUrl(null)}><X className="size-4" aria-hidden /> Remove</Button> : null}
+          {imageUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => { setImageUrl(null); markDirty(); }}><X className="size-4" aria-hidden /> Remove</Button> : null}
         </div>
         <p className="mt-1.5 text-[0.8125rem] text-muted">JPEG, PNG or WebP up to 5 MB. Use your own photos or ones you have the right to use.</p>
       </div>

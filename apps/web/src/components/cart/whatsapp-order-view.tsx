@@ -110,7 +110,6 @@ export function WhatsAppOrderView({
     );
   useEffect(() => {
     void loadSlots();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once
   }, []);
   const chosenSlot = slots?.find((x) => x.slotId === slotId && x.date === date) ?? null;
   const slotText = chosenSlot ? `${dayLabel(chosenSlot.date, slots?.[0]?.date ?? chosenSlot.date).name}, ${dayLabel(chosenSlot.date, chosenSlot.date).date} · ${chosenSlot.label}, ${formatSlotTime(chosenSlot.startTime)}–${formatSlotTime(chosenSlot.endTime)}` : null;

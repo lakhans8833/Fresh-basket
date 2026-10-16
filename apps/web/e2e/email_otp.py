@@ -35,6 +35,8 @@ def open_login(b, next_path="/account/orders"):
     ctx = b.new_context()
     page = ctx.new_page()
     page.goto(f"{BASE}/login?next={next_path.replace('/', '%2F')}")
+    # Let streaming finish: until then React's hidden streaming template can hold a second copy of the form.
+    page.wait_for_load_state("networkidle")
     return ctx, page
 
 
@@ -165,6 +167,27 @@ with sync_playwright() as p:
     enter(page, "12345678")
     expect(page.get_by_text(WRONG)).to_be_visible(timeout=10000)
     check("8 digits → sent to the server (longer configured codes work)", fake("/stats")["verifyRequests"] == vb + 1)
+    ctx.close()
+
+    # 7. Code accepted, but the account check says "no session" → the page explains it AND the form is
+    #    usable again (back to the email step), instead of a locked form with a used-up code.
+    fake("/reset-limits", "POST")
+    ctx, page = open_login(b)
+    flip = {"n": 1}
+    def me_none(route):
+        if route.request.method == "GET" and flip["n"] > 0:
+            flip["n"] -= 1
+            return route.fulfill(status=200, content_type="application/json", body='{"profile":null}')
+        return route.continue_()
+    em = f"none-{RUN}@test.local"
+    send(page, em)
+    expect(page.locator("#otp-code")).to_be_visible(timeout=10000)
+    flip["n"] = 2  # the auth-state refresh and done() both see "signed out"
+    page.route("**/api/me*", me_none)
+    enter(page, inbox(em))
+    expect(page.get_by_text("Sign-in didn't complete")).to_be_visible(timeout=15000)
+    check("'signed out' after a valid code → message + back to a usable email step (not locked)",
+          page.locator("#otp-email").is_visible() and page.get_by_role("button", name=re.compile(r"^Send code")).is_enabled())
     ctx.close()
     b.close()
 

@@ -160,7 +160,10 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     if (!vs.length || vs.some((v) => !packGrams(v.label))) return "";
     return String(Math.max(...vs.map((v) => v.stock * (packGrams(v.label) ?? 0))) / 1000);
   });
-  const byWeight = variants.length > 0 && variants.every((v) => packGrams(v.label) !== null);
+  // Judged on the sizes customers can buy: a hidden old size (e.g. "1 bunch" kept for past orders)
+  // must not switch a weight product back to per-pack stock (that would clear its shared total).
+  const activeVariants = variants.filter((v) => v.active);
+  const byWeight = activeVariants.length > 0 && activeVariants.every((v) => packGrams(v.label) !== null);
   // Only send the total when it was edited here (or the stock mode changes), so saving a description
   // never overwrites sales that happened since this page was opened.
   const [stockTouched, setStockTouched] = useState(false);

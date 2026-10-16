@@ -11,7 +11,7 @@ import { FavouriteButton } from "./favourite-button";
 import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
 import { bestDealVariant, defaultVariant } from "./default-variant";
-import { DiscountBadge, percentOff } from "../ui/price";
+import { DiscountBadge } from "../ui/price";
 import { PackSizeSelect } from "./pack-size-select";
 
 function useCardState(product: ProductSummary, preferDeal = false, preferVariantId?: string) {

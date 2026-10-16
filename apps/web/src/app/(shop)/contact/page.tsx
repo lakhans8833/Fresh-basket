@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { getSettings } from "@/lib/settings";
-import { normalizeWhatsAppNumber } from "@freshbasket/shared";
+import { supportWhatsApp } from "@/components/info/support-contacts";
 import { getSession } from "@/lib/auth";
 import { InfoPage } from "@/components/info/info-page";
 import { ContactForm } from "@/components/info/contact-form";
@@ -15,7 +15,7 @@ export default async function ContactPage({ searchParams }: { searchParams: Prom
   const details = [
     s.supportPhone && { icon: Phone, label: "Call", value: s.supportPhone, href: `tel:${s.supportPhone.replace(/[^\d+]/g, "")}` },
     // 10-digit Indian mobiles need the 91 country code for wa.me links.
-    normalizeWhatsAppNumber(s.whatsapp) && { icon: MessageCircle, label: "WhatsApp", value: s.whatsapp!, href: `https://wa.me/${normalizeWhatsAppNumber(s.whatsapp)}`, external: true },
+    supportWhatsApp(s) && { icon: MessageCircle, label: "WhatsApp", value: `+${supportWhatsApp(s)}`, href: `https://wa.me/${supportWhatsApp(s)}`, external: true },
     s.supportEmail && { icon: Mail, label: "Email", value: s.supportEmail, href: `mailto:${s.supportEmail}` },
     s.address && { icon: MapPin, label: "Address", value: s.address },
     s.supportHours && { icon: Clock, label: "Hours", value: s.supportHours },

@@ -3,6 +3,7 @@ import { cache } from "react";
 import type { StoreSettings } from "@freshbasket/shared";
 import { queryOne } from "./db";
 import { env } from "./env";
+import { resolveWhatsAppNumber } from "@/config/store";
 import { CACHE_TAGS, cached } from "./cache";
 
 type Row = {
@@ -92,7 +93,7 @@ export function whatsappPaymentMethods(s: StoreSettings): ("cod" | "upi" | "razo
 export function supportGaps(s: StoreSettings): string[] {
   const gaps: string[] = [];
   if (!s.supportPhone) gaps.push("Phone");
-  if (!s.whatsapp) gaps.push("WhatsApp number");
+  if (!resolveWhatsAppNumber(s.whatsapp)) gaps.push("WhatsApp number");
   if (!s.supportEmail) gaps.push("Email");
   if (!s.supportHours) gaps.push("Support hours");
   return gaps;

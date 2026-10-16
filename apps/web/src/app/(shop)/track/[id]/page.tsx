@@ -6,7 +6,7 @@ import { getSettings } from "@/lib/settings";
 import { trackToken } from "@/lib/tokens";
 import { upiPaymentInfo } from "@/lib/payments/upi";
 import { OrderDetail } from "@/components/account/order-detail";
-import { SupportContacts } from "@/components/info/support-contacts";
+import { hasSupportContacts, SupportContacts } from "@/components/info/support-contacts";
 
 export const metadata: Metadata = { title: "Track your order", robots: { index: false, follow: false } };
 
@@ -55,5 +55,5 @@ export default async function TrackOrderPage({ params, searchParams }: { params:
   // A forwarded link doesn't work forever: 30 days after the order is finished, the link stops working.
   if (linkExpired(order)) notFound();
   const upi = await upiPaymentInfo(order, settings);
-  return <OrderDetail order={forTracking(order)} justPlaced={sp.placed === "1"} mode="track" trackKey={sp.k} upi={upi} support={<SupportContacts settings={settings} orderNumber={order.orderNumber} title="Help with this order" />} />;
+  return <OrderDetail order={forTracking(order)} justPlaced={sp.placed === "1"} mode="track" trackKey={sp.k} upi={upi} support={hasSupportContacts(settings) ? <SupportContacts settings={settings} orderNumber={order.orderNumber} title="Help with this order" /> : undefined} />;
 }

@@ -66,7 +66,10 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
     set();
     const ro = new ResizeObserver(set);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--header-h");
+    };
   }, []);
 
   return (

@@ -1,5 +1,18 @@
 import { Clock, Mail, MessageCircle, Phone } from "lucide-react";
 import { normalizeWhatsAppNumber, type StoreSettings } from "@freshbasket/shared";
+import { resolveWhatsAppNumber } from "@/config/store";
+
+type SupportSettings = Pick<StoreSettings, "supportPhone" | "whatsapp" | "supportEmail" | "supportHours">;
+
+/** The same WhatsApp number orders go to (NEXT_PUBLIC_WHATSAPP_NUMBER first, else Admin → Settings). */
+export function supportWhatsApp(settings: SupportSettings) {
+  return resolveWhatsAppNumber(settings.whatsapp) ?? normalizeWhatsAppNumber(settings.whatsapp);
+}
+
+/** True when at least one support detail is filled in (otherwise pages keep their plain /contact link). */
+export function hasSupportContacts(settings: SupportSettings) {
+  return Boolean(settings.supportPhone || supportWhatsApp(settings) || settings.supportEmail || settings.supportHours);
+}
 import { cn } from "../ui/cn";
 
 /**
@@ -8,12 +21,12 @@ import { cn } from "../ui/cn";
  */
 export function SupportContacts({
   settings, orderNumber, title = "Need help?", className,
-}: { settings: Pick<StoreSettings, "supportPhone" | "whatsapp" | "supportEmail" | "supportHours">; orderNumber?: string; title?: string; className?: string }) {
-  const wa = normalizeWhatsAppNumber(settings.whatsapp);
+}: { settings: SupportSettings; orderNumber?: string; title?: string; className?: string }) {
+  const wa = supportWhatsApp(settings);
   const waText = orderNumber ? `?text=${encodeURIComponent(`Hi, I need help with order ${orderNumber}.`)}` : "";
   const actions = [
     settings.supportPhone && { key: "call", icon: Phone, label: "Call", value: settings.supportPhone, href: `tel:${settings.supportPhone.replace(/[^\d+]/g, "")}` },
-    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: settings.whatsapp!, href: `https://wa.me/${wa}${waText}`, external: true },
+    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: `+${wa}`, href: `https://wa.me/${wa}${waText}`, external: true },
     settings.supportEmail && {
       key: "email", icon: Mail, label: "Email", value: settings.supportEmail,
       href: `mailto:${settings.supportEmail}${orderNumber ? `?subject=${encodeURIComponent(`Order ${orderNumber}`)}` : ""}`,

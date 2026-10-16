@@ -16,8 +16,13 @@ const RESEND_SECONDS = 60;
  * The email must contain {{ .Token }} — see apps/web/README.md.
  */
 export function SignupCode({
-  email, justSent, onConfirmed, onCancel,
-}: { email: string; justSent: boolean; onConfirmed: () => Promise<void>; onCancel: () => void }) {
+  email, justSent, password, onConfirmed, onCancel, onFailed,
+}: {
+  email: string; justSent: boolean;
+  /** The password typed on the sign-up / sign-in form: becomes the account's password once the email is proven. */
+  password?: string;
+  onConfirmed: () => Promise<boolean>; onCancel: () => void; onFailed: () => void;
+}) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<"verify" | "resend" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +54,14 @@ export function SignupCode({
       if (error) return setError(verifyErrorMessage(error));
       setVerified(true);
       setInfo("Email confirmed. Signing you in…");
-      await onConfirmed();
+      // Whoever proves the inbox owns the account: if the address had an older unconfirmed sign-up
+      // (maybe by someone else), Supabase keeps THAT password. Set the one typed now and end any other
+      // session of this account.
+      if (password && password.length >= 8) {
+        await sb.auth.updateUser({ password }).catch(() => undefined);
+        await sb.auth.signOut({ scope: "others" }).catch(() => undefined);
+      }
+      if (!(await onConfirmed())) onFailed();
     } catch (err) {
       setError(verifyErrorMessage(err as Error));
     } finally {
@@ -69,7 +81,7 @@ export function SignupCode({
       const { error } = await sb.auth.resend({
         type: "signup",
         email,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(new URLSearchParams(window.location.search).get("next") ?? "/account")}` },
       });
       if (error) {
         const s = waitSeconds(error);

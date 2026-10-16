@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound, Star } from "lucide-react";
+import { requestLeave } from "./unsaved-guard";
 import { useSession } from "../account/session-context";
 import { LeafMark } from "../layout/logo";
 import { DevBadge } from "../ui/feedback";
@@ -52,6 +53,11 @@ export function AdminShell({
   const items = NAV.filter((n) => role === "admin" || !n.adminOnly);
 
   // Close the mobile menu after navigating.
+  // The admin panel has no shop header: no extra scroll offset for in-page links here.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--header-h", "0px");
+    return () => { document.documentElement.style.removeProperty("--header-h"); };
+  }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- close menu on route change
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -61,11 +67,19 @@ export function AdminShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  async function signOut() {
-    setSigningOut(true);
-    await logout();
-    // Full page load so nothing from the signed-in panel stays on screen.
-    window.location.assign("/admin/login");
+  function signOut() {
+    // Unsaved edits on this page? Ask first (Save / Discard / Stay) — before the session ends.
+    requestLeave(async () => {
+      setSigningOut(true);
+      try {
+        await logout();
+        // Full page load so nothing from the signed-in panel stays on screen.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload clears the signed-in panel
+        window.location.assign("/admin/login");
+      } catch {
+        setSigningOut(false);
+      }
+    });
   }
 
   const nav = (

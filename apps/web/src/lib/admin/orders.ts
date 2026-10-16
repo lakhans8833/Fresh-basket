@@ -2,19 +2,20 @@ import "server-only";
 import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
 import { pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
-import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
+import { getOrderById, hydrateOrders, ORDER_COLUMNS, releaseExpired, type OrderRow } from "../orders";
 import { notificationSetup, notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
 import { cancelPaymentLinkFor } from "../payments/link-cancel";
 import { getSettings, supportGaps } from "../settings";
 import { serviceAreaMismatches, toArea } from "../delivery";
 
 /**
- * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
- * Needs `left join delivery_slots s on s.id = o.slot_id`; if the slot was deleted, the end of the
- * delivery day counts.
+ * Overdue delivery: a confirmed order (placed / packed / out for delivery) whose delivery slot has
+ * ended (India time) and that still isn't delivered. Orders without a slot (time agreed on WhatsApp)
+ * count as overdue after the end of their delivery day. Unconfirmed WhatsApp orders are NOT overdue —
+ * they have their own "to confirm" count and confirmation window.
+ * Needs `left join delivery_slots s on s.id = o.slot_id`.
  */
-/** Overdue: the delivery slot has ended (India time) and the order still isn't delivered. */
-export const LATE_SQL = `(o.status in ('placed','pending_confirmation','packed','out_for_delivery') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+export const LATE_SQL = `(o.status in ('placed','packed','out_for_delivery') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
 
 /**
  * Low stock, judged per PRODUCT for stock-by-weight items (their sizes share one total: low when it
@@ -24,8 +25,8 @@ export const LATE_SQL = `(o.status in ('placed','pending_confirmation','packed',
 const LOW_STOCK_SQL = `
   with packs as (
     select p.id as product_id, p.name, p.stock_grams, v.id as variant_id, v.label, v.stock, pack_label_grams(v.label) as g
-      from product_variants v join products p on p.id = v.product_id
-     where v.active and p.active
+      from product_variants v join products p on p.id = v.product_id join categories c on c.id = p.category_id
+     where v.active and p.active and c.active
   ), weight as (
     select product_id, name, stock_grams, min(g) as smallest from packs
      where stock_grams is not null group by product_id, name, stock_grams having bool_and(g is not null and g > 0)
@@ -93,10 +94,16 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
       await c.query("select cancel_order($1, $2, $3)", [id, `admin:${actorId}`, note || "Cancelled by store"]);
       return;
     }
-    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold.
+    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold. An order WITHOUT a slot
+    // (time agreed on WhatsApp) confirmed after its day has passed gets today's date, so it isn't
+    // "overdue" the moment it's confirmed.
     await c.query(
-      "update orders set status = $2, reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end where id = $1",
-      [id, to],
+      `update orders set status = $2,
+              reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end,
+              delivery_date = case when $3 = 'pending_confirmation' and slot_id is null
+                                   then greatest(delivery_date, (now() at time zone 'Asia/Kolkata')::date) else delivery_date end
+        where id = $1`,
+      [id, to, from],
     );
     await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,$4)", [id, to, note ?? null, `admin:${actorId}`]);
   });
@@ -154,9 +161,7 @@ export async function adminStats() {
          (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
     ),
     query<OrderRow>(
-      `select o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount, o.coupon_code,
-              o.delivery_fee, o.total, to_char(o.delivery_date,'YYYY-MM-DD') as delivery_date, o.slot_label, o.address, o.customer_note,
-              o.reservation_expires_at, o.razorpay_order_id, o.created_at
+      `select ${ORDER_COLUMNS}
          from orders o order by created_at desc limit 8`,
     ),
     query(`select * from (${LOW_STOCK_SQL}) ls order by "out" desc, "productName", label limit 10`),

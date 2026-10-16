@@ -47,7 +47,8 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
    * After signing in: continue only once the server confirms the session. A failed check keeps the
    * session and offers a retry; "no session after all" asks to sign in again. Never navigates silently.
    */
-  async function done() {
+  /** Returns true when the session is confirmed and we're moving on; false → the caller unlocks its form. */
+  async function done(): Promise<boolean> {
     setError(null);
     setSessionProblem(false);
     const r = await refresh();
@@ -56,7 +57,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
       // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
       router.replace(next);
       router.refresh();
-      return;
+      return true;
     }
     if (r.status === "signed_out") {
       setCheckFailed(false);
@@ -68,6 +69,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
       setError("You're signed in, but we couldn't load your account just now (connection or server problem). Please try again.");
     }
     setBusy(null);
+    return false;
   }
 
   async function devLogin(e?: FormEvent, preset?: { email: string; name: string }) {
@@ -231,7 +233,9 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
               email={confirming.email}
               justSent={confirming.justSent}
               onConfirmed={done}
+              password={password}
               onCancel={() => { setConfirming(null); setTab("signin"); setError(null); setInfo(null); }}
+              onFailed={() => { setConfirming(null); setTab("signin"); }}
             />
           ) : (
           <>

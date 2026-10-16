@@ -196,7 +196,7 @@ describe("3. late payment: slot checked in the same transaction", () => {
     ["inactive", async (s: string) => { await query("update delivery_slots set active = false where id = $1", [s]); }, /no longer offered/],
     ["closed (cutoff passed)", async (s: string, o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, today]); await query("update delivery_slots set start_time = '00:00', end_time = '00:30' where id = $1", [s]); }, /had closed/],
     ["in the past", async (_s: string, o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, addDays(today, -1)]); }, /date had passed/],
-  ])("slot %s → revived atomically with no slot for today and an explanatory event", async (_name, breakIt, note) => {
+  ])("slot %s → revived atomically without the slot (keeping a future day) and an explanatory event", async (name, breakIt, note) => {
     const s = await makeSlot(5);
     const { order } = await placeOrder(CUSTOMER, input({ slotId: s }));
     await expire(order.id);
@@ -204,7 +204,9 @@ describe("3. late payment: slot checked in the same transaction", () => {
     const before = await stockOf(tomato);
     expect(await pay(order.id, order.total)).toBe("paid_late");
     const o = (await getOrderById(order.id))!;
-    expect(o).toMatchObject({ status: "placed", paymentStatus: "paid", slotLabel: NO_SLOT_LABEL, deliveryDate: today });
+    // The chosen day is kept when it's still ahead (full / switched-off slot); a past or closed day becomes today.
+    const expectedDate = name === "full" || name === "inactive" ? tomorrow : today;
+    expect(o).toMatchObject({ status: "placed", paymentStatus: "paid", slotLabel: NO_SLOT_LABEL, deliveryDate: expectedDate });
     expect((await queryOne<{ slot_id: string | null }>("select slot_id from orders where id = $1", [order.id]))!.slot_id).toBeNull();
     expect(await lastNote(order.id)).toMatch(note);
     expect(await stockOf(tomato)).toBe(before - 4);

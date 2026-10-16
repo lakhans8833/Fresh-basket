@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import {
-  computeQuote, describeIssue, effectiveMinOrder, formatINR,
+  computeQuote, describeIssue, effectiveMinOrder, formatINR, MAX_QTY_PER_LINE,
   type CouponRule, type DeliveryArea, type PricedLineInput, type Quote, type QuoteResponse,
 } from "@freshbasket/shared";
 import { pool } from "./db";
@@ -71,18 +71,21 @@ export async function buildQuote(
   // what the OTHER lines of the same product leave (e.g. 20 kg total, 15 × 1 kg in the cart → at
   // most 10 × 500 g). Every line passes exactly when the product's total fits, so an oversized
   // basket flags each size involved (not just whichever line happened to come last).
+  // Only lines that can actually be bought use stock: a switched-off size or an invalid quantity
+  // is reported on its own and must not make the other sizes look out of stock.
+  const sellable = (r: VariantRow) => r.active && r.product_active && Number.isInteger(qty.get(r.id)) && qty.get(r.id)! >= 1 && qty.get(r.id)! <= MAX_QTY_PER_LINE;
   const gramsInBasket = new Map<string, number>();
   for (const r of vrows) {
-    if (r.stock_grams !== null && r.stock_grams !== undefined && r.grams) {
+    if (sellable(r) && r.stock_grams !== null && r.stock_grams !== undefined && r.grams) {
       gramsInBasket.set(r.product_id, (gramsInBasket.get(r.product_id) ?? 0) + qty.get(r.id)! * r.grams);
     }
   }
   const linesPerProduct = new Map<string, number>();
-  for (const r of vrows) linesPerProduct.set(r.product_id, (linesPerProduct.get(r.product_id) ?? 0) + 1);
+  for (const r of vrows) if (sellable(r)) linesPerProduct.set(r.product_id, (linesPerProduct.get(r.product_id) ?? 0) + 1);
   const isShared = (r: VariantRow) => r.stock_grams !== null && r.stock_grams !== undefined && Boolean(r.grams);
   const available = (r: VariantRow): number => {
     if (!isShared(r)) return r.stock;
-    const others = (gramsInBasket.get(r.product_id) ?? 0) - qty.get(r.id)! * r.grams!;
+    const others = (gramsInBasket.get(r.product_id) ?? 0) - (sellable(r) ? qty.get(r.id)! * r.grams! : 0);
     return Math.max(0, Math.floor((Number(r.stock_grams) - others) / r.grams!));
   };
 

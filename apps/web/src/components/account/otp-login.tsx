@@ -16,7 +16,7 @@ const RESEND_SECONDS = 60;
  * New customers get an account automatically on their first code. The code is checked by
  * Supabase Auth (verifyOtp); nothing about it is stored or checked in this app.
  */
-export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () => Promise<void> }) {
+export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () => Promise<boolean> }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -104,7 +104,14 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
       }
       setVerified(true);
       setInfo("Signed in. Loading your account…");
-      await onSignedIn();
+      if (!(await onSignedIn())) {
+        // The sign-in didn't stick (the page shows why): the code is used up, so start again.
+        setVerified(false);
+        setInfo(null);
+        setCode("");
+        setWait(0);
+        setStep("email");
+      }
     } catch (err) {
       setError(verifyErrorMessage(err as Error));
     } finally {

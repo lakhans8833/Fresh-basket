@@ -25,7 +25,7 @@ export type OrderRow = {
   unavailable_item_preference?: "call" | "remove" | null;
 };
 
-const ORDER_COLUMNS = `o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount,
+export const ORDER_COLUMNS = `o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount,
   o.coupon_code, o.delivery_fee, o.total, to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.slot_label, o.address,
   o.customer_note, o.unavailable_item_preference, o.reservation_expires_at, o.razorpay_order_id, o.created_at,
   o.channel, o.upi_reference, o.razorpay_payment_link_url, o.whatsapp_updates`;
@@ -483,6 +483,8 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
     if (isIdempotencyConflict(e)) {
       const again = await findSame(pool);
       if (again.rows[0]) return { order: (await getOrderById(again.rows[0].id))!, created: false };
+      // Same retry key, but different details (e.g. another mobile number): a clear 409, not a raw 500.
+      throw conflict("This order request was already used with different details. Please refresh the page and try again.");
     }
     throw e;
   }
@@ -525,10 +527,14 @@ export async function customerCancel(userId: string, orderId: string) {
  * every pack size from the order shares the product's one total). Unavailable items and price changes
  * are reported so the customer sees them; nothing is added at an old price.
  */
-export async function reorderItems(userId: string, orderId: string) {
+export async function reorderItems(userId: string, orderId: string, cart: { variantId: string; quantity: number }[] = []) {
   const order = await getMyOrder(userId, orderId);
   if (!order) throw notFound("Order not found.");
-  const ids = order.items.map((i) => i.variantId).filter((x): x is string => Boolean(x));
+  // What's already in the basket counts: same pack (the order tops it up, never adds on top of the
+  // past quantity) and, for weight products, every other size drawing from the same total.
+  const inCart = new Map<string, number>();
+  for (const l of cart) inCart.set(l.variantId, (inCart.get(l.variantId) ?? 0) + l.quantity);
+  const ids = [...new Set([...order.items.map((i) => i.variantId).filter((x): x is string => Boolean(x)), ...inCart.keys()])];
   const rows = await query<{
     id: string; stock: number; active: boolean; slug: string; price: number; label: string; product_id: string;
     product_name: string; stock_grams: number | null; grams: number | null; image_url: string | null;
@@ -542,9 +548,16 @@ export async function reorderItems(userId: string, orderId: string) {
   );
   const avail = new Map(rows.map((r) => [r.id, r]));
   const gramsLeft = new Map<string, number>();
+  for (const r of rows) {
+    const q = inCart.get(r.id) ?? 0;
+    if (q > 0 && r.stock_grams !== null && r.grams) {
+      gramsLeft.set(r.product_id, (gramsLeft.get(r.product_id) ?? r.stock_grams) - q * r.grams);
+    }
+  }
   const items: {
     variantId: string; productSlug: string; productName: string; variantLabel: string; imageUrl: string | null;
-    quantity: number; requested: number; price: number; oldPrice: number;
+    /** How many to ADD to the basket now (on top of `inCart`). */
+    quantity: number; requested: number; inCart: number; price: number; oldPrice: number;
   }[] = [];
   const skipped: { productName: string; variantLabel: string; reason: "unavailable" | "out_of_stock" }[] = [];
   for (const it of order.items) {
@@ -553,20 +566,22 @@ export async function reorderItems(userId: string, orderId: string) {
       skipped.push({ productName: it.productName, variantLabel: it.variantLabel, reason: "unavailable" });
       continue;
     }
-    let canHave = v.stock;
+    const have = inCart.get(v.id) ?? 0;
+    let canAdd = Math.max(0, v.stock - have);
     if (v.stock_grams !== null && v.grams) {
       const left = gramsLeft.get(v.product_id) ?? v.stock_grams;
-      canHave = Math.floor(left / v.grams);
+      canAdd = Math.max(0, Math.floor(left / v.grams));
     }
-    const qty = Math.min(it.quantity, canHave, MAX_QTY_PER_LINE);
-    if (qty <= 0) {
+    const add = Math.max(0, Math.min(it.quantity - have, canAdd, MAX_QTY_PER_LINE - have));
+    if (add <= 0 && have === 0) {
       skipped.push({ productName: it.productName, variantLabel: it.variantLabel, reason: "out_of_stock" });
       continue;
     }
-    if (v.stock_grams !== null && v.grams) gramsLeft.set(v.product_id, (gramsLeft.get(v.product_id) ?? v.stock_grams) - qty * v.grams);
+    if (v.stock_grams !== null && v.grams) gramsLeft.set(v.product_id, (gramsLeft.get(v.product_id) ?? v.stock_grams) - add * v.grams);
+    inCart.set(v.id, have + add);
     items.push({
       variantId: v.id, productSlug: v.slug, productName: v.product_name, variantLabel: v.label, imageUrl: v.image_url,
-      quantity: qty, requested: it.quantity, price: v.price, oldPrice: it.unitPrice,
+      quantity: add, requested: it.quantity, inCart: have, price: v.price, oldPrice: it.unitPrice,
     });
   }
   return { items, skipped };

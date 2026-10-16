@@ -18,7 +18,7 @@ const TABS = [
 export function MobileTabBar() {
   const pathname = usePathname();
   const { count, hydrated } = useCart();
-  const { profile, loading } = useSession();
+  const { profile } = useSession();
   if (pathname.startsWith("/checkout") || pathname.startsWith("/pay")) return null;
   const n = hydrated ? count : 0;
   return (
@@ -26,7 +26,8 @@ export function MobileTabBar() {
       <ul className="grid grid-cols-4">
         {TABS.map((tab) => {
           // Signed out, the account tab is a "Sign in" tab (visible label and accessible name agree).
-          const signIn = tab.href === "/account" && !profile && !loading;
+          // (The profile comes from the server on first render, so there's no signed-out flash.)
+          const signIn = tab.href === "/account" && !profile;
           const { icon: Icon, match } = tab;
           const href = signIn ? "/login" : tab.href;
           const label = signIn ? "Sign in" : tab.label;

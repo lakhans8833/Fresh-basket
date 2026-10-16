@@ -70,7 +70,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
               <li key={`p-${c.name}`}>{c.name}: price {c.price > c.oldPrice ? "went up" : "went down"} from {formatINR(c.oldPrice)} to <b>{formatINR(c.price)}</b></li>
             ))}
             {buyAgainNotice.reduced.map((c) => (
-              <li key={`q-${c.name}`}>{c.name}: only {c.quantity} of {c.requested} in stock — added {c.quantity}</li>
+              <li key={`q-${c.name}`}>{c.name}: not enough stock for all {c.requested} — your cart now has {c.quantity}</li>
             ))}
             {buyAgainNotice.skipped.map((c) => (
               <li key={`s-${c.name}`}>{c.name}: {c.reason === "out_of_stock" ? "out of stock" : "no longer available"} — not added</li>

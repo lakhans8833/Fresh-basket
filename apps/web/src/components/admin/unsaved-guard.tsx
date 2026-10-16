@@ -11,9 +11,21 @@ import { Button } from "../ui/button";
  *   Save / Discard / Stay. Save runs the page's own save and only leaves if it succeeded.
  * After a successful save the page is no longer dirty, so no warning appears.
  */
+const LEAVE_EVENT = "fb:request-leave";
+
+/**
+ * For actions that leave the page without a link (e.g. Sign out): asks every mounted guard first.
+ * `proceed` runs right away when nothing is unsaved, or after the admin chooses Save/Discard.
+ */
+export function requestLeave(proceed: () => void) {
+  const ev = new CustomEvent(LEAVE_EVENT, { cancelable: true, detail: { proceed } });
+  if (window.dispatchEvent(ev)) proceed();
+}
+
 export function useUnsavedGuard({ dirty, save, saving }: { dirty: boolean; save?: () => Promise<boolean>; saving?: boolean }) {
   const router = useRouter();
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  // Where the admin wanted to go: a page (link) or an action (sign out).
+  const [pending, setPending] = useState<{ href: string } | { run: () => void } | null>(null);
   const dirtyRef = useRef(dirty);
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -29,37 +41,46 @@ export function useUnsavedGuard({ dirty, save, saving }: { dirty: boolean; save?
       if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
       const url = new URL(a.href, window.location.href);
       if (url.origin !== window.location.origin) return;
-      if (url.pathname === window.location.pathname && url.search === window.location.search) return; // same page / #hash
+      // Same page with another filter / #hash: the page (and the edits) stay mounted — nothing is lost.
+      if (url.pathname === window.location.pathname) return;
       e.preventDefault();
       e.stopPropagation();
-      setPendingHref(`${url.pathname}${url.search}${url.hash}`);
+      setPending({ href: `${url.pathname}${url.search}${url.hash}` });
+    };
+    const onLeaveRequest = (e: Event) => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      setPending({ run: (e as CustomEvent<{ proceed: () => void }>).detail.proceed });
     };
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", onClick, true);
+    window.addEventListener(LEAVE_EVENT, onLeaveRequest);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", onClick, true);
+      window.removeEventListener(LEAVE_EVENT, onLeaveRequest);
     };
   }, [dirty]);
 
-  const leave = (href: string) => {
+  const leave = (to: { href: string } | { run: () => void }) => {
     dirtyRef.current = false;
-    setPendingHref(null);
-    router.push(href);
+    setPending(null);
+    if ("href" in to) router.push(to.href);
+    else to.run();
   };
 
   const dialog = (
     <LeaveDialog
-      open={pendingHref !== null}
+      open={pending !== null}
       saving={Boolean(saving)}
       canSave={Boolean(save)}
-      onStay={() => setPendingHref(null)}
-      onDiscard={() => pendingHref && leave(pendingHref)}
+      onStay={() => setPending(null)}
+      onDiscard={() => pending && leave(pending)}
       onSave={async () => {
-        if (!save || !pendingHref) return;
-        const href = pendingHref;
-        if (await save()) leave(href);
-        else setPendingHref(null); // save failed: stay and show the form's errors
+        if (!save || !pending) return;
+        const to = pending;
+        if (await save()) leave(to);
+        else setPending(null); // save failed: stay and show the form's errors
       }}
     />
   );
@@ -85,6 +106,8 @@ function LeaveDialog({
         e.preventDefault();
         if (!saving) onStay();
       }}
+      // Browsers may close a modal on a repeated Escape even when cancel is prevented: keep it in step.
+      onClose={() => { if (open && !ref.current?.open) onStay(); }}
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-[var(--radius-card)] border border-line bg-ivory p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40"
     >
       {open ? (

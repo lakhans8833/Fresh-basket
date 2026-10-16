@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
+import { api } from "@/lib/client/api";
 import { Button, ButtonLink } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
@@ -35,6 +36,7 @@ export function ResetPasswordForm({
       return;
     }
     setDone(true);
+    void api("/api/auth/recovery-done", { method: "POST" }).catch(() => undefined);
     setTimeout(() => {
       router.replace(next);
       router.refresh();

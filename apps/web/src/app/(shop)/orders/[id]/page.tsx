@@ -5,7 +5,7 @@ import { getMyOrder } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
 import { upiPaymentInfo } from "@/lib/payments/upi";
 import { OrderDetail } from "@/components/account/order-detail";
-import { SupportContacts } from "@/components/info/support-contacts";
+import { hasSupportContacts, SupportContacts } from "@/components/info/support-contacts";
 
 export const metadata: Metadata = { title: "Order", robots: { index: false } };
 
@@ -21,7 +21,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   return (
     <OrderDetail
       order={order} justPlaced={(await searchParams).placed === "1"} upi={upi}
-      support={<SupportContacts settings={settings} orderNumber={order.orderNumber} title="Help with this order" />}
+      support={hasSupportContacts(settings) ? <SupportContacts settings={settings} orderNumber={order.orderNumber} title="Help with this order" /> : undefined}
     />
   );
 }

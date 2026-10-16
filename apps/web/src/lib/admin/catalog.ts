@@ -129,7 +129,8 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
     );
     await c.query("update product_variants set active = false where product_id = $1 and not (id = any($2::uuid[]))", [productId, keep]);
     if (d.stockGrams !== undefined) {
-      if (d.stockGrams !== null && d.variants.some((v) => packGrams(v.label) === null)) {
+      // Only sizes on sale matter: a hidden size without a weight is kept for old orders, not sold.
+      if (d.stockGrams !== null && d.variants.some((v) => v.active !== false && packGrams(v.label) === null)) {
         throw badRequest("Total stock in kg only works when every option is a weight like “500 g” or “1 kg”.");
       }
       // Setting a total re-derives every weight pack's stock (database trigger).

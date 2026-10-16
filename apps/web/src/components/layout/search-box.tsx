@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowRight, Loader2, Plus, Search, X } from "lucide-react";
-import { formatINR, type ProductSummary } from "@freshbasket/shared";
+import { formatINR, type ProductSummary, addablePacks, MAX_QTY_PER_LINE } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "../product/product-image";
@@ -88,7 +88,7 @@ export function SearchBox() {
       const next = new URLSearchParams(params.toString());
       next.delete("q");
       next.delete("page");
-      router.push(next.size ? `/shop?${next}` : "/shop");
+      router.push(next.toString() ? `/shop?${next}` : "/shop");
     }
   }
 
@@ -179,7 +179,8 @@ function SuggestionRow({ id, product, active, onHover }: { id: string; product: 
   if (!v) return null;
   const out = v.stock <= 0;
   const pct = percentOff(v.price, v.mrp);
-  const full = hydrated && quantityOf(v.id) >= v.stock;
+  // Weight products: other sizes already in the cart use the same stock; also respects the per-line cap.
+  const full = hydrated && addablePacks(product, v.id, quantityOf, MAX_QTY_PER_LINE) <= 0;
 
   return (
     <li id={id} role="option" aria-selected={active} onPointerEnter={onHover} className={cn("relative flex items-center gap-3 px-4 py-2.5", active && "bg-lime-50")}>
