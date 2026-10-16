@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { MapPin, Clock, Pencil, Plus, Trash2 } from "lucide-react";
 import { adminDeliveryAreaSchema, adminSlotSchema, effectiveMinOrder, formatINR, formatSlotTime } from "@freshbasket/shared";
@@ -89,7 +90,7 @@ function AreasSection() {
       {data ? (
         <p className="border-b border-line px-5 py-3 text-sm text-ink-soft">
           <b>Minimum order rule:</b> customers must reach the <b>higher</b> of the area&apos;s own minimum and the store-wide minimum
-          {storeMin ? <> (currently <b>{formatINR(storeMin)}</b>, set in <a href="/admin/settings" className="font-semibold text-leaf-600 underline">Settings</a>)</> : " (none set in Settings)"}. The Min. order column shows what customers see at checkout.
+          {storeMin ? <> (currently <b>{formatINR(storeMin)}</b>, set in <Link href="/admin/settings" className="font-semibold text-leaf-600 underline">Settings</Link>)</> : " (none set in Settings)"}. The Min. order column shows what customers see at checkout.
         </p>
       ) : null}
       {mismatch.size ? (
