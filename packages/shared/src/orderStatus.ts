@@ -92,3 +92,19 @@ export const NO_SLOT_LABEL = "Delivery time confirmed on WhatsApp";
 
 /** Steps shown on the tracking timeline (cancelled is shown separately). */
 export const TRACKING_STEPS: OrderStatus[] = ["placed", "packed", "out_for_delivery", "delivered"];
+
+/** What to do if an item can't be supplied. No automatic substitution: changes need the customer's OK. */
+export const UNAVAILABLE_ITEM_PREFERENCES = ["call", "remove"] as const;
+export type UnavailableItemPreference = (typeof UNAVAILABLE_ITEM_PREFERENCES)[number];
+export const UNAVAILABLE_ITEM_LABEL: Record<UnavailableItemPreference, { title: string; detail: string; short: string }> = {
+  call: {
+    title: "Call me about unavailable items",
+    detail: "We'll call or WhatsApp you before changing anything. No substitutes or extra charges without your OK.",
+    short: "Call customer before any change",
+  },
+  remove: {
+    title: "Remove unavailable items and refund",
+    detail: "We'll leave them out and you pay only for what's delivered (refunded if you paid online).",
+    short: "Remove item, refund — no substitute",
+  },
+};

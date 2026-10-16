@@ -1,5 +1,5 @@
 import type { Paise } from "./money";
-import type { OrderStatus, PaymentMethod, PaymentStatus } from "./orderStatus";
+import type { OrderStatus, PaymentMethod, PaymentStatus, UnavailableItemPreference } from "./orderStatus";
 import type { Quote } from "./pricing";
 
 /** Shapes returned by the HTTP API (apps/web/src/app/api). Shared by web and mobile. */
@@ -180,6 +180,8 @@ export interface Order {
   createdAt: string;
   reservationExpiresAt: string | null;
   customerNote: string | null;
+  /** What to do if an item can't be supplied (null on orders placed before this was asked). */
+  unavailableItems: UnavailableItemPreference | null;
   /** "web" checkout or "whatsapp" order. */
   channel: "web" | "whatsapp";
   /** UTR the customer reported for a UPI payment (not proof of payment). */

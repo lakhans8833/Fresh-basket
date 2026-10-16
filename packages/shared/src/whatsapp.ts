@@ -91,6 +91,8 @@ export interface WhatsAppOrder {
   trackUrl?: string | null;
   /** Chosen delivery day + slot, e.g. "Fri, 16 Oct · Morning, 07:00–10:00". */
   delivery?: string | null;
+  /** What to do if an item isn't available, e.g. "Call me about unavailable items". */
+  ifUnavailable?: string | null;
 }
 
 /** Short human-friendly reference so the seller and customer can refer to the order. */
@@ -147,6 +149,7 @@ export function buildWhatsAppOrderMessage(o: WhatsAppOrder): string {
     lines.push(`Payment: ${cleanText(o.paymentMethod, 60)}${o.paymentStatus && o.paymentStatus !== o.paymentMethod ? ` (${cleanText(o.paymentStatus, 40)})` : ""}`);
   }
   if (o.payLink) lines.push(`Pay online: ${o.payLink}`);
+  if (o.ifUnavailable) lines.push(`If an item isn't available: ${cleanText(o.ifUnavailable, 80)}`);
   if (c.notes) {
     lines.push("");
     lines.push(`Notes: ${cleanText(c.notes, 200, true)}`);

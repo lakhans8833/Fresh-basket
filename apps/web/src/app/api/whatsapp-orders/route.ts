@@ -1,4 +1,4 @@
-import { buildWhatsAppOrderUrl, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, whatsappOrderSchema } from "@freshbasket/shared";
+import { buildWhatsAppOrderUrl, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, UNAVAILABLE_ITEM_LABEL, whatsappOrderSchema } from "@freshbasket/shared";
 import { clientIp, HttpError, json, parseBody, rateLimit, route } from "@/lib/http";
 import { getSession } from "@/lib/auth";
 import { placeWhatsAppOrder } from "@/lib/orders";
@@ -43,6 +43,7 @@ export const POST = route(async (req) => {
     paymentStatus: PAYMENT_STATUS_LABEL[order.paymentStatus],
     payLink,
     trackUrl,
+    ifUnavailable: order.unavailableItems ? UNAVAILABLE_ITEM_LABEL[order.unavailableItems].title : null,
     delivery: input.slotId ? `${new Date(`${order.deliveryDate}T12:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} · ${order.slotLabel}` : null,
   });
 

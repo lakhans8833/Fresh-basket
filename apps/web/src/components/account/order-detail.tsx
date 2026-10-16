@@ -6,8 +6,7 @@ import { useEffect, useState } from "react";
 import { Check, PackageCheck, Truck, ClipboardList, Home as HomeIcon, XCircle, RotateCcw, CreditCard, PartyPopper, Clock, ExternalLink } from "lucide-react";
 import {
   canCustomerCancel, formatINR, NO_SLOT_LABEL, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
-  type Order, type OrderStatus, type PlaceOrderResponse,
-} from "@freshbasket/shared";
+  type Order, type OrderStatus, type PlaceOrderResponse, UNAVAILABLE_ITEM_LABEL } from "@freshbasket/shared";
 import { UpiPayPanel, type UpiInfo } from "./upi-pay-panel";
 import { api } from "@/lib/client/api";
 import { useCart } from "../cart/cart-context";
@@ -219,6 +218,11 @@ export function OrderDetail({
             <p className="mt-3 font-medium text-ink">{order.address.fullName}{order.address.phone ? ` · ${order.address.phone}` : ""}</p>
             <p className="text-muted">{[order.address.line1, order.address.line2, order.address.landmark, order.address.city, order.address.state, order.address.pincode].filter(Boolean).join(", ")}</p>
             {order.customerNote ? <p className="mt-3 rounded-xl bg-sage-50 p-3 text-sm text-ink-soft">“{order.customerNote}”</p> : null}
+            {order.unavailableItems ? (
+              <p className="mt-3 text-sm text-ink-soft">
+                <span className="font-medium text-ink">If an item isn&apos;t available:</span> {UNAVAILABLE_ITEM_LABEL[order.unavailableItems].title.replace(/^./, (c) => c.toLowerCase())}.
+              </p>
+            ) : null}
           </section>
           <section className="rounded-[var(--radius-card)] border border-line bg-white p-5 text-[0.9375rem]">
             <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.1em] text-muted">Payment</h3>

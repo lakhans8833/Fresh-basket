@@ -6,8 +6,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Banknote, Building2, CalendarClock, CheckCircle2, CreditCard, ExternalLink, Home, MapPin, NotebookPen, Pencil, Phone, QrCode, ShieldCheck, ShoppingBasket, Truck, UserRound } from "lucide-react";
 import {
   buildWhatsAppUrl, formatINR, formatSlotTime, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
-  type QuoteIssue, type SlotOption, type WhatsAppCustomer, type WhatsAppCustomerInput,
-} from "@freshbasket/shared";
+  type QuoteIssue, type SlotOption, type WhatsAppCustomer, type WhatsAppCustomerInput, type UnavailableItemPreference } from "@freshbasket/shared";
+import { UnavailableItemsChoice } from "./unavailable-items-choice";
 import { api, ApiError, isDefiniteRejection, newIdempotencyKey } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
 import { UpiPayPanel, type UpiInfo } from "../account/upi-pay-panel";
@@ -80,6 +80,7 @@ export function WhatsAppOrderView({
   const [remember, setRemember] = useState(true);
   const [method, setMethod] = useState<WaMethod | null>(paymentMethods[0] ?? null);
   const [whatsappUpdates, setWhatsappUpdates] = useState(false);
+  const [unavailableItems, setUnavailableItems] = useState<UnavailableItemPreference>("call");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [review, setReview] = useState<WhatsAppCustomer | null>(null);
@@ -203,6 +204,7 @@ export function WhatsAppOrderView({
           paymentMethod: method,
           couponCode: profile ? couponCode : null,
           whatsappUpdates,
+          unavailableItems,
           idempotencyKey: idemKey.current,
           deliveryDate: chosenSlot ? chosenSlot.date : null,
           slotId: chosenSlot ? chosenSlot.slotId : null,
@@ -514,6 +516,7 @@ export function WhatsAppOrderView({
           </fieldset></div>
 
           <div className="mt-6 space-y-4">
+            <UnavailableItemsChoice value={unavailableItems} onChange={setUnavailableItems} />
             <Checkbox label="Remember my details on this device" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             <Checkbox
               label="Send me order updates on WhatsApp (confirmed, packed, out for delivery, delivered)"

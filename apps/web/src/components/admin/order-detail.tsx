@@ -4,12 +4,10 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowLeft, Printer, PackageCheck, Truck, Home as HomeIcon, XCircle, Banknote, RotateCcw, Phone, MapPin, CalendarClock, StickyNote, ClipboardList, Clock, User,
-  BadgeCheck, MessageCircle,
-} from "lucide-react";
+  BadgeCheck, MessageCircle, PhoneCall } from "lucide-react";
 import {
   allowedAdminTransitions, formatINR, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL,
-  type Order, type OrderStatus,
-} from "@freshbasket/shared";
+  type Order, type OrderStatus, UNAVAILABLE_ITEM_LABEL } from "@freshbasket/shared";
 import { Checkbox, Input } from "../ui/form";
 import { api } from "@/lib/client/api";
 import { Button } from "../ui/button";
@@ -303,6 +301,15 @@ export function AdminOrderDetail({ id }: { id: string }) {
                     <p className="text-muted">{o.slotLabel}</p>
                   </div>
                 </li>
+                {o.unavailableItems ? (
+                  <li className={cn("flex gap-2.5 rounded-xl p-3", o.unavailableItems === "call" ? "bg-[#fdf6e7]" : "bg-sage-50")}>
+                    <PhoneCall className="mt-0.5 size-4 shrink-0 text-forest-700" aria-hidden />
+                    <p className="text-ink-soft">
+                      <span className="font-semibold text-forest-800">If an item isn&apos;t available: </span>{UNAVAILABLE_ITEM_LABEL[o.unavailableItems].short}.
+                      <span className="block text-xs text-muted">No substitutes or extra charges without the customer&apos;s OK.</span>
+                    </p>
+                  </li>
+                ) : null}
                 {o.customerNote ? (
                   <li className="flex gap-2.5 rounded-xl bg-lime-50 p-3">
                     <StickyNote className="mt-0.5 size-4 shrink-0 text-forest-700" aria-hidden />
@@ -475,6 +482,7 @@ function PackingSlip({ order: o, storeName }: { order: AdminOrder; storeName: st
         <div>
           <p className="font-bold">Payment</p>
           <p>{o.paymentMethod === "cod" && o.paymentStatus === "cod_pending" ? `CASH ON DELIVERY — collect ${formatINR(o.total)}` : `${PAYMENT_METHOD_LABEL[o.paymentMethod]} — ${PAYMENT_STATUS_LABEL[o.paymentStatus]}`}</p>
+          {o.unavailableItems ? <p className="mt-2"><b>If unavailable:</b> {UNAVAILABLE_ITEM_LABEL[o.unavailableItems].short} (no substitute without OK)</p> : null}
           {o.customerNote ? <p className="mt-2"><b>Note:</b> {o.customerNote}</p> : null}
         </div>
       </div>

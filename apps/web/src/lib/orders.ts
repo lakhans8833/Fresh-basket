@@ -22,11 +22,12 @@ export type OrderRow = {
   total: number; delivery_date: string; slot_label: string; address: Order["address"]; customer_note: string | null;
   reservation_expires_at: Date | null; razorpay_order_id: string | null; created_at: Date;
   channel: "web" | "whatsapp"; upi_reference: string | null; razorpay_payment_link_url: string | null; whatsapp_updates: boolean;
+  unavailable_item_preference?: "call" | "remove" | null;
 };
 
 const ORDER_COLUMNS = `o.id, o.order_number, o.user_id, o.status, o.payment_method, o.payment_status, o.subtotal, o.discount,
   o.coupon_code, o.delivery_fee, o.total, to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.slot_label, o.address,
-  o.customer_note, o.reservation_expires_at, o.razorpay_order_id, o.created_at,
+  o.customer_note, o.unavailable_item_preference, o.reservation_expires_at, o.razorpay_order_id, o.created_at,
   o.channel, o.upi_reference, o.razorpay_payment_link_url, o.whatsapp_updates`;
 
 export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
@@ -58,6 +59,7 @@ export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
     slotLabel: r.slot_label,
     address: r.address,
     customerNote: r.customer_note,
+    unavailableItems: r.unavailable_item_preference ?? null,
     reservationExpiresAt: r.reservation_expires_at ? r.reservation_expires_at.toISOString() : null,
     createdAt: r.created_at.toISOString(),
     channel: r.channel ?? "web",
@@ -163,6 +165,7 @@ interface CoreOrder {
   channel: "web" | "whatsapp";
   deliveryDate: string;
   customerNote: string | null | undefined;
+  unavailableItems: "call" | "remove";
   idempotencyKey: string;
   fingerprint: string;
   whatsappUpdates: boolean;
@@ -197,9 +200,9 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   const { rows: orows } = await c.query<{ id: string }>(
     `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
                          delivery_fee, total, delivery_date, slot_id, slot_label, address, customer_note, idempotency_key,
-                         reservation_expires_at, request_fingerprint, channel, whatsapp_updates)
+                         reservation_expires_at, request_fingerprint, channel, whatsapp_updates, unavailable_item_preference)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-             case when $17::int is not null then now() + make_interval(mins => $17::int) end, $18, $19, $20)
+             case when $17::int is not null then now() + make_interval(mins => $17::int) end, $18, $19, $20, $21)
      returning id`,
     [
       o.userId, firstStatus, o.paymentMethod, prepaid ? "pending" : "cod_pending",
@@ -207,6 +210,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
       o.deliveryDate, slot?.id ?? null, slot?.label ?? NO_SLOT_LABEL,
       JSON.stringify(o.address), o.customerNote ?? null, o.idempotencyKey,
       prepaid || firstStatus === "pending_confirmation" ? hold : null, o.fingerprint, o.channel, o.whatsappUpdates,
+      o.unavailableItems,
     ],
   );
   const id = orows[0]!.id;
@@ -357,7 +361,8 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
 
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: input.couponCode, paymentMethod: input.paymentMethod, channel: "web",
-        deliveryDate: input.deliveryDate, customerNote: input.customerNote, idempotencyKey: input.idempotencyKey, fingerprint,
+        deliveryDate: input.deliveryDate, customerNote: input.customerNote, unavailableItems: input.unavailableItems ?? "call",
+        idempotencyKey: input.idempotencyKey, fingerprint,
         whatsappUpdates: Boolean(input.whatsappUpdates),
         slot: async (cc) => {
           const slot = await lockAndCheckSlot(cc, input.slotId, input.deliveryDate);
@@ -454,7 +459,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
       }
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
-        channel: "whatsapp", deliveryDate, customerNote: cu.notes || null,
+        channel: "whatsapp", deliveryDate, customerNote: cu.notes || null, unavailableItems: input.unavailableItems ?? "call",
         idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates),
         // Cash on delivery: the store confirms it after the customer's WhatsApp message arrives.
         needsConfirmation: true,

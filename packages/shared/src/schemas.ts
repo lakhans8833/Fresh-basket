@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MAX_LINES, MAX_QTY_PER_LINE } from "./pricing";
 import { isValidIndianMobile, normalizePhone, pincodeStateMessage, PINCODE_REGEX, stateMatchesPincode } from "./pincode";
-import { ORDER_STATUSES } from "./orderStatus";
+import { ORDER_STATUSES, UNAVAILABLE_ITEM_PREFERENCES } from "./orderStatus";
 import { UPI_ID_REGEX } from "./upi";
 import { whatsappCustomerSchema } from "./whatsapp";
 
@@ -57,6 +57,8 @@ export const placeOrderSchema = z.object({
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   paymentMethod: z.enum(["cod", "razorpay", "mock", "upi"]),
   customerNote: trimmed(300).optional().nullable(),
+  /** If an item can't be supplied: call first (default) or remove + refund. Never auto-substitute. */
+  unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
   /** Customer ticked "Send me order updates on WhatsApp". */
   whatsappUpdates: z.boolean().optional().default(false),
   /** Client-generated key so a double-click or retry never creates two orders. */
@@ -269,6 +271,7 @@ export const whatsappOrderSchema = z.object({
   paymentMethod: z.enum(["cod", "upi", "razorpay_link"]),
   couponCode: trimmed(32).toUpperCase().optional().nullable(),
   whatsappUpdates: z.boolean().optional().default(false),
+  unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
   idempotencyKey: z.string().min(8).max(80),
   /** Delivery date + slot chosen on the WhatsApp order page (both or neither). */
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
