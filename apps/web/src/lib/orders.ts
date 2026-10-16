@@ -288,11 +288,22 @@ export async function cancelOrder(orderId: string, actor: string, reason: string
   });
 }
 
+/**
+ * Customer cancellation. Ownership and the "not packed yet" rule are checked under the order's row lock
+ * in the same transaction as the cancellation, so staff packing it a moment earlier (or dispatching it)
+ * can't be overridden. Staff cancellations keep their wider rules (adminUpdateOrderStatus).
+ */
 export async function customerCancel(userId: string, orderId: string) {
-  const order = await getMyOrder(userId, orderId);
-  if (!order) throw notFound("Order not found.");
-  if (!canCustomerCancel(order.status)) throw conflict("This order can no longer be cancelled. Please contact support.");
-  await cancelOrder(orderId, "customer", "Cancelled by customer");
+  await tx(async (c) => {
+    const { rows } = await c.query<{ status: OrderStatus }>(
+      "select status from orders where id = $1 and user_id = $2 for update",
+      [orderId, userId],
+    );
+    const o = rows[0];
+    if (!o) throw notFound("Order not found.");
+    if (!canCustomerCancel(o.status)) throw conflict("This order can no longer be cancelled. Please contact support.");
+    await c.query("select cancel_order($1, $2, $3)", [orderId, "customer", "Cancelled by customer"]);
+  });
   return getMyOrder(userId, orderId);
 }
 
