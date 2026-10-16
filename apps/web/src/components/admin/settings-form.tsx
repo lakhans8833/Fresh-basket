@@ -207,7 +207,18 @@ function Editor({ initial }: { initial: StoreSettings }) {
       </Card>
 
       <Card aria-labelledby="support-h">
-        <CardHeader id="support-h" title="Customer support" description="Shown in the footer and on the contact page." />
+        <CardHeader id="support-h" title="Customer support" description="Shown in the footer, on the contact page and on each order page (Call / WhatsApp / Email). Empty fields are simply hidden." />
+        {(() => {
+          const missing = [
+            !f.supportPhone.trim() && "Phone",
+            !f.whatsapp.trim() && "WhatsApp number",
+            !f.supportEmail.trim() && "Email",
+            !f.supportHours.trim() && "Support hours",
+          ].filter(Boolean) as string[];
+          return missing.length ? (
+            <Notice tone="info" className="mx-5 mt-5 sm:mx-6">Customers can&apos;t see these yet because they&apos;re empty: {missing.join(", ")}.</Notice>
+          ) : null;
+        })()}
         <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
           {text("supportPhone", "Phone", { type: "tel", inputMode: "tel", max: 20, placeholder: "+91 98765 43210" })}
           {text("whatsapp", "WhatsApp number", { type: "tel", inputMode: "tel", max: 20, placeholder: "919876543210", hint: "With country code, digits only" })}

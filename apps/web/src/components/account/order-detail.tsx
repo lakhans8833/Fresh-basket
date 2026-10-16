@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Check, PackageCheck, Truck, ClipboardList, Home as HomeIcon, XCircle, RotateCcw, CreditCard, PartyPopper, Clock, ExternalLink } from "lucide-react";
 import {
   canCustomerCancel, formatINR, NO_SLOT_LABEL, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
@@ -35,8 +35,8 @@ export function formatDeliveryDate(d: string) {
  * masked the address and phone; no cancel/reorder.
  */
 export function OrderDetail({
-  order, justPlaced, mode = "account", trackKey, upi,
-}: { order: Order; justPlaced: boolean; mode?: "account" | "track"; trackKey?: string; upi?: UpiInfo | null }) {
+  order, justPlaced, mode = "account", trackKey, upi, support,
+}: { order: Order; justPlaced: boolean; mode?: "account" | "track"; trackKey?: string; upi?: UpiInfo | null; support?: ReactNode }) {
   const router = useRouter();
   const { add, lines } = useCart();
   const toast = useToast();
@@ -242,8 +242,9 @@ export function OrderDetail({
           <div className="flex flex-col gap-2.5">
             {mode === "account" ? <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Buy again</Button> : null}
             {mode === "account" && canCustomerCancel(order.status) ? <Button variant="danger" loading={busy === "cancel"} onClick={cancel}>Cancel order</Button> : null}
-            <Link href="/contact" className="text-center text-sm text-muted underline-offset-4 hover:underline">Need help with this order?</Link>
+            {support ? null : <Link href="/contact" className="text-center text-sm text-muted underline-offset-4 hover:underline">Need help with this order?</Link>}
           </div>
+          {support}
         </aside>
       </div>
     </div>
