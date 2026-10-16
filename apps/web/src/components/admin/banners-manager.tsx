@@ -12,7 +12,7 @@ import { cn } from "../ui/cn";
 import { PromoCard } from "../home/promo-strip";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
-import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle } from "./ui";
+import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
 
 interface Banner extends PromoBanner {
   active: boolean;
@@ -56,6 +56,7 @@ function Inner() {
   const toast = useToast();
   const { data, error, reload } = useAdminData<{ banners: Banner[] }>("/api/admin/banners");
   const [editing, setEditing] = useState<Banner | "new" | null>(null);
+  const editorRef1 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Banner | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const banners = data?.banners ?? [];
@@ -114,13 +115,13 @@ function Inner() {
         </ul>
       )}
 
-      <EditorDialog open={editing !== null} title={editing === "new" ? "New banner" : `Edit “${editing?.title ?? ""}”`} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef1} open={editing !== null} title={editing === "new" ? "New banner" : `Edit “${editing?.title ?? ""}”`} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <BannerForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
             nextSort={(banners.reduce((m, b) => Math.max(m, b.sortOrder), 0) || 0) + 1}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef1.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Banner created" : "Banner saved");
               setEditing(null);
@@ -153,6 +154,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 

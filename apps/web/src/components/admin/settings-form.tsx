@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
+import { useUnsavedGuard } from "./unsaved-guard";
 import { inputToPaise, paiseToInput } from "./money";
 import { Card, CardHeader, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle } from "./ui";
 
@@ -78,6 +79,10 @@ function Editor({ initial }: { initial: StoreSettings }) {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const qrRef = useRef<HTMLInputElement>(null);
+  // Unsaved-changes protection: compare with what was loaded / last saved.
+  const [baseline, setBaseline] = useState(() => JSON.stringify(f));
+  const dirty = JSON.stringify(f) !== baseline;
+  const guard = useUnsavedGuard({ dirty, saving, save: () => submit() });
   const set = (p: Partial<typeof f>) => {
     setF((x) => ({ ...x, ...p }));
     setSaved(false);
@@ -111,8 +116,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
     }
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(e?: React.FormEvent): Promise<boolean> {
+    e?.preventDefault();
+    if (saving) return false; // no double submit
     setFormError(null);
     const errs: Record<string, string> = {};
     const minOrder = inputToPaise(f.defaultMinOrder);
@@ -142,16 +148,19 @@ function Editor({ initial }: { initial: StoreSettings }) {
     setErrors(errs);
     if (!r.success || Object.keys(errs).length) {
       setFormError("Please fix the highlighted fields.");
-      return;
+      return false;
     }
     setSaving(true);
     try {
       await api("/api/admin/settings", { method: "PUT", json: r.data });
       toast("Settings saved");
       setSaved(true);
+      setBaseline(JSON.stringify(f));
+      return true;
     } catch (err) {
       setErrors(serverFieldErrors(err));
       setFormError(errorMessage(err));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -173,7 +182,8 @@ function Editor({ initial }: { initial: StoreSettings }) {
   );
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-6">
+    <form onSubmit={(e) => void submit(e)} noValidate className="space-y-6">
+      {guard.dialog}
       {formError ? <Notice tone="error">{formError}</Notice> : null}
 
       <Card aria-labelledby="brand-h">

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight, ImagePlus, Plus, Trash2, X, Archive, Save, ExternalLink, Scale } from "lucide-react";
 import { adminProductSchema, packGrams, type AdminProductInput } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
@@ -13,6 +13,7 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { ProductImage } from "../product/product-image";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData, validateImage } from "./use-admin-data";
+import { useUnsavedGuard } from "./unsaved-guard";
 import { AdminOnly } from "./admin-context";
 import { inputToPaise, paiseToInput, parseIntOrNull } from "./money";
 import { Card, CardHeader, ConfirmDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle } from "./ui";
@@ -180,12 +181,8 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   // Mark dirty on any edit (cheap: every setter below goes through `touch`).
   const touch = () => setDirty(true);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const h = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", h);
-    return () => window.removeEventListener("beforeunload", h);
-  }, [dirty]);
+  // Leaving with unsaved edits (tab close, sidebar, links): Save / Discard / Stay.
+  const guard = useUnsavedGuard({ dirty: dirty && !deleting, saving, save: () => submit() });
 
   function onName(v: string) {
     setName(v);
@@ -283,15 +280,16 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     return { payload: r.success && Object.keys(errs).length === 0 ? r.data : undefined, errs };
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(e?: React.FormEvent): Promise<boolean> {
+    e?.preventDefault();
+    if (saving) return false; // no double submit
     setFormError(null);
     const { payload, errs } = build();
     setErrors(errs);
     if (!payload) {
       setFormError("Please fix the highlighted fields.");
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -300,11 +298,13 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       toast(isNew ? "Product created" : "Product saved");
       if (isNew) router.replace(`/admin/products/${r.id}`);
       else await onSaved(); // reload so new weight options get their ids
+      return true;
     } catch (err) {
       const fe = serverFieldErrors(err);
       if (err instanceof ApiError && err.code === "DUPLICATE") fe.slug = "Another product already uses this URL slug.";
       setErrors(fe);
       setFormError(errorMessage(err));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -331,7 +331,8 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
 
   return (
     <>
-    <form ref={formRef} onSubmit={submit} noValidate>
+    <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate>
+      {guard.dialog}
       {back}
       <PageHeader
         title={isNew ? "New product" : name || "Edit product"}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MapPin, Clock, Pencil, Plus, Trash2 } from "lucide-react";
 import { adminDeliveryAreaSchema, adminSlotSchema, effectiveMinOrder, formatINR, formatSlotTime } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
@@ -13,7 +13,7 @@ import { cn } from "../ui/cn";
 import { errorMessage, serverFieldErrors, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
 import { inputToPaise, paiseToInput } from "./money";
-import { Badge, Card, CardHeader, ConfirmDialog, EditorDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle } from "./ui";
+import { Badge, Card, CardHeader, ConfirmDialog, EditorDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
 
 interface Area { id: string; pincode: string; areaName: string; city: string; fee: number; freeAbove: number | null; minOrder: number; active: boolean }
 interface Slot { id: string; label: string; startTime: string; endTime: string; cutoffMinutes: number; capacity: number; sortOrder: number; active: boolean }
@@ -58,6 +58,7 @@ function AreasSection() {
     return storeMin > a.minOrder ? `${formatINR(eff)} (store-wide)` : formatINR(eff);
   };
   const [editing, setEditing] = useState<Area | "new" | null>(null);
+  const editorRef1 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Area | null>(null);
   const [busy, setBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -160,12 +161,12 @@ function AreasSection() {
         </>
       )}
 
-      <EditorDialog open={editing !== null} title={editing === "new" ? "New delivery area" : "Edit delivery area"} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef1} open={editing !== null} title={editing === "new" ? "New delivery area" : "Edit delivery area"} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <AreaForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef1.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Area added" : "Area saved");
               setEditing(null);
@@ -194,6 +195,7 @@ function AreaForm({ initial, onCancel, onSaved }: { initial: Area | null; onCanc
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
 
   async function submit(e: React.FormEvent) {
@@ -269,6 +271,7 @@ function SlotsSection() {
   const toast = useToast();
   const { data, error, reload } = useAdminData<{ slots: Slot[] }>("/api/admin/delivery/slots");
   const [editing, setEditing] = useState<Slot | "new" | null>(null);
+  const editorRef2 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Slot | null>(null);
   const [busy, setBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -332,13 +335,13 @@ function SlotsSection() {
         </ul>
       )}
 
-      <EditorDialog open={editing !== null} title={editing === "new" ? "New delivery slot" : "Edit delivery slot"} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef2} open={editing !== null} title={editing === "new" ? "New delivery slot" : "Edit delivery slot"} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <SlotForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
             nextSort={slots.reduce((m, s) => Math.max(m, s.sortOrder), 0) + 1}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef2.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Slot added" : "Slot saved");
               setEditing(null);
@@ -367,6 +370,7 @@ function SlotForm({ initial, nextSort, onCancel, onSaved }: { initial: Slot | nu
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
   const num = (s: string) => (/^\d+$/.test(s) ? Number(s) : -1);
 

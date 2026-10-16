@@ -12,7 +12,7 @@ import { ProductImage } from "../product/product-image";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
 import { slugify } from "./product-form";
-import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Thumb, Toggle } from "./ui";
+import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Thumb, Toggle, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
 
 interface Cat {
   id: string;
@@ -37,6 +37,7 @@ function Inner() {
   const toast = useToast();
   const { data, error, reload } = useAdminData<{ categories: Cat[] }>("/api/admin/categories");
   const [editing, setEditing] = useState<Cat | "new" | null>(null);
+  const editorRef1 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Cat | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -103,13 +104,13 @@ function Inner() {
         </ul>
       )}
 
-      <EditorDialog open={editing !== null} title={editing === "new" ? "New category" : `Edit ${editing?.name ?? ""}`} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef1} open={editing !== null} title={editing === "new" ? "New category" : `Edit ${editing?.name ?? ""}`} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <CategoryForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
             nextSort={(cats.reduce((m, c) => Math.max(m, c.sortOrder), 0) || 0) + 1}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef1.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Category created" : "Category saved");
               setEditing(null);
@@ -139,6 +140,7 @@ function CategoryForm({ initial, nextSort, onCancel, onSaved }: { initial: Cat |
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
