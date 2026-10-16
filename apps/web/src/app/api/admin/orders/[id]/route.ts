@@ -26,8 +26,8 @@ export const PATCH = route<{ params: Promise<{ id: string }> }>(async (req, { pa
   if ("confirmUpi" in body) {
     // Marking money as received is an admin decision (staff can see orders but not confirm payments).
     if (s.profile.role !== "admin") throw forbidden("Only an admin can confirm UPI payments.");
-    await adminConfirmUpiPayment(id, { id: s.userId, email: s.profile.email }, body.confirmUpi.reference);
-    return json({ order: await adminGetOrder(id) });
+    const { result } = await adminConfirmUpiPayment(id, { id: s.userId, email: s.profile.email }, body.confirmUpi.reference);
+    return json({ order: await adminGetOrder(id), result });
   }
   throw badRequest("Nothing to update.");
 });

@@ -46,9 +46,11 @@ function UpiVerifyCard({ order, onDone }: { order: AdminOrder; onDone: (o: Admin
     setBusy(true);
     setErr(null);
     try {
-      const r = await api<{ order: AdminOrder }>(`/api/admin/orders/${order.id}`, { method: "PATCH", json: { confirmUpi: { reference: ref, amountReceived: true } } });
+      const r = await api<{ order: AdminOrder; result?: string }>(`/api/admin/orders/${order.id}`, { method: "PATCH", json: { confirmUpi: { reference: ref, amountReceived: true } } });
       onDone(r.order);
-      toast("UPI payment confirmed — order is now placed");
+      if (r.result === "paid" || r.result === "paid_late" || !r.result) toast("UPI payment confirmed — order is now placed");
+      else if (r.result === "refund_required") toast("Payment recorded, but the order was already cancelled — refund the customer");
+      else toast(`Not marked paid (${r.result.replaceAll("_", " ")}) — check the order history`);
     } catch (e) {
       setErr(errorMessage(e));
     } finally {

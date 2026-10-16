@@ -223,9 +223,10 @@ export function WhatsAppOrderView({
         /* ignore */
       }
       const err = e as ApiError;
-      // The server answered (rejected or cancelled): the next attempt is a new order with a new key.
-      // On a network failure the key is kept, so a retry can't create a second order.
-      if (err instanceof ApiError) idemKey.current = newIdempotencyKey();
+      // The server definitely rejected it (4xx, e.g. slot full, order cancelled): the next attempt is a new
+      // order with a new key. Offline (status 0), rate limit or a server error (5xx) keeps the key, because
+      // the order may already be saved — a retry then returns that same order instead of a second one.
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429) idemKey.current = newIdempotencyKey();
       const slotFull = Boolean((err.details as { messages?: Record<string, string> } | undefined)?.messages?._slot);
       if (slotFull) {
         // That slot filled up meanwhile: back to the form with fresh slots so another can be picked.
