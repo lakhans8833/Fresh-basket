@@ -6,7 +6,9 @@ import { getBrowserSupabase } from "@/lib/client/supabase";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
+import { OTP_MAX, OTP_MIN, sendErrorMessage, verifyErrorMessage, waitSeconds } from "@/lib/client/otp-errors";
 
+/** Matches Supabase's default per-email send limit (Auth → Rate Limits); the server's own wait wins. */
 const RESEND_SECONDS = 60;
 
 /**
@@ -23,7 +25,11 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [wait, setWait] = useState(0);
+  /** The code was accepted: keep the form locked while the page moves on (the code can't be reused). */
+  const [verified, setVerified] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
+  /** Blocks a second send / verify while one is in flight (double tap, Enter + click). */
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -37,56 +43,75 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
 
   async function sendCode(e?: FormEvent) {
     e?.preventDefault();
+    if (inFlight.current || wait > 0) return;
     const sb = getBrowserSupabase();
-    if (!sb) return;
+    if (!sb) return setError("Sign-in isn't set up on this website.");
     const addr = email.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(addr)) return setError("Enter a valid email address.");
+    const resend = step === "code";
+    inFlight.current = true;
     setError(null);
     setInfo(null);
     setBusy("send");
-    const { error } = await sb.auth.signInWithOtp({
-      email: addr,
-      options: {
-        shouldCreateUser: true,
-        data: name.trim() ? { full_name: name.trim() } : undefined,
-        // If the email also contains a sign-in link, it lands here and signs in the same way.
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    setBusy(null);
-    if (error) {
-      const m = error.message;
-      const secs = /(\d+)\s*seconds?/i.exec(m)?.[1];
-      if (secs) setWait(Number(secs));
-      setError(
-        /rate|seconds|too many/i.test(m) ? `Too many requests. Please wait${secs ? ` ${secs} seconds` : " a minute"} and try again.`
-        : /signups? not allowed|disabled/i.test(m) ? "New sign-ups are turned off for this store. Please contact the store."
-        : m,
+    try {
+      const { error } = await sb.auth.signInWithOtp({
+        email: addr,
+        options: {
+          shouldCreateUser: true,
+          data: name.trim() ? { full_name: name.trim() } : undefined,
+          // If the email template also has a sign-in link, it lands on /auth/callback (token_hash).
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
+      if (error) {
+        const secs = waitSeconds(error);
+        if (secs) setWait(secs);
+        setError(sendErrorMessage(error));
+        return;
+      }
+      setEmail(addr);
+      setCode("");
+      setStep("code");
+      setWait(RESEND_SECONDS);
+      setInfo(
+        resend
+          ? `New code sent to ${addr}. Use the code from this newest email — earlier codes no longer work.`
+          : `We've emailed a sign-in code to ${addr}. It can take a minute — check spam too.`,
       );
-      return;
+    } catch (err) {
+      setError(sendErrorMessage(err as Error));
+    } finally {
+      inFlight.current = false;
+      setBusy(null);
     }
-    setEmail(addr);
-    setCode("");
-    setStep("code");
-    setWait(RESEND_SECONDS);
-    setInfo(`We've emailed a sign-in code to ${addr}. It can take a minute — check spam too.`);
   }
 
   async function verify(e: FormEvent) {
     e.preventDefault();
+    if (inFlight.current || verified) return;
     const sb = getBrowserSupabase();
-    if (!sb) return;
+    if (!sb) return setError("Sign-in isn't set up on this website.");
     const token = code.replace(/\D/g, "");
-    if (token.length < 6) return setError("Enter the code from the email (6 digits or more).");
+    if (token.length < OTP_MIN || token.length > OTP_MAX) return setError(`Enter the ${OTP_MIN}-digit code from the email (some emails have up to ${OTP_MAX} digits).`);
+    inFlight.current = true;
     setError(null);
     setBusy("verify");
-    const { error } = await sb.auth.verifyOtp({ email, token, type: "email" });
-    if (error) {
+    try {
+      const { error } = await sb.auth.verifyOtp({ email, token, type: "email" });
+      if (error) {
+        setError(verifyErrorMessage(error));
+        return;
+      }
+      setVerified(true);
+      setInfo("Signed in. Loading your account…");
+      await onSignedIn();
+    } catch (err) {
+      setError(verifyErrorMessage(err as Error));
+    } finally {
+      // The code is single-use: after a successful sign-in the parent navigates (or shows its own retry).
+      inFlight.current = false;
       setBusy(null);
-      setError(/expired|invalid/i.test(error.message) ? "That code is wrong or has expired. Check the latest email, or send a new code." : error.message);
-      return;
     }
-    await onSignedIn();
   }
 
   if (step === "email") {
@@ -120,7 +145,7 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
           inputMode="numeric"
           autoComplete="one-time-code"
           pattern="[0-9 ]*"
-          maxLength={12}
+          maxLength={OTP_MAX + 4}
           required
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ""))}
@@ -128,12 +153,12 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
           placeholder="••••••"
         />
       </Field>
-      <Button type="submit" variant="dark" size="lg" className="w-full" loading={busy === "verify"}>Verify &amp; sign in</Button>
+      <Button type="submit" variant="dark" size="lg" className="w-full" loading={busy === "verify"} disabled={busy !== null || verified}>Verify &amp; sign in</Button>
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <button type="button" onClick={() => { setStep("email"); setError(null); setInfo(null); }} className="inline-flex items-center gap-1 font-semibold text-forest-800 hover:underline">
+        <button type="button" disabled={busy !== null || verified} onClick={() => { setStep("email"); setError(null); setInfo(null); setWait(0); }} className="inline-flex items-center gap-1 font-semibold text-forest-800 hover:underline">
           <ArrowLeft className="size-3.5" aria-hidden /> Change email
         </button>
-        <button type="button" onClick={() => sendCode()} disabled={wait > 0 || busy !== null} className="font-semibold text-forest-800 hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline">
+        <button type="button" onClick={() => sendCode()} disabled={wait > 0 || busy !== null || verified} className="font-semibold text-forest-800 hover:underline disabled:cursor-not-allowed disabled:text-muted disabled:no-underline">
           {busy === "send" ? "Sending…" : wait > 0 ? `Resend code in ${wait}s` : "Resend code"}
         </button>
       </div>
