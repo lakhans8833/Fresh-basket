@@ -598,6 +598,24 @@ describe("WhatsApp orders", () => {
     await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "razorpay_link" }))).rejects.toMatchObject({ status: 400 }); // no Razorpay keys here
   });
 
+  it("a UPI order paid after it expired and after its delivery date moves to today with a note", async () => {
+    await query("update store_settings set upi_id = 'freshbasket.test@okaxis'");
+    try {
+      const { order } = await placeWhatsAppOrder(null, wa({ paymentMethod: "upi" }));
+      await query("update orders set reservation_expires_at = now() - interval '1 minute', delivery_date = delivery_date - 2 where id = $1", [order.id]);
+      await releaseExpired();
+      const r = await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, "498765432101");
+      expect(r.result).toBe("paid_late");
+      await new Promise((res) => setTimeout(res, 300)); // reschedule runs right after
+      const o = (await getOrderById(order.id))!;
+      expect(o.status).toBe("placed");
+      expect(o.deliveryDate).toBe(istDateString(new Date()));
+      expect(o.events.at(-1)!.note).toMatch(/new delivery time/);
+    } finally {
+      await query("update store_settings set upi_id = null");
+    }
+  });
+
   it("UPI: reference from the customer keeps it pending; only an admin confirmation marks it paid", async () => {
     await query("update store_settings set upi_id = 'freshbasket.test@okaxis', upi_payee_name = 'Fresh Basket'");
     try {

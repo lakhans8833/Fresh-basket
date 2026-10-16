@@ -1,7 +1,7 @@
 """Browser test of the WhatsApp checkout (no real message is sent: window.open is intercepted).
 Requires NEXT_PUBLIC_WHATSAPP_NUMBER to be set when the app was built.
 Usage: python3 apps/web/e2e/whatsapp.py [base_url] [expected_number]"""
-import os, re, sys
+import os, random, re, sys
 from urllib.parse import unquote
 from playwright.sync_api import sync_playwright, expect
 
@@ -37,7 +37,9 @@ with sync_playwright() as p:
     assert page.evaluate("window.__opened.length") == 0
 
     page.locator("#wa-name").fill("Test *Customer*")
-    page.locator("#wa-phone").fill("98765 43210")
+    # A fresh mobile per run: guests may only have 2 unconfirmed orders per number.
+    PHONE = "9" + str(random.randint(100000000, 999999999))
+    page.locator("#wa-phone").fill(PHONE)
     page.locator("#wa-address").fill("H.No 12, Sector 7, near the park")
     page.locator("#wa-area").fill("Sector 7")
     # A PIN code we don't deliver to: no order can be placed, customer can ask on WhatsApp instead.
@@ -66,7 +68,7 @@ with sync_playwright() as p:
     print("---- message ----\n" + msg + "\n-----------------")
     assert re.search(r"Order ID: FB\d{6}-\d+", msg), msg
     assert "Name: Test Customer" in msg and "*Customer*" in msg  # customer's own * stripped, our heading kept
-    assert "Mobile: +91 9876543210" in msg
+    assert f"Mobile: +91 {PHONE}" in msg
     assert "City / PIN: Bengaluru - 560034" in msg or "- 560034" in msg
     assert "Payment: Cash on delivery\n" in msg and "(Cash on delivery)" not in msg
     assert re.search(r"Delivery slot: \w{3}, \d{1,2} \w{3} · ", msg), "slot line missing"
@@ -85,7 +87,7 @@ with sync_playwright() as p:
     page.wait_for_url(re.compile(r"/track/[0-9a-f-]{36}\?k="))
     expect(page.get_by_text("Order tracking")).to_be_visible()
     expect(page.get_by_text("H.No 12")).to_have_count(0)
-    expect(page.get_by_text("98••••••10").first).to_be_visible()
+    expect(page.get_by_text(PHONE[:2] + "••••••" + PHONE[-2:]).first).to_be_visible()
     # A wrong key shows "not found" (no order data); the status code may be 200 because the shop layout streams.
     page.goto(page.url[:-4] + "zzzz")
     expect(page.get_by_text("We couldn't find that page")).to_be_visible()

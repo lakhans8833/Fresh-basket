@@ -374,7 +374,9 @@ export function AdminOrderDetail({ id }: { id: string }) {
         withNote={pending?.kind === "status"}
         note={note}
         onNote={setNote}
-        help={!pending ? "" : pending.kind === "status" ? ACTION[pending.to].help : pending.to === "cod_collected" ? "Confirm the rider handed over the cash for this order." : "Only do this after the money has been returned to the customer."}
+        help={!pending ? "" : pending.kind === "status" && pending.to === "placed" && o.status === "pending_confirmation"
+          ? `Confirm only if the order's WhatsApp message came from +91 ${o.address.phone} (the number on this order) — updates go to that number.`
+          : pending.kind === "status" ? ACTION[pending.to].help : pending.to === "cod_collected" ? "Confirm the rider handed over the cash for this order." : "Only do this after the money has been returned to the customer."}
         onConfirm={confirm}
         onClose={() => setPending(null)}
       />

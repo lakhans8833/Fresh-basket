@@ -9,6 +9,14 @@ import { OrderDetail } from "@/components/account/order-detail";
 
 export const metadata: Metadata = { title: "Track your order", robots: { index: false, follow: false } };
 
+const TRACK_LINK_DAYS_AFTER_DONE = 30;
+
+function linkExpired(o: Order) {
+  if (o.status !== "delivered" && o.status !== "cancelled") return false;
+  const last = o.events.at(-1)?.createdAt ?? o.createdAt;
+  return Date.now() - Date.parse(last) > TRACK_LINK_DAYS_AFTER_DONE * 86_400_000;
+}
+
 const mask = (s: string, keepStart: number, keepEnd: number) =>
   s.length <= keepStart + keepEnd ? s : `${s.slice(0, keepStart)}${"•".repeat(Math.max(3, s.length - keepStart - keepEnd))}${s.slice(s.length - keepEnd)}`;
 
@@ -43,6 +51,8 @@ export default async function TrackOrderPage({ params, searchParams }: { params:
   if (!/^[0-9a-f-]{36}$/i.test(id) || !trackToken.verify(id, sp.k)) notFound();
   const [order, settings] = await Promise.all([getOrderById(id), getSettings()]);
   if (!order) notFound();
+  // A forwarded link doesn't work forever: 30 days after the order is finished, the link stops working.
+  if (linkExpired(order)) notFound();
   const upi = await upiPaymentInfo(order, settings);
   return <OrderDetail order={forTracking(order)} justPlaced={sp.placed === "1"} mode="track" trackKey={sp.k} upi={upi} />;
 }
