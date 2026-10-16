@@ -434,7 +434,7 @@ describe("shop listing", () => {
 });
 
 describe("late orders", () => {
-  it("flags placed orders whose delivery slot has ended, until they are packed", async () => {
+  it("flags orders whose delivery slot has ended, until they are delivered (overdue deliveries)", async () => {
     const { order } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["onion:1 kg"]!, quantity: 3 }] }));
     const isLate = async () => (await adminListOrders({})).find((o) => (o as { id: string }).id === order.id) as { late: boolean } | undefined;
     expect((await isLate())?.late).toBe(false); // slot is tomorrow
@@ -447,7 +447,12 @@ describe("late orders", () => {
     expect((await adminGetOrder(order.id)).late).toBe(true);
     expect(await lateCount()).toBe(before + 1);
 
+    // Packed or out for delivery after the slot ended is still overdue for the customer.
     await adminUpdateOrderStatus(order.id, "packed", ADMIN);
+    expect((await isLate())?.late).toBe(true);
+    await adminUpdateOrderStatus(order.id, "out_for_delivery", ADMIN);
+    expect((await isLate())?.late).toBe(true);
+    await adminUpdateOrderStatus(order.id, "delivered", ADMIN);
     expect((await isLate())?.late).toBe(false);
     expect(await lateCount()).toBe(before);
   });

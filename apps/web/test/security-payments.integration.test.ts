@@ -143,21 +143,25 @@ describe("2. a late payment revives an order only if it can still be delivered",
     expect(await stockOf(variant)).toBe(before - 4);
   });
 
+  // Policy (migration 20261017000005): the paid order is revived — stock and coupon re-checked — but
+  // never into a slot it can't use. It loses the slot ("delivery time to be agreed"), the slot is
+  // never overfilled, and an order event says why. Unfulfillable items/coupons → refund_required.
   it.each([
-    ["slot full", async (o: { id: string }) => { const s = (await queryOne<{ slot_id: string }>("select slot_id from orders where id = $1", [o.id]))!.slot_id; await query("update delivery_slots set capacity = 1 where id = $1", [s]); await placeOrder(CUSTOMER, input({ slotId: s })); }, /full/],
+    ["slot full", async (o: { id: string }) => { const s = (await queryOne<{ slot_id: string }>("select slot_id from orders where id = $1", [o.id]))!.slot_id; await query("update delivery_slots set capacity = 1 where id = $1", [s]); await placeOrder(CUSTOMER, input({ slotId: s })); }, /slot was full/],
     ["slot switched off", async (o: { id: string }) => { await query("update delivery_slots set active = false where id = (select slot_id from orders where id = $1)", [o.id]); }, /no longer offered/],
-    ["slot cutoff passed", async (o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, today]); await query("update delivery_slots set start_time = '00:00', end_time = '00:30' where id = (select slot_id from orders where id = $1)", [o.id]); }, /closed/],
-    ["delivery date passed", async (o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, addDays(today, -1)]); }, /date has passed/],
-  ])("keeps the order cancelled and flags a refund when the %s", async (_name, breakIt, note) => {
+    ["slot cutoff passed", async (o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, today]); await query("update delivery_slots set start_time = '00:00', end_time = '00:30' where id = (select slot_id from orders where id = $1)", [o.id]); }, /slot had closed/],
+    ["delivery date passed", async (o: { id: string }) => { await query("update orders set delivery_date = $2 where id = $1", [o.id, addDays(today, -1)]); }, /date had passed/],
+  ])("revives without the unusable slot when the %s (never back into it)", async (_name, breakIt, note) => {
     const own = await makeSlot(5);
     const order = await expiredPrepaidOrder({ slotId: own });
     await breakIt(order);
     const before = await stockOf(variant);
-    expect(await pay(order.id, order.total)).toBe("refund_required");
+    expect(await pay(order.id, order.total)).toBe("paid_late");
     const o = (await getOrderById(order.id))!;
-    expect(o).toMatchObject({ status: "cancelled", paymentStatus: "refund_pending" });
+    expect(o).toMatchObject({ status: "placed", paymentStatus: "paid" });
+    expect((await queryOne<{ slot_id: string | null }>("select slot_id from orders where id = $1", [order.id]))!.slot_id).toBeNull();
     expect(o.events.at(-1)!.note).toMatch(note);
-    expect(await stockOf(variant)).toBe(before); // nothing re-reserved
+    expect(await stockOf(variant)).toBe(before - 4);
     // Webhook retries stay idempotent.
     const [{ n: payments }] = await query<{ n: number }>("select count(*)::int as n from payments where order_id = $1", [order.id]);
     expect(payments).toBe(1);
@@ -171,8 +175,9 @@ describe("2. a late payment revives an order only if it can still be delivered",
       const [late, checkout] = await Promise.allSettled([pay(order.id, order.total), placeOrder(CUSTOMER, input({ slotId: s }))]);
       const booked = (await queryOne<{ n: number }>("select count(*)::int as n from orders where slot_id = $1 and status <> 'cancelled'", [s]))!.n;
       expect(booked).toBe(1);
-      const lateWon = late.status === "fulfilled" && late.value === "paid_late";
-      expect(lateWon).toBe(checkout.status === "rejected");
+      expect(late).toMatchObject({ status: "fulfilled", value: "paid_late" }); // the payment is never lost
+      const lateKeptSlot = (await queryOne<{ slot_id: string | null }>("select slot_id from orders where id = $1", [order.id]))!.slot_id === s;
+      expect(lateKeptSlot).toBe(checkout.status === "rejected");
     }
   });
 });
