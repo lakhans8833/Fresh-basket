@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { env } from "@/lib/env";
+import { getSession } from "@/lib/auth";
 
 /**
  * Setup check: tells you what is configured and whether the database is reachable and
- * migrated. Never returns secret values — only whether they are set.
+ * migrated. Never returns secret values — only whether they are set. Anyone gets just "ok";
+ * the details (database messages, regions, what's configured) are shown to admins only.
  */
 export async function GET() {
   let database: { ok: boolean; message: string; source: string };
@@ -47,6 +49,10 @@ export async function GET() {
     /* reported above */
   }
 
+  const session = await getSession().catch(() => null);
+  if (session?.profile.role !== "admin") {
+    return NextResponse.json({ ok: database.ok }, { status: database.ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
+  }
   return NextResponse.json(
     {
       database,

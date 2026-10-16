@@ -24,12 +24,14 @@ export function WishlistView() {
   }, []);
 
   const wanted = ids !== null && ids.length > 0;
+  // Fetch exactly the saved products (not the first 200 of the catalogue), newest 200 saves.
+  const idsKey = ids ? ids.slice(-200).join(",") : "";
   useEffect(() => {
     if (!wanted || catalog) return;
-    api<{ products: ProductSummary[] }>("/api/products?limit=200")
+    api<{ products: ProductSummary[] }>(`/api/products?limit=200&ids=${encodeURIComponent(idsKey)}`)
       .then((r) => setCatalog(r.products))
       .catch(() => setError(true));
-  }, [wanted, catalog]);
+  }, [wanted, catalog, idsKey]);
 
   if (ids === null || (wanted && !catalog && !error)) {
     return <div className={grid} aria-busy="true">{Array.from({ length: 4 }, (_, i) => <ProductCardSkeleton key={i} />)}</div>;

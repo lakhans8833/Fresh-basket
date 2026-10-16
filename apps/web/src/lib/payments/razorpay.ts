@@ -33,6 +33,41 @@ export function createRazorpayOrder(args: { amount: number; receipt: string; ord
   });
 }
 
+export interface RazorpayPaymentLink { id: string; short_url: string; status: string; amount: number; reference_id: string }
+
+/**
+ * Payment Link for one order: amount = the order total computed by the server; reference_id =
+ * our order number (Razorpay rejects a second link with the same reference_id, so an order can't
+ * get two different links by accident).
+ */
+export function createPaymentLink(args: {
+  amount: number; orderNumber: string; orderId: string; description: string;
+  customer: { name: string; contact: string }; callbackUrl: string; expireBy: number;
+}) {
+  return call<RazorpayPaymentLink>("/payment_links", {
+    method: "POST",
+    body: JSON.stringify({
+      amount: args.amount,
+      currency: "INR",
+      accept_partial: false,
+      reference_id: args.orderNumber,
+      description: args.description.slice(0, 2048),
+      customer: { name: args.customer.name.slice(0, 80), contact: args.customer.contact },
+      notify: { sms: false, email: false },
+      reminder_enable: false,
+      expire_by: args.expireBy,
+      notes: { order_id: args.orderId, order_number: args.orderNumber },
+      callback_url: args.callbackUrl,
+      callback_method: "get",
+    }),
+  });
+}
+
+/** Cancel an unpaid Payment Link (Razorpay refuses for links that are already paid). */
+export function cancelPaymentLinkAtRazorpay(linkId: string) {
+  return call<RazorpayPaymentLink>(`/payment_links/${encodeURIComponent(linkId)}/cancel`, { method: "POST", body: "{}" });
+}
+
 export function fetchPayment(paymentId: string) {
   return call<RazorpayPayment>(`/payments/${encodeURIComponent(paymentId)}`);
 }

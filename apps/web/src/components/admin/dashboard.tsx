@@ -13,6 +13,7 @@ export interface Stats {
   ordersToday: number;
   revenueToday: number;
   toFulfil: number;
+  toConfirm?: number;
   outForDelivery: number;
   awaitingPayment: number;
   refundsPending: number;
@@ -30,6 +31,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
     ? [
         { label: "Orders today", value: data.ordersToday, icon: ClipboardList, href: "/admin/orders" },
         { label: "Revenue today", value: formatINR(data.revenueToday), icon: IndianRupee, hint: "Paid + cash on delivery" },
+        { label: "WhatsApp orders to confirm", value: data.toConfirm ?? 0, icon: MessageSquare, href: "/admin/orders?status=pending_confirmation", attention: (data.toConfirm ?? 0) > 0 },
         { label: "To fulfil", value: data.toFulfil, icon: PackageOpen, href: "/admin/orders?status=placed", attention: data.toFulfil > 0 },
         { label: "Late orders", value: data.lateOrders, icon: AlarmClock, href: "/admin/orders?status=late", warn: data.lateOrders > 0, hint: "Slot over, still not packed" },
         { label: "Out for delivery", value: data.outForDelivery, icon: Truck, href: "/admin/orders?status=out_for_delivery" },

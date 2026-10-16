@@ -29,6 +29,12 @@ function init() {
   if (state.ready || typeof window === "undefined") return;
   const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent);
+  set({ ready: true, installed: standalone, ios, canPrompt: deferred !== null || state.canPrompt });
+}
+
+// Listen as soon as this module loads (before React hydrates): Chrome can fire the install prompt
+// early on repeat visits, and an event fired before a listener exists is lost.
+if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferred = e as BeforeInstallPromptEvent;
@@ -38,7 +44,6 @@ function init() {
     deferred = null;
     set({ installed: true, canPrompt: false });
   });
-  set({ ready: true, installed: standalone, ios });
 }
 
 function subscribe(l: () => void) {

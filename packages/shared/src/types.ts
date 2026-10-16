@@ -20,6 +20,13 @@ export interface StoreSettings {
   defaultMinOrder: Paise;
   slotDaysAhead: number;
   announcement: string | null;
+  /** Store UPI ID for UPI payments (verified by staff); null = UPI not offered. */
+  upiId: string | null;
+  upiPayeeName: string | null;
+  /** Optional QR image uploaded in Admin → Settings. */
+  upiQrUrl: string | null;
+  /** Razorpay Payment Links can be created (Razorpay keys configured on the server). */
+  paymentLinks: boolean;
 }
 
 export interface Category {
@@ -166,6 +173,14 @@ export interface Order {
   createdAt: string;
   reservationExpiresAt: string | null;
   customerNote: string | null;
+  /** "web" checkout or "whatsapp" order. */
+  channel: "web" | "whatsapp";
+  /** UTR the customer reported for a UPI payment (not proof of payment). */
+  upiReference: string | null;
+  /** Razorpay Payment Link for this order (while payment is pending). */
+  paymentLinkUrl: string | null;
+  /** Customer agreed to WhatsApp order updates. */
+  whatsappUpdates: boolean;
 }
 
 export interface QuoteResponse {

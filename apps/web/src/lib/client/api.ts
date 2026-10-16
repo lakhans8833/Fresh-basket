@@ -11,6 +11,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The server definitely didn't keep this order attempt (ORDER_CANCELLED, or a 4xx rejection such as
+ * "slot full"): the customer's next deliberate attempt must use a NEW idempotency key. Offline (status 0),
+ * timeouts, 429 and ambiguous 5xx keep the key, so a retry returns the order if it was in fact saved.
+ */
+export function isDefiniteRejection(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false;
+  if (err.code === "ORDER_CANCELLED") return true;
+  return err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
+}
+
 /** Fetch JSON from our API. Throws ApiError with the server's message on failure. */
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init;

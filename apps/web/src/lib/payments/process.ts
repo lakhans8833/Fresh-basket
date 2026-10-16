@@ -1,6 +1,14 @@
 import "server-only";
 import { pool, tx } from "../db";
+import { scheduleOrderNotification } from "../notify/whatsapp";
 import { CACHE_TAGS, invalidate } from "../cache";
+
+const confirmedOnPayment = (orderId: string | null | undefined, result: string) => {
+  // A late payment re-takes stock: drop the cached catalogue so the shop shows it right away.
+  // (Date/slot of a late-paid order is validated inside mark_order_paid, in the same transaction.)
+  if (result === "paid_late") invalidate(CACHE_TAGS.catalog);
+  if (orderId && (result === "paid" || result === "paid_late")) scheduleOrderNotification(orderId, "confirmed");
+};
 
 export type PaymentProvider = "razorpay" | "mock";
 
@@ -13,6 +21,10 @@ export interface NormalisedPaymentEvent {
   paymentId: string | null;
   amount: number | null;
   orderId?: string | null; // our order id when the provider echoes it
+  /** payment_link.paid: the link id, our order number (reference_id) and what Razorpay says was paid. */
+  paymentLink?: { id: string | null; referenceId: string | null; amountPaid: number | null; status: string | null } | null;
+  currency?: string | null;
+  paymentStatus?: string | null;
   payload: unknown;
 }
 
@@ -32,17 +44,8 @@ export type ProcessResult =
  * (duplicates return "duplicate"), then updates the order inside the same transaction.
  */
 export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<ProcessResult> {
-  return afterPayment(await processPaymentEventTx(ev));
-}
-
-/** A late payment re-takes stock: drop the cached catalogue so the shop shows it right away. */
-function afterPayment(result: ProcessResult): ProcessResult {
-  if (result === "paid_late") invalidate(CACHE_TAGS.catalog);
-  return result;
-}
-
-async function processPaymentEventTx(ev: NormalisedPaymentEvent): Promise<ProcessResult> {
-  return tx(async (c) => {
+  let paidOrder: string | null = null;
+  const result = await tx(async (c): Promise<ProcessResult> => {
     const ins = await c.query(
       `insert into payment_events (provider, event_id, event_type, payload) values ($1,$2,$3,$4)
        on conflict (provider, event_id) do nothing returning id`,
@@ -58,13 +61,29 @@ async function processPaymentEventTx(ev: NormalisedPaymentEvent): Promise<Proces
 
     if (ev.type === "other" || !ev.paymentId) return finish("ignored");
 
-    const { rows } = await c.query<{ id: string }>(
-      ev.orderId
-        ? "select id from orders where id = $1"
-        : "select id from orders where razorpay_order_id = $1",
-      [ev.orderId ?? ev.providerOrderId],
-    );
-    const orderId = rows[0]?.id;
+    let orderId: string | undefined;
+    if (ev.paymentLink) {
+      // Payment Link: the link must belong to one of our link orders, be fully paid in INR by a
+      // captured payment, and the amounts must agree (mark_order_paid also checks the order total).
+      const l = ev.paymentLink;
+      if (l.status !== "paid" || ev.paymentStatus !== "captured" || (ev.currency && ev.currency !== "INR")) return finish("ignored");
+      if (l.amountPaid === null || ev.amount === null || l.amountPaid !== ev.amount) return finish("amount_mismatch");
+      const { rows } = await c.query<{ id: string }>(
+        `select id from orders where payment_method = 'razorpay_link'
+            and (razorpay_payment_link_id = $1::text or ($1::text is null and order_number = $2::text))
+          limit 1`,
+        [l.id, l.referenceId],
+      );
+      orderId = rows[0]?.id;
+    } else {
+      const { rows } = await c.query<{ id: string }>(
+        ev.orderId
+          ? "select id from orders where id = $1"
+          : "select id from orders where razorpay_order_id = $1",
+        [ev.orderId ?? ev.providerOrderId],
+      );
+      orderId = rows[0]?.id;
+    }
     if (!orderId) return finish("order_not_found");
 
     if (ev.type === "payment.failed") {
@@ -79,8 +98,11 @@ async function processPaymentEventTx(ev: NormalisedPaymentEvent): Promise<Proces
       "select mark_order_paid($1, $2, $3, $4, $5, 'webhook') as result",
       [orderId, ev.provider, ev.providerOrderId, ev.paymentId, ev.amount],
     );
+    paidOrder = orderId;
     return finish(r[0]!.result);
   });
+  confirmedOnPayment(paidOrder, result);
+  return result;
 }
 
 /** Used by the client-side "verify" call after the server has independently confirmed the payment. */
@@ -94,23 +116,34 @@ export async function markPaidFromVerifiedPayment(args: {
     );
     return rows[0]!.result;
   });
-  return afterPayment(result);
+  confirmedOnPayment(args.orderId, result);
+  return result;
 }
 
 /** Normalise a Razorpay webhook body. */
 export function normaliseRazorpayEvent(body: {
   event?: string;
-  payload?: { payment?: { entity?: { id?: string; order_id?: string; amount?: number; status?: string } }; order?: { entity?: { id?: string } } };
+  payload?: {
+    payment?: { entity?: { id?: string; order_id?: string; amount?: number; status?: string; currency?: string } };
+    order?: { entity?: { id?: string } };
+    payment_link?: { entity?: { id?: string; reference_id?: string; amount_paid?: number; status?: string } };
+  };
 }, eventId: string): NormalisedPaymentEvent {
   const p = body.payload?.payment?.entity;
+  const link = body.payload?.payment_link?.entity;
   const rawType = body.event ?? "unknown";
   const type =
-    rawType === "payment.captured" || rawType === "order.paid"
+    rawType === "payment.captured" || rawType === "order.paid" || rawType === "payment_link.paid"
       ? "payment.captured"
       : rawType === "payment.failed"
         ? "payment.failed"
         : "other";
   return {
+    paymentLink: rawType === "payment_link.paid"
+      ? { id: link?.id ?? null, referenceId: link?.reference_id ?? null, amountPaid: typeof link?.amount_paid === "number" ? link.amount_paid : null, status: link?.status ?? null }
+      : null,
+    currency: p?.currency ?? null,
+    paymentStatus: p?.status ?? null,
     provider: "razorpay",
     eventId,
     type,

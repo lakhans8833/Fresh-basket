@@ -109,7 +109,7 @@ export default async function HomePage() {
           title: ["Order on WhatsApp", "in One Tap"] as [string, string],
           subtitle: "Fill your cart, add your address and send the order to us on WhatsApp.",
           cta: { href: "/shop", label: "Start shopping" },
-          secondary: { href: "/cart", label: "Order on WhatsApp" },
+          secondary: { href: "/order", label: "Order on WhatsApp" },
           image: "/images/site/hero-shopping-basket.webp",
           imageAlt: "A shopping basket filled with fresh vegetables",
         } satisfies HeroSlide]

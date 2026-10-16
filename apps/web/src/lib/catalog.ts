@@ -165,6 +165,8 @@ const productImages = cached("product-images-v1", [CACHE_TAGS.catalog], 300, (pr
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
   const r = (await activeProductRows()).find((x) => x.slug === slug);
   if (!r) return null;
+  // Same rule as the listings: a product whose sizes are all switched off isn't shown.
+  if (!toSummary(r).variants.length) return null;
   const images = await productImages(r.id);
   return { ...toSummary(r), description: r.description, highlights: r.highlights ?? [],
     storageTips: r.storage_tips ?? null, shelfLife: r.shelf_life ?? null, origin: r.origin ?? null, nutrition: r.nutrition ?? null, images, categorySlug: r.category_slug };

@@ -21,6 +21,8 @@ interface Services {
   razorpayKeyIdSet: boolean;
   webhookSecretSet: boolean;
   cronSecretSet: boolean;
+  whatsappCloud?: boolean;
+  whatsappTemplates?: string[];
 }
 
 export function SettingsForm() {
@@ -65,6 +67,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
     defaultMinOrder: paiseToInput(initial.defaultMinOrder),
     slotDaysAhead: String(initial.slotDaysAhead),
     announcement: initial.announcement ?? "",
+    upiId: initial.upiId ?? "",
+    upiPayeeName: initial.upiPayeeName ?? "",
+    upiQrUrl: initial.upiQrUrl,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -72,6 +77,7 @@ function Editor({ initial }: { initial: StoreSettings }) {
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const qrRef = useRef<HTMLInputElement>(null);
   const set = (p: Partial<typeof f>) => {
     setF((x) => ({ ...x, ...p }));
     setSaved(false);
@@ -91,6 +97,20 @@ function Editor({ initial }: { initial: StoreSettings }) {
     }
   }
 
+  async function onQr(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setFormError(null);
+    try {
+      set({ upiQrUrl: await uploadImage(file) });
+    } catch (e) {
+      setFormError(errorMessage(e, "Upload failed."));
+    } finally {
+      setUploading(false);
+      if (qrRef.current) qrRef.current.value = "";
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -107,6 +127,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
       address: f.address.trim() || null,
       supportHours: f.supportHours.trim() || null,
       announcement: f.announcement.trim() || null,
+      upiId: f.upiId.trim(),
+      upiPayeeName: f.upiPayeeName.trim() || null,
+      upiQrUrl: f.upiQrUrl || null,
       defaultMinOrder: minOrder === null || Number.isNaN(minOrder) ? 0 : minOrder,
       slotDaysAhead: days,
     });
@@ -221,6 +244,39 @@ function Editor({ initial }: { initial: StoreSettings }) {
         </div>
       </Card>
 
+      <Card aria-labelledby="upi-h">
+        <CardHeader
+          id="upi-h"
+          title="UPI payments"
+          description="Customers can pay to this UPI ID at checkout and on WhatsApp orders. Each UPI order stays “payment pending” until you confirm the money arrived (Orders → order → Verify UPI payment). Leave the UPI ID empty to turn UPI off."
+        />
+        <div className="space-y-4 p-5 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="UPI ID" htmlFor="st-upi" error={errors.upiId} hint="e.g. yourname@okaxis — the account that receives the money">
+              <Input id="st-upi" value={f.upiId} invalid={!!errors.upiId} autoComplete="off" onChange={(e) => set({ upiId: e.target.value })} maxLength={120} />
+            </Field>
+            <Field label="Payee name (optional)" htmlFor="st-upi-name" hint="Shown in the customer's UPI app">
+              <Input id="st-upi-name" value={f.upiPayeeName} onChange={(e) => set({ upiPayeeName: e.target.value })} maxLength={60} />
+            </Field>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-ink-soft">Your UPI QR image (optional)</p>
+            <p className="text-xs text-muted">We also show a QR made from the UPI ID with the exact order amount. Upload your bank/UPI app QR if you want customers to see it too.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {f.upiQrUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded image
+                <img src={f.upiQrUrl} alt="UPI QR preview" className="h-28 w-28 rounded-lg border border-line bg-white object-contain p-1" />
+              ) : null}
+              <input ref={qrRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="st-upi-qr" onChange={(e) => onQr(e.target.files?.[0])} />
+              <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => qrRef.current?.click()}>
+                {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {f.upiQrUrl ? "Replace QR" : "Upload QR"}
+              </Button>
+              {f.upiQrUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => set({ upiQrUrl: null })}><X className="size-4" aria-hidden /> Remove</Button> : null}
+            </div>
+          </div>
+        </div>
+      </Card>
+
       <div className="sticky bottom-4 z-20 flex items-center justify-end gap-3 rounded-full border border-line bg-white/95 py-2 pl-5 pr-2 shadow-[var(--shadow-lift)] backdrop-blur">
         {saved ? <span className="mr-auto inline-flex items-center gap-1.5 text-sm text-forest-700" role="status"><CheckCircle2 className="size-4" aria-hidden /> All changes saved</span> : null}
         <Button type="submit" loading={saving} disabled={uploading}>{!saving ? <Save className="size-4" aria-hidden /> : null} Save settings</Button>
@@ -265,6 +321,9 @@ function ServicesPanel({ s }: { s: Services }) {
             <li>Key ID: {s.razorpayKeyIdSet ? "set" : "not set"}</li>
             <li>Webhook secret: {s.webhookSecretSet ? "set" : "not set"}</li>
           </ul>
+        </ServiceRow>
+        <ServiceRow ok={Boolean(s.whatsappCloud && s.whatsappTemplates?.length)} title="WhatsApp order updates" status={s.whatsappCloud ? `WhatsApp Cloud API connected · ${s.whatsappTemplates?.length ?? 0} of 4 templates set` : "Off — no automatic WhatsApp messages"}>
+          Set <Env>WHATSAPP_CLOUD_ACCESS_TOKEN</Env>, <Env>WHATSAPP_CLOUD_PHONE_NUMBER_ID</Env> and the approved template names (<Env>WHATSAPP_TEMPLATE_ORDER_CONFIRMED</Env> etc.). Only customers who opt in get messages.
         </ServiceRow>
         <ServiceRow ok={s.cronSecretSet} title="Scheduled clean-up" status={s.cronSecretSet ? "Cron secret set" : "Cron secret not set"}>
           Unpaid online orders release their stock after the payment window. Set <Env>CRON_SECRET</Env> so your scheduler can call the clean-up job; it also runs whenever staff open the dashboard or orders.

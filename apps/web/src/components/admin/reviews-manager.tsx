@@ -46,8 +46,8 @@ function Inner() {
   async function setStatus(r: AdminReview, status: Status) {
     setBusy(r.id);
     try {
-      await api(`/api/admin/reviews/${r.id}`, { method: "PATCH", json: { status } });
-      setData((d) => (d ? { reviews: tab ? d.reviews.filter((x) => x.id !== r.id) : d.reviews.map((x) => (x.id === r.id ? { ...x, status } : x)) } : d));
+      const res = await api<{ updatedAt: string }>(`/api/admin/reviews/${r.id}`, { method: "PATCH", json: { status, updatedAt: r.updatedAt } });
+      setData((d) => (d ? { reviews: tab ? d.reviews.filter((x) => x.id !== r.id) : d.reviews.map((x) => (x.id === r.id ? { ...x, status, updatedAt: res.updatedAt } : x)) } : d));
       toast(status === "approved" ? "Review published" : status === "hidden" ? "Review hidden" : "Review moved back to waiting");
     } catch (e) {
       toast(errorMessage(e));

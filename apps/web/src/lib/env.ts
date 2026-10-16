@@ -74,6 +74,25 @@ export const env = {
     reservationMinutes: Number(read("PAYMENT_RESERVATION_MINUTES") ?? 15),
   },
 
+  /**
+   * WhatsApp Business Platform (Cloud API) for automatic order updates. Server-only secrets.
+   * Off unless the access token and phone number ID are set; each event also needs an approved
+   * template name (see README → WhatsApp order updates).
+   */
+  whatsappCloud: {
+    accessToken: read("WHATSAPP_CLOUD_ACCESS_TOKEN"),
+    phoneNumberId: read("WHATSAPP_CLOUD_PHONE_NUMBER_ID"),
+    apiVersion: read("WHATSAPP_CLOUD_API_VERSION") ?? "v21.0",
+    apiBase: read("WHATSAPP_CLOUD_API_BASE") ?? "https://graph.facebook.com",
+    language: read("WHATSAPP_TEMPLATE_LANGUAGE") ?? "en",
+    templates: {
+      confirmed: read("WHATSAPP_TEMPLATE_ORDER_CONFIRMED"),
+      packed: read("WHATSAPP_TEMPLATE_ORDER_PACKED"),
+      out_for_delivery: read("WHATSAPP_TEMPLATE_OUT_FOR_DELIVERY"),
+      delivered: read("WHATSAPP_TEMPLATE_ORDER_DELIVERED"),
+    },
+  },
+
   cronSecret: read("CRON_SECRET"),
   devFeaturesAllowed,
 };
