@@ -44,3 +44,16 @@ describe("shared weight stock", () => {
     expect([formatWeight(2000), formatWeight(1500), formatWeight(750), formatWeight(0), formatWeight(1250)]).toEqual(["2 kg", "1.5 kg", "750 g", "0 kg", "1.25 kg"]);
   });
 });
+
+import { describeIssue, effectiveMinOrder } from "../src/pricing";
+describe("minimum order rule", () => {
+  it("is the higher of the area's and the store-wide minimum", () => {
+    expect(effectiveMinOrder(0, 9900)).toBe(9900); // area 'None' + store ₹99 → ₹99 (was shown as "None")
+    expect(effectiveMinOrder(14900, 9900)).toBe(14900);
+    expect(effectiveMinOrder(null, 0)).toBe(0);
+  });
+  it("explains shared-stock shortages", () => {
+    const m = describeIssue({ code: "OUT_OF_STOCK", variantId: "x", available: 2, shared: true }, (p) => `₹${p / 100}`);
+    expect(m).toMatch(/Only 2 of this size fit/);
+  });
+});
