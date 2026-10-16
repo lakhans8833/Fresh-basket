@@ -139,7 +139,7 @@ export function AdminOrderDetail({ id }: { id: string }) {
       setData(r);
       toast(
         pending.kind === "status"
-          ? `Order ${ORDER_STATUS_LABEL[pending.to].toLowerCase()}`
+          ? pending.to === "placed" ? "Order confirmed" : `Order ${ORDER_STATUS_LABEL[pending.to].toLowerCase()}`
           : pending.to === "cod_collected" ? "Cash collection recorded" : "Marked as refunded",
       );
       setPending(null);

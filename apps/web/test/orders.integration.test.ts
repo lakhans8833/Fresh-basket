@@ -515,7 +515,8 @@ describe("WhatsApp orders", () => {
   const wa = (o: Record<string, unknown> = {}) =>
     whatsappOrderSchema.parse({
       items: [{ variantId: v["onion:1 kg"]!, quantity: 3 }],
-      customer: { name: "Guest Buyer", phone: "98765 43210", address: `House ${++waNo}, Lane 2, near park`, area: "", city: "Bengaluru", pincode: "560034", notes: "" },
+      // A different mobile per order: guests may only have 2 open orders per mobile number.
+      customer: { name: "Guest Buyer", phone: `98${String(76543210 + ++waNo).padStart(8, "0")}`, address: `House ${waNo}, Lane 2, near park`, area: "", city: "Bengaluru", pincode: "560034", notes: "" },
       paymentMethod: "cod",
       idempotencyKey: randomUUID(),
       ...o,
@@ -554,12 +555,33 @@ describe("WhatsApp orders", () => {
     expect(await stock(id)).toBe(held);
   });
 
+  it("unconfirmed WhatsApp orders expire (stock back), confirming clears the hold, guests are capped per mobile", async () => {
+    const id = v["onion:1 kg"]!;
+    const before = await stock(id);
+    const phone = "9" + String(Date.now()).slice(-9);
+    const cust = (n: number) => ({ name: "Cap Test", phone, address: `Flat ${n}, Cap Lane`, area: "", city: "Bengaluru", pincode: "560034", notes: "" });
+    const { order: a } = await placeWhatsAppOrder(null, wa({ customer: cust(1) }));
+    expect(a.reservationExpiresAt).not.toBeNull();
+    const { order: b } = await placeWhatsAppOrder(null, wa({ customer: cust(2) }));
+    await expect(placeWhatsAppOrder(null, wa({ customer: cust(3) }))).rejects.toMatchObject({ status: 409 });
+
+    await query("update orders set reservation_expires_at = now() - interval '1 minute' where id = $1", [a.id]);
+    await releaseExpired();
+    expect((await getOrderById(a.id))!.status).toBe("cancelled");
+    expect(await stock(id)).toBeLessThan(before); // b still holds its stock
+
+    await adminUpdateOrderStatus(b.id, "placed", ADMIN);
+    expect((await getOrderById(b.id))!.reservationExpiresAt).toBeNull();
+    await adminUpdateOrderStatus(b.id, "cancelled", ADMIN);
+    expect(await stock(id)).toBe(before);
+  });
+
   it("saves the chosen delivery date + slot and shares slot capacity with website orders", async () => {
     const { order } = await placeWhatsAppOrder(null, wa({ deliveryDate: tomorrow, slotId: eveningSlot }));
     expect(order.deliveryDate).toBe(tomorrow);
     expect(order.slotLabel).toMatch(/^Evening, /);
     // Date outside the booking window, or a date without a slot, is refused.
-    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: addDays(tomorrow, 60), slotId: eveningSlot }))).rejects.toMatchObject({ status: 400 });
+    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: addDays(tomorrow, 60), slotId: eveningSlot }))).rejects.toMatchObject({ status: 409, details: { messages: { _slot: expect.any(String) } } });
     expect(() => wa({ deliveryDate: tomorrow })).toThrow();
 
     const tiny = (await queryOne<{ id: string }>(
@@ -613,8 +635,8 @@ describe("WhatsApp orders", () => {
       await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(1) }));
       await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(2) }));
       await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(3) }))).rejects.toMatchObject({ status: 409 });
-      // Cash on delivery and signed-in customers aren't limited this way.
-      expect((await placeWhatsAppOrder(null, wa({ paymentMethod: "cod", customer: cust(4) }))).created).toBe(true);
+      // Cash on delivery counts too (unconfirmed orders hold stock); signed-in customers aren't limited this way.
+      await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "cod", customer: cust(4) }))).rejects.toMatchObject({ status: 409 });
       expect((await placeWhatsAppOrder(CUSTOMER, wa({ paymentMethod: "upi", customer: cust(5) }))).order.reservationExpiresAt).toBeTruthy();
     } finally {
       await query("update store_settings set upi_id = null");

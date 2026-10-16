@@ -86,21 +86,26 @@ export function WhatsAppOrderView({
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
   const [placed, setPlaced] = useState<PlacedWaOrder | null>(null);
+  /** Did the WhatsApp tab actually open? (false when a pop-up blocker stopped it) */
+  const [waOpened, setWaOpened] = useState(true);
   const idemKey = useRef(newIdempotencyKey());
   // Delivery date + slot (shared capacity with website orders). null = still loading; [] = no slots set up.
   const [slots, setSlots] = useState<SlotOption[] | null>(null);
+  const [slotsError, setSlotsError] = useState(false);
   const [date, setDate] = useState<string | null>(null);
   const [slotId, setSlotId] = useState<string | null>(null);
 
   const loadSlots = () =>
     api<{ slots: SlotOption[] }>("/api/delivery/slots", { cache: "no-store" }).then(
       (r) => {
+        setSlotsError(false);
         setSlots(r.slots);
         const first = r.slots.find((x) => x.available);
         setDate((d) => (d && r.slots.some((x) => x.date === d) ? d : first?.date ?? r.slots[0]?.date ?? null));
         setSlotId((id) => (id && r.slots.some((x) => x.slotId === id && x.available) ? id : first?.slotId ?? null));
       },
-      () => setSlots([]),
+      // A failed request is NOT "no slots set up": keep the form blocked until slots load.
+      () => setSlotsError(true),
     );
   useEffect(() => {
     void loadSlots();
@@ -164,7 +169,9 @@ export function WhatsAppOrderView({
     if (!area) return setFormError("We don't deliver to this PIN code yet. Message us on WhatsApp to ask, or try another address.");
     if (blocking.length) return setFormError("Some items in your cart need attention before you can order.");
     if (guestCoupon) return setFormError("Coupons need an account. Sign in to use your coupon, or remove it in the cart to order as a guest.");
-    if (slots === null) return setFormError("Delivery slots are still loading — please try again in a moment.");
+    if (slots === null) {
+      return setFormError(slotsError ? "Couldn't load delivery times. Tap “Try again” in step 3." : "Delivery slots are still loading — please try again in a moment.");
+    }
     if (slots.length > 0 && !chosenSlot) {
       document.getElementById("wa-slot-step")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return setFormError("Choose a delivery date and time slot.");
@@ -205,7 +212,9 @@ export function WhatsAppOrderView({
       cart.clear();
       setPlaced(r);
       setReview(null);
-      if (win && "location" in win) win.location.href = r.whatsappUrl;
+      const opened = Boolean(win && !win.closed && "location" in win);
+      if (opened) win!.location.href = r.whatsappUrl;
+      setWaOpened(opened);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       try {
@@ -214,6 +223,9 @@ export function WhatsAppOrderView({
         /* ignore */
       }
       const err = e as ApiError;
+      // The server answered (rejected or cancelled): the next attempt is a new order with a new key.
+      // On a network failure the key is kept, so a retry can't create a second order.
+      if (err instanceof ApiError) idemKey.current = newIdempotencyKey();
       const slotFull = Boolean((err.details as { messages?: Record<string, string> } | undefined)?.messages?._slot);
       if (slotFull) {
         // That slot filled up meanwhile: back to the form with fresh slots so another can be picked.
@@ -253,7 +265,10 @@ export function WhatsAppOrderView({
             <span className="mx-auto grid size-16 place-items-center rounded-full bg-whatsapp text-white"><WhatsAppIcon className="size-9" /></span>
             <h2 className="mt-4 text-2xl font-bold text-forest-800">Order {o.orderNumber} is saved</h2>
             <p className="mt-2 text-ink-soft">
-              WhatsApp has opened with your order details — press <b>Send</b> there so we can confirm quickly. Total <b className="text-ink">{formatINR(o.total)}</b> · {PAYMENT_METHOD_LABEL[o.paymentMethod]}.
+              {waOpened
+                ? <>WhatsApp has opened with your order details — press <b>Send</b> there so we can confirm quickly.</>
+                : <>Now tap <b>Send order on WhatsApp</b> below and press <b>Send</b> in WhatsApp — we only get your order once you send it.</>}{" "}
+              Total <b className="text-ink">{formatINR(o.total)}</b> · {PAYMENT_METHOD_LABEL[o.paymentMethod]}.
             </p>
           </div>
           {o.paymentMethod === "upi" && placed.upi ? (
@@ -267,12 +282,14 @@ export function WhatsAppOrderView({
                 </a>
               </div>
             </Notice>
+          ) : o.paymentMethod === "cod" ? (
+            <Notice tone="info" className="mt-5">Cash on delivery — please keep {formatINR(o.total)} ready. Nothing to pay now. We&apos;ll confirm your order on WhatsApp.</Notice>
           ) : (
-            <Notice tone="info" className="mt-5">Cash on delivery — please keep {formatINR(o.total)} ready. Nothing to pay now.</Notice>
+            <Notice tone="warning" className="mt-5" title="Payment pending">Open your order page to see how to pay {formatINR(o.total)}, or message us on WhatsApp.</Notice>
           )}
           <div className="mt-6 flex flex-col gap-3">
             <a href={placed.whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-whatsapp-dark px-5 font-semibold text-white hover:bg-forest-800">
-              <WhatsAppIcon className="size-5" /> Open WhatsApp again
+              <WhatsAppIcon className="size-5" /> {waOpened ? "Open WhatsApp again" : "Send order on WhatsApp"}
             </a>
             <ButtonLink href={trackPath} variant="outline" size="lg" className="rounded-xl">
               <Truck className="size-5" aria-hidden /> Track this order
@@ -328,7 +345,7 @@ export function WhatsAppOrderView({
             <Button size="lg" className="rounded-xl sm:flex-1" loading={placing} onClick={confirmOrder}>
               <WhatsAppIcon className="size-5" /> Confirm &amp; send on WhatsApp
             </Button>
-            <Button size="lg" variant="outline" className="rounded-xl" disabled={placing} onClick={() => setReview(null)}>
+            <Button size="lg" variant="outline" className="rounded-xl" disabled={placing} onClick={() => { setReview(null); void loadSlots(); }}>
               <Pencil className="size-4" aria-hidden /> Edit details
             </Button>
           </div>
@@ -437,7 +454,12 @@ export function WhatsAppOrderView({
           <div id="wa-slot-step" className="mt-7 scroll-mt-32 border-t border-line pt-6"><fieldset>
             <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">3</span> <CalendarClock className="size-5 text-forest-800" aria-hidden /> Delivery Date &amp; Time</legend>
             <div className="mt-4">
-              {slots === null ? (
+              {slots === null && slotsError ? (
+                <Notice tone="error">
+                  Couldn&apos;t load delivery times.{" "}
+                  <button type="button" className="font-semibold underline" onClick={() => void loadSlots()}>Try again</button>
+                </Notice>
+              ) : slots === null ? (
                 <div className="skeleton h-28 w-full" aria-busy="true" />
               ) : slots.length ? (
                 <SlotPicker slots={slots} date={date} slotId={slotId} onChange={(d, id) => { setDate(d); setSlotId(id); }} />

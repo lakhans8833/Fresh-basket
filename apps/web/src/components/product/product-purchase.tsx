@@ -19,7 +19,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
   const first = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(first?.id);
   const [qty, setQty] = useState(1);
-  const { add, quantityOf, hydrated } = useCart();
+  const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const variant = product.variants.find((v) => v.id === variantId) ?? first;
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
@@ -119,8 +119,14 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
         <button
           type="button"
           onClick={() => {
-            // Puts the chosen pack in the cart (if not already there), then opens the WhatsApp order form.
-            const n = inCart > 0 ? 0 : Math.min(qty, maxAddable);
+            // Makes the cart hold the chosen quantity of this pack (never less than already there), then
+            // opens the WhatsApp order form. Before the cart has loaded, just open the form.
+            if (!hydrated) return router.push("/order");
+            if (inCart > 0) {
+              if (qty > inCart) setQuantity(variant.id, Math.min(qty, inCart + maxAddable));
+              return router.push("/order");
+            }
+            const n = Math.min(qty, maxAddable);
             if (n > 0) add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
             router.push("/order");
           }}

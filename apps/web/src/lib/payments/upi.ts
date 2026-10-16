@@ -67,6 +67,11 @@ export async function adminConfirmUpiPayment(orderId: string, actor: { id: strin
     if (!o) throw notFound("Order not found.");
     if (o.payment_method !== "upi") throw badRequest("Only UPI orders can be confirmed here.");
     if (o.payment_status === "paid") throw conflict("This order is already paid.");
+    if (o.payment_status !== "pending" && o.payment_status !== "failed") {
+      throw conflict("This order's payment is already settled (refund pending or refunded). Check it before recording more money.");
+    }
+    // One UTR confirms one order: lock on the UTR so two staff can't use it for two orders at once.
+    await c.query("select pg_advisory_xact_lock(hashtext('upi_utr:' || $1))", [reference]);
     const used = await c.query<{ order_number: string }>(
       `select o.order_number from payments p join orders o on o.id = p.order_id
         where p.provider = 'upi_manual' and p.provider_payment_id = $1 and p.order_id <> $2 limit 1`,
@@ -78,6 +83,14 @@ export async function adminConfirmUpiPayment(orderId: string, actor: { id: strin
       [orderId, reference, o.total],
     );
     const result = r[0]!.result;
+    if (result !== "paid" && result !== "paid_late") {
+      // Nothing was marked paid (amount mismatch, already processed, refund needed): don't tell the customer it's confirmed.
+      await c.query(
+        "insert into order_events (order_id, status, note, actor) select id, status, $2, $3 from orders where id = $1",
+        [orderId, `UPI reference ${reference} checked by staff — needs review (${result.replaceAll("_", " ")})`, `admin:${actor.id}`],
+      );
+      return { result };
+    }
     await c.query("update orders set upi_reference = coalesce(upi_reference, $2) where id = $1", [orderId, reference]);
     // Who confirmed it is kept in the actor column (staff-only); the note is safe to show the customer.
     await c.query(

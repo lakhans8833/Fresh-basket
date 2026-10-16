@@ -11,7 +11,7 @@ import { cancelPaymentLinkFor } from "../payments/link-cancel";
  * Needs `left join delivery_slots s on s.id = o.slot_id`; if the slot was deleted, the end of the
  * delivery day counts.
  */
-export const LATE_SQL = `(o.status = 'placed' and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+export const LATE_SQL = `(o.status in ('placed', 'pending_confirmation') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
 
 export async function adminListOrders(f: { status?: string | null; q?: string | null; date?: string | null; limit?: number }) {
   await releaseExpired();
@@ -69,7 +69,11 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
       await c.query("select cancel_order($1, $2, $3)", [id, `admin:${actorId}`, note || "Cancelled by store"]);
       return;
     }
-    await c.query("update orders set status = $2 where id = $1", [id, to]);
+    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold.
+    await c.query(
+      "update orders set status = $2, reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end where id = $1",
+      [id, to],
+    );
     await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,$4)", [id, to, note ?? null, `admin:${actorId}`]);
   });
   // Customer's WhatsApp update (packed / out for delivery / delivered), once per event.
@@ -113,7 +117,7 @@ export async function adminStats() {
     query<Record<string, number>>(
       `select
          (select count(*)::int from orders where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
-         (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
+         (select coalesce(sum(total),0)::int from orders where status not in ('cancelled', 'pending_confirmation') and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
          (select count(*)::int from orders where status = 'pending_confirmation') as "toConfirm",

@@ -87,5 +87,8 @@ export function canCustomerCancel(status: OrderStatus): boolean {
   return status === "pending_payment" || status === "pending_confirmation" || status === "placed";
 }
 
+/** slot_label of WhatsApp orders placed without a delivery slot (time agreed on WhatsApp). */
+export const NO_SLOT_LABEL = "Delivery time confirmed on WhatsApp";
+
 /** Steps shown on the tracking timeline (cancelled is shown separately). */
 export const TRACKING_STEPS: OrderStatus[] = ["placed", "packed", "out_for_delivery", "delivered"];

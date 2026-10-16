@@ -73,13 +73,16 @@ export async function notifyOrderEvent(
     const to = `91${normalizePhone(o.phone)}`;
 
     // Claim the (order, event) slot. A sent/sending/skipped row means someone already handled it;
-    // a failed row may be retried (max 3 attempts, at least a minute apart).
+    // a failed row may be retried (max 3 attempts, at least a minute apart), and so may a send stuck
+    // in "sending" for 10+ minutes.
     const claim = await query<{ id: number }>(
       `insert into order_notifications (order_id, channel, event, status, recipient) values ($1, 'whatsapp', $2, 'sending', $3)
        on conflict (order_id, channel, event) do update
          set status = 'sending', attempts = order_notifications.attempts + 1, recipient = excluded.recipient, error = null, updated_at = now()
-         where order_notifications.status = 'failed' and order_notifications.attempts < 3
-           and order_notifications.updated_at < now() - interval '1 minute'
+         where order_notifications.attempts < 3
+           and ((order_notifications.status = 'failed' and order_notifications.updated_at < now() - interval '1 minute')
+                -- a send that was cut off (function timed out) before recording its result
+                or (order_notifications.status = 'sending' and order_notifications.updated_at < now() - interval '10 minutes'))
        returning id`,
       [orderId, event, to],
     );

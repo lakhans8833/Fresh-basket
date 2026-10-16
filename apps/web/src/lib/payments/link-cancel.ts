@@ -16,7 +16,7 @@ export function cancelPaymentLinkFor(orderId: string) {
         "select razorpay_payment_link_id as link, payment_method as method, payment_status from orders where id = $1",
         [orderId],
       );
-      if (!o?.link || o.method !== "razorpay_link" || o.payment_status === "paid") return;
+      if (!o?.link || o.link.startsWith("creating:") || o.method !== "razorpay_link" || o.payment_status === "paid") return;
       await query("update orders set razorpay_payment_link_url = null where id = $1", [orderId]);
       if (env.payments.online === "razorpay") await cancelPaymentLinkAtRazorpay(o.link);
     } catch (e) {

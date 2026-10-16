@@ -13,7 +13,7 @@ with sync_playwright() as p:
     page = b.new_page(viewport={"width": 390, "height": 860})
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    page.add_init_script("window.__opened=[]; window.open=(u)=>{window.__opened.push(u); return {}};")
+    page.add_init_script("window.__opened=[]; window.open=(u)=>{window.__opened.push(u); return {closed: false, location: {}}};")
 
     # Add two products from the shop
     page.goto(f"{BASE}/shop")

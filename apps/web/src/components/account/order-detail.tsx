@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Check, PackageCheck, Truck, ClipboardList, Home as HomeIcon, XCircle, RotateCcw, CreditCard, PartyPopper, Clock, ExternalLink } from "lucide-react";
 import {
-  canCustomerCancel, formatINR, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
+  canCustomerCancel, formatINR, NO_SLOT_LABEL, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
   type Order, type OrderStatus, type PlaceOrderResponse,
 } from "@freshbasket/shared";
 import { UpiPayPanel, type UpiInfo } from "./upi-pay-panel";
@@ -106,7 +106,7 @@ export function OrderDetail({
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-lime-300 text-forest-900"><PartyPopper className="size-6" aria-hidden /></span>
           <div>
             <h1 className="text-2xl font-semibold">Thank you! Your order is confirmed.</h1>
-            <p className="text-white/75">We&apos;ll deliver on {formatDeliveryDate(order.deliveryDate)}, {order.slotLabel.split(",")[0]}.</p>
+            <p className="text-white/75">{order.slotLabel === NO_SLOT_LABEL ? "We'll agree the delivery time with you on WhatsApp." : <>We&apos;ll deliver on {formatDeliveryDate(order.deliveryDate)}, {order.slotLabel.split(",")[0]}.</>}</p>
           </div>
         </div>
       ) : null}
@@ -127,7 +127,7 @@ export function OrderDetail({
 
       {order.status === "pending_confirmation" ? (
         <Notice tone="warning" className="mt-5" title="Waiting for the store to confirm">
-          Your order is saved. Please make sure you pressed <b>Send</b> in WhatsApp — the store confirms your order there, then it&apos;s packed for {formatDeliveryDate(order.deliveryDate)}.
+          Your order is saved. Please make sure you pressed <b>Send</b> in WhatsApp — the store confirms your order there, then it&apos;s packed{order.slotLabel === NO_SLOT_LABEL ? " for the delivery time agreed with you" : ` for ${formatDeliveryDate(order.deliveryDate)}`}.
         </Notice>
       ) : null}
 
@@ -144,7 +144,11 @@ export function OrderDetail({
             </div>
           ) : null}
         </Notice>
-      ) : order.status === "pending_payment" && mode === "account" ? (
+      ) : order.status === "pending_payment" && order.paymentMethod === "upi" ? (
+        <Notice tone="warning" className="mt-5" title="Waiting for UPI payment">
+          UPI payment details aren&apos;t available right now. Please message the store on WhatsApp to pay {formatINR(order.total)}.
+        </Notice>
+      ) : order.status === "pending_payment" && mode === "account" && (order.paymentMethod === "razorpay" || order.paymentMethod === "mock") ? (
         <Notice tone="warning" className="mt-5" title="Waiting for payment">
           Your items are held until {order.reservationExpiresAt ? new Date(order.reservationExpiresAt).toLocaleTimeString("en-IN", { timeStyle: "short", timeZone: "Asia/Kolkata" }) : "shortly"}. If you&apos;ve already paid, this page updates automatically once the payment is confirmed.
           <div className="mt-3"><Button size="sm" variant="dark" loading={busy === "pay"} onClick={resumePayment}><CreditCard className="size-4" aria-hidden /> Complete payment</Button></div>
@@ -210,7 +214,7 @@ export function OrderDetail({
         <aside className="space-y-4">
           <section className="rounded-[var(--radius-card)] border border-line bg-white p-5 text-[0.9375rem]">
             <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.1em] text-muted">Delivery</h3>
-            <p className="mt-2 font-semibold text-ink">{formatDeliveryDate(order.deliveryDate)}</p>
+            {order.slotLabel !== NO_SLOT_LABEL ? <p className="mt-2 font-semibold text-ink">{formatDeliveryDate(order.deliveryDate)}</p> : null}
             <p className="text-ink-soft">{order.slotLabel.replace(/(\d{2}:\d{2})/g, (t) => formatSlotTime(t))}</p>
             <p className="mt-3 font-medium text-ink">{order.address.fullName}{order.address.phone ? ` · ${order.address.phone}` : ""}</p>
             <p className="text-muted">{[order.address.line1, order.address.line2, order.address.landmark, order.address.city, order.address.state, order.address.pincode].filter(Boolean).join(", ")}</p>

@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, PREPAID_METHODS, stateMatchesPincode,
-  type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput,
-} from "@freshbasket/shared";
+  type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
 import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
@@ -136,7 +135,10 @@ export const MANUAL_PAYMENT_HOLD_MINUTES = 24 * 60;
  * still re-reserves the stock (or is flagged for refund if it's gone).
  */
 export const GUEST_PAYMENT_HOLD_MINUTES = 3 * 60;
-const GUEST_OPEN_PREPAID_LIMIT = 2;
+/** Open (unpaid or unconfirmed) guest orders allowed per mobile number, so fake orders can't block stock. */
+const GUEST_OPEN_LIMIT = 2;
+/** WhatsApp cash orders the store hasn't confirmed within this time are cancelled and their stock released. */
+export const CONFIRM_HOLD_MINUTES = 24 * 60;
 
 function holdMinutesFor(method: PaymentMethod): number | null {
   if (method === "cod") return null;
@@ -185,7 +187,9 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
 
   const prepaid = PREPAID_METHODS.includes(o.paymentMethod);
   const firstStatus = prepaid ? "pending_payment" : o.needsConfirmation ? "pending_confirmation" : "placed";
-  const hold = o.holdMinutes !== undefined && o.paymentMethod !== "cod" ? o.holdMinutes : holdMinutesFor(o.paymentMethod);
+  const hold = o.needsConfirmation && !prepaid
+    ? CONFIRM_HOLD_MINUTES
+    : o.holdMinutes !== undefined && o.paymentMethod !== "cod" ? o.holdMinutes : holdMinutesFor(o.paymentMethod);
   const { rows: orows } = await c.query<{ id: string }>(
     `insert into orders (user_id, status, payment_method, payment_status, subtotal, discount, coupon_id, coupon_code,
                          delivery_fee, total, delivery_date, slot_id, slot_label, address, customer_note, idempotency_key,
@@ -196,9 +200,9 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
     [
       o.userId, firstStatus, o.paymentMethod, prepaid ? "pending" : "cod_pending",
       ctx.quote.subtotal, ctx.quote.discount, ctx.couponId, ctx.quote.couponCode, ctx.quote.deliveryFee, ctx.quote.total,
-      o.deliveryDate, slot?.id ?? null, slot?.label ?? "Delivery time confirmed on WhatsApp",
+      o.deliveryDate, slot?.id ?? null, slot?.label ?? NO_SLOT_LABEL,
       JSON.stringify(o.address), o.customerNote ?? null, o.idempotencyKey,
-      prepaid ? hold : null, o.fingerprint, o.channel, o.whatsappUpdates,
+      prepaid || firstStatus === "pending_confirmation" ? hold : null, o.fingerprint, o.channel, o.whatsappUpdates,
     ],
   );
   const id = orows[0]!.id;
@@ -368,7 +372,7 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
   const slotId = input.slotId ?? null;
   const deliveryDate = input.deliveryDate ?? today;
   if (slotId && (deliveryDate < today || deliveryDate > addDays(today, settings.slotDaysAhead - 1))) {
-    throw badRequest("Please choose a delivery date shown on the page.");
+    throw new OrderRejected("That delivery date is no longer available. Please choose a date and time again.", { _slot: "Choose a delivery date and time again." });
   }
   await releaseExpired();
 
@@ -390,11 +394,11 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
   const findSame = (c: Q) =>
     c.query<{ id: string }>(
       `select id from orders
-        where (case when $1::uuid is null then user_id is null else user_id = $1::uuid end)
+        where (case when $1::uuid is null then user_id is null and address->>'phone' = $4 else user_id = $1::uuid end)
           and (idempotency_key = $2
                or (request_fingerprint = $3 and created_at > now() - interval '2 minutes' and status <> 'cancelled'))
         order by created_at desc limit 1`,
-      [userId, input.idempotencyKey, fingerprint],
+      [userId, input.idempotencyKey, fingerprint, cu.phone],
     );
 
   try {
@@ -403,15 +407,15 @@ export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppO
       await c.query("select pg_advisory_xact_lock(hashtext('place_order:' || $1))", [owner]);
       const dup = await findSame(c);
       if (dup.rows[0]) return { id: dup.rows[0].id, created: false };
-      const prepaid = input.paymentMethod !== "cod";
-      if (!userId && prepaid) {
+      if (!userId) {
+        // Unpaid or not-yet-confirmed guest orders hold stock; cap them per mobile number.
         const open = await c.query<{ n: number }>(
           `select count(*)::int as n from orders
-            where user_id is null and status = 'pending_payment' and address->>'phone' = $1`,
+            where user_id is null and status in ('pending_payment', 'pending_confirmation') and address->>'phone' = $1`,
           [cu.phone],
         );
-        if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_PREPAID_LIMIT) {
-          throw conflict("You already have unpaid orders waiting. Pay for one of them, choose cash on delivery, or sign in to order.");
+        if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_LIMIT) {
+          throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
         }
       }
       const id = await insertOrder(c, {

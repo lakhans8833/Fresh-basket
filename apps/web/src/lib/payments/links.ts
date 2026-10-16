@@ -21,6 +21,29 @@ export async function ensurePaymentLink(order: Order): Promise<string | null> {
   if (stored?.url) return stored.url;
   if (env.payments.online !== "razorpay") throw new HttpError(503, "Online payment links aren't configured.");
 
+  // Only one request creates the link: claim it with a placeholder id (a retry or double tap waits for
+  // the first one instead of creating a second link or cancelling the order). A claim older than
+  // a minute is from a request that died and can be taken over.
+  const claim = `creating:${Date.now()}`;
+  const claimed = await queryOne<{ id: string }>(
+    `update orders set razorpay_payment_link_id = $2
+      where id = $1 and razorpay_payment_link_url is null
+        and (razorpay_payment_link_id is null
+             or (razorpay_payment_link_id like 'creating:%'
+                 and substr(razorpay_payment_link_id, 10)::bigint < (extract(epoch from now()) * 1000)::bigint - 60000))
+      returning id`,
+    [order.id, claim],
+  );
+  if (!claimed) {
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const s2 = await queryOne<{ url: string | null; status: string }>("select razorpay_payment_link_url as url, status from orders where id = $1", [order.id]);
+      if (s2?.url) return s2.url;
+      if (s2?.status !== "pending_payment") break;
+    }
+    throw new HttpError(503, "Your payment link is still being created. Please try again in a moment.");
+  }
+
   // The link expires with the stock hold (Razorpay needs at least 15 minutes from now).
   const expireBy = Math.max(
     Math.floor((stored?.expires?.getTime() ?? Date.now() + 24 * 3600_000) / 1000),
@@ -38,14 +61,12 @@ export async function ensurePaymentLink(order: Order): Promise<string | null> {
     });
     if (link.amount !== order.total) throw new Error(`Payment link amount ${link.amount} != order total ${order.total}`);
     await query(
-      "update orders set razorpay_payment_link_id = $2, razorpay_payment_link_url = $3 where id = $1 and razorpay_payment_link_id is null",
-      [order.id, link.id, link.short_url],
+      "update orders set razorpay_payment_link_id = $2, razorpay_payment_link_url = $3 where id = $1 and razorpay_payment_link_id = $4",
+      [order.id, link.id, link.short_url, claim],
     );
   } catch (e) {
     console.error("[razorpay] payment link failed", e);
-    // A parallel request may have created it (Razorpay rejects a duplicate reference_id).
-    const again = await queryOne<{ url: string | null }>("select razorpay_payment_link_url as url from orders where id = $1", [order.id]);
-    if (again?.url) return again.url;
+    await query("update orders set razorpay_payment_link_id = null where id = $1 and razorpay_payment_link_id = $2", [order.id, claim]);
     await cancelOrder(order.id, "system", "Could not create the payment link");
     throw new HttpError(502, "We couldn't create the payment link. Your order was cancelled — please try again or choose another payment method.");
   }
