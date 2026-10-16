@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await getSession()) redirect(next);
   return (
     <div className="container-page grid min-h-[60vh] place-items-center py-10">
-      <LoginForm mode={env.auth.mode} next={next} linkError={sp.error === "link"} />
+      <LoginForm mode={env.auth.mode} next={next} linkError={sp.error === "expired" || sp.error === "device" || sp.error === "link" ? sp.error : undefined} />
     </div>
   );
 }

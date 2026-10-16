@@ -13,7 +13,13 @@ import { DevBadge, Notice } from "../ui/feedback";
 import { LeafMark } from "../layout/logo";
 import { cn } from "../ui/cn";
 
-export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: boolean }) {
+const LINK_ERRORS: Record<"expired" | "device" | "link", string> = {
+  expired: "That email link has expired or was already used. Each link works once — request a new one below (sign-in code, magic link or Forgot password).",
+  device: "Open the email link in the same browser where you asked for it — or sign in below with your password or an email code.",
+  link: "That sign-in link didn't work. Please request a new one below.",
+};
+
+export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link" }) {
   const router = useRouter();
   const { refresh } = useSession();
   const [method, setMethod] = useState<"code" | "password">("code");
@@ -22,7 +28,7 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(linkError ? "That sign-in link is invalid or has expired." : null);
+  const [error, setError] = useState<string | null>(linkError ? LINK_ERRORS[linkError] : null);
   const [info, setInfo] = useState<string | null>(null);
   const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
 

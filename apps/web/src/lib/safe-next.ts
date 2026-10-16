@@ -11,6 +11,9 @@ export function safeNextPath(next: string | null | undefined, fallback = "/accou
     const base = "https://same-origin.invalid";
     const u = new URL(next, base);
     if (u.origin !== base) return fallback;
+    // Dot segments ("/.//evil.com", "/x/..//evil.com") collapse to "//evil.com" when parsed, which a
+    // browser treats as another site: check the result again.
+    if (u.pathname.startsWith("//") || u.pathname.startsWith("/\\")) return fallback;
     return `${u.pathname}${u.search}${u.hash}`;
   } catch {
     return fallback;

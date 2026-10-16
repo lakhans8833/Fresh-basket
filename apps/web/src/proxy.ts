@@ -28,6 +28,15 @@ function withCors(req: NextRequest, res: NextResponse) {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // A Supabase email link that failed (used twice / too old) or wasn't allowed to return to its page
+  // arrives on any page with ?error_code=… — send it to the sign-in page, which explains what to do.
+  const authError = req.nextUrl.searchParams.get("error_code");
+  if (authError && req.method === "GET" && !pathname.startsWith("/api/") && pathname !== "/login") {
+    const to = new URL("/login", req.url);
+    to.search = "";
+    to.searchParams.set("error", /expired/i.test(authError) ? "expired" : "link");
+    return NextResponse.redirect(to);
+  }
   if (pathname.startsWith("/api/") && req.method === "OPTIONS") {
     return withCors(req, new NextResponse(null, { status: 204 }));
   }
