@@ -21,11 +21,13 @@ type ProductRow = {
   description: string | null; highlights: string[]; seasonal: boolean; featured: boolean;
   storage_tips?: string | null; shelf_life?: string | null; origin?: string | null; nutrition?: string | null;
   image_url: string | null; variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean }[] | null;
+  stock_grams?: number | null;
 };
 
 const PRODUCT_SELECT = `
   select p.id, p.slug, p.name, p.category_id, c.name as category_name, c.slug as category_slug,
          p.description, p.highlights, p.seasonal, p.featured, p.storage_tips, p.shelf_life, p.origin, p.nutrition,
+         p.stock_grams::float8 as stock_grams,
          (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image_url,
          (select json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'mrp', v.mrp, 'stock', v.stock, 'active', v.active) order by v.sort_order, v.price)
             from product_variants v where v.product_id = p.id and v.active) as variants
@@ -46,6 +48,7 @@ function toSummary(r: ProductRow): ProductSummary {
     variants,
     fromPrice: variants.length ? Math.min(...variants.map((v) => v.price)) : 0,
     inStock: variants.some((v) => v.stock > 0),
+    stockGrams: r.stock_grams ?? null,
   };
 }
 
@@ -108,7 +111,7 @@ export const PRICE_BUCKETS: { key: string; label: string; min: number; max: numb
  * whenever stock or the catalogue changes (lib/cache.ts). Filtering happens in memory — the whole
  * shop is a few hundred rows at most, and one cached read is far faster than a query per page.
  */
-const activeProductRows = cached("products-v2", [CACHE_TAGS.catalog], 300, () =>
+const activeProductRows = cached("products-v3", [CACHE_TAGS.catalog], 300, () =>
   query<ProductRow>(`${PRODUCT_SELECT} where p.active and c.active order by p.name`),
 );
 

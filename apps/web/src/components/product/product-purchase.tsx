@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
-import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
+import { addablePacks, formatINR, formatWeight, MAX_QTY_PER_LINE, sharesWeightStock, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
@@ -22,7 +22,10 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
   const out = variant.stock <= 0;
   const inCart = hydrated ? quantityOf(variant.id) : 0;
-  const maxAddable = Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart);
+  // Weight products: all pack sizes share one total, so sizes already in the cart count too.
+  const maxAddable = addablePacks(product, variant.id, (id) => (hydrated ? quantityOf(id) : 0), MAX_QTY_PER_LINE);
+  const shared = sharesWeightStock(product.stockGrams, product.variants);
+  const otherSizesInCart = shared && hydrated ? product.variants.some((v) => v.id !== variant.id && quantityOf(v.id) > 0) : false;
 
   return (
     <div className="mt-6">
@@ -87,6 +90,9 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           <span className="font-medium text-leaf-600">In stock</span>
         )}
         {inCart > 0 ? <span className="text-muted"> · {inCart} already in your cart</span> : null}
+        {!out && maxAddable === 0 && otherSizesInCart ? (
+          <span className="block text-muted">Other sizes in your cart already use the {formatWeight(product.stockGrams ?? 0)} available.</span>
+        ) : null}
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">

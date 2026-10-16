@@ -13,6 +13,7 @@ import { errorMessage, useAdminData } from "./use-admin-data";
 import { useAdmin } from "./admin-context";
 import { inputToPaise, paiseToInput } from "./money";
 import { Badge, Card, LoadError, LoadingRows, PageHeader } from "./ui";
+import { productStockSummary } from "@freshbasket/shared";
 
 interface Row {
   variantId: string;
@@ -116,22 +117,40 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     return () => window.removeEventListener("beforeunload", h);
   }, [dirty]);
 
+  // Low / out for weight products is decided on the product's shared total (2 kg of mint is not
+  // "low" just because the 1 kg size can only be made twice); other packs are judged one by one.
+  const productLevel = useMemo(() => {
+    const byProduct = new Map<string, Row[]>();
+    for (const r of rows) if (r.productStockGrams !== null) byProduct.set(r.productId, [...(byProduct.get(r.productId) ?? []), r]);
+    const out = new Map<string, ReturnType<typeof productStockSummary>>();
+    for (const [id, rs] of byProduct) {
+      out.set(id, productStockSummary(rs[0]!.productStockGrams, rs.map((r) => ({ id: r.variantId, label: r.label, stock: r.stock, active: r.active }))));
+    }
+    return out;
+  }, [rows]);
+  const stockState = (r: Row): "out" | "low" | "ok" => {
+    const pl = r.productStockGrams !== null ? productLevel.get(r.productId) : undefined;
+    if (pl && pl.kind === "weight") return pl.out ? "out" : pl.low ? "low" : "ok";
+    return r.stock === 0 ? "out" : r.stock <= LOW ? "low" : "ok";
+  };
+
   const counts = useMemo(() => {
     let low = 0, out = 0, inactive = 0;
     for (const r of rows) {
       if (!r.active || !r.productActive) inactive++;
-      else if (r.stock === 0) out++;
-      else if (r.stock <= LOW) low++;
+      else if (stockState(r) === "out") out++;
+      else if (stockState(r) === "low") low++;
     }
     return { all: rows.length, low, out, inactive };
-  }, [rows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stockState only reads productLevel
+  }, [rows, productLevel]);
 
   const visible = rows.filter((r) => {
     const needle = q.trim().toLowerCase();
     if (needle && !`${r.productName} ${r.label} ${r.categoryName}`.toLowerCase().includes(needle)) return false;
     const live = r.active && r.productActive;
-    if (filter === "low") return live && r.stock > 0 && r.stock <= LOW;
-    if (filter === "out") return live && r.stock === 0;
+    if (filter === "low") return live && stockState(r) === "low";
+    if (filter === "out") return live && stockState(r) === "out";
     if (filter === "inactive") return !live;
     return true;
   });

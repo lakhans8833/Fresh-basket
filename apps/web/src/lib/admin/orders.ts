@@ -9,7 +9,29 @@ import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../o
  * Needs `left join delivery_slots s on s.id = o.slot_id`; if the slot was deleted, the end of the
  * delivery day counts.
  */
-export const LATE_SQL = `(o.status = 'placed' and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+/** Overdue: the delivery slot has ended (India time) and the order still isn't delivered. */
+export const LATE_SQL = `(o.status in ('placed','packed','out_for_delivery') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+
+/**
+ * Low stock, judged per PRODUCT for stock-by-weight items (their sizes share one total: low when it
+ * makes 5 or fewer of the smallest active size, out when it can't make even one) and per pack for
+ * everything else (5 or fewer left).
+ */
+const LOW_STOCK_SQL = `
+  with packs as (
+    select p.id as product_id, p.name, p.stock_grams, v.id as variant_id, v.label, v.stock, pack_label_grams(v.label) as g
+      from product_variants v join products p on p.id = v.product_id
+     where v.active and p.active
+  ), weight as (
+    select product_id, name, stock_grams, min(g) as smallest from packs
+     where stock_grams is not null group by product_id, name, stock_grams having bool_and(g is not null and g > 0)
+  )
+  select product_id as "productId", name as "productName", null::uuid as "variantId", null::text as label, null::int as stock,
+         stock_grams::float8 as "stockGrams", (stock_grams < smallest) as "out"
+    from weight where stock_grams <= 5 * smallest
+  union all
+  select k.product_id, k.name, k.variant_id, k.label, k.stock, null::float8, (k.stock = 0)
+    from packs k where k.product_id not in (select product_id from weight) and k.stock <= 5`;
 
 export async function adminListOrders(f: { status?: string | null; q?: string | null; date?: string | null; limit?: number }) {
   await releaseExpired();
@@ -108,11 +130,12 @@ export async function adminStats() {
          (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
+         (select count(*)::int from orders where status = 'placed') as "newOrders",
          (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
          (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
          (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
          (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",
-         (select count(*)::int from product_variants where active and stock <= 5) as "lowStockCount",
+         (select count(*)::int from (${LOW_STOCK_SQL}) ls) as "lowStockCount",
          (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
     ),
     query<OrderRow>(
@@ -121,10 +144,7 @@ export async function adminStats() {
               o.reservation_expires_at, o.razorpay_order_id, o.created_at
          from orders o order by created_at desc limit 8`,
     ),
-    query(
-      `select v.id as "variantId", p.name as "productName", v.label, v.stock from product_variants v join products p on p.id = v.product_id
-        where v.active and p.active and v.stock <= 5 order by v.stock, p.name limit 10`,
-    ),
+    query(`select * from (${LOW_STOCK_SQL}) ls order by "out" desc, "productName", label limit 10`),
   ]);
   return { ...counts[0], recent: await hydrateOrders(pool, recentRows), lowStock };
 }

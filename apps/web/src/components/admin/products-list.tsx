@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Package, Plus, Search, ChevronRight, Scale } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { useToast } from "../ui/toast";
-import { formatINR } from "@freshbasket/shared";
+import { formatINR, productStockSummary } from "@freshbasket/shared";
 import { Button, ButtonLink } from "../ui/button";
 import { Input } from "../ui/form";
 import { EmptyState } from "../ui/feedback";
@@ -24,16 +24,17 @@ interface Row {
   categoryName: string;
   imageUrl: string | null;
   variants: { id: string; label: string; price: number; stock: number; active: boolean }[];
+  /** Weight products: the shared total in grams (each size's `stock` is only what that total could make). */
+  stockGrams: number | null;
 }
 
 function summary(p: Row) {
   const active = p.variants.filter((v) => v.active);
   const prices = active.map((v) => v.price);
-  const stock = active.reduce((s, v) => s + v.stock, 0);
-  const anyOut = active.some((v) => v.stock === 0);
-  const low = active.some((v) => v.stock > 0 && v.stock <= 5);
+  // Never add up the sizes of a weight product: they are alternative ways to sell ONE total.
+  const st = productStockSummary(p.stockGrams, active);
   const priceText = prices.length === 0 ? "—" : Math.min(...prices) === Math.max(...prices) ? formatINR(prices[0]!) : `${formatINR(Math.min(...prices))} – ${formatINR(Math.max(...prices))}`;
-  return { active, priceText, stock, anyOut, low };
+  return { active, priceText, st };
 }
 
 function Flags({ p }: { p: Row }) {
@@ -49,9 +50,10 @@ function Flags({ p }: { p: Row }) {
 function StockText({ s }: { s: ReturnType<typeof summary> }) {
   if (s.active.length === 0) return <span className="text-muted">No active sizes</span>;
   return (
-    <span className={cn("tabular-nums", s.stock === 0 ? "font-semibold text-danger" : s.anyOut || s.low ? "font-semibold text-[#7a5212]" : "text-ink")}>
-      {s.stock === 0 ? "Out of stock" : `${s.stock} in stock`}
-      {s.stock > 0 && s.anyOut ? " · a size is out" : s.stock > 0 && s.low ? " · running low" : ""}
+    <span className={cn("tabular-nums", s.st.out ? "font-semibold text-danger" : s.st.someSizeOut || s.st.low ? "font-semibold text-[#7a5212]" : "text-ink")}>
+      {s.st.text}
+      {!s.st.out && s.st.low ? " · running low" : !s.st.out && s.st.someSizeOut ? " · a size is out" : ""}
+      {s.st.kind === "weight" ? <span className="block text-xs font-normal text-muted">Shared by all sizes</span> : null}
     </span>
   );
 }

@@ -38,6 +38,7 @@ export async function adminListProducts(q?: string | null) {
   }
   return query(
     `select p.id, p.slug, p.name, p.active, p.featured, p.seasonal, c.name as "categoryName",
+            p.stock_grams::float8 as "stockGrams",
             (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as "imageUrl",
             (select coalesce(json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'stock', v.stock, 'active', v.active) order by v.sort_order), '[]')
                from product_variants v where v.product_id = p.id) as variants

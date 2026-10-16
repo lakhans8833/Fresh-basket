@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
+import { addablePacks, formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "./product-image";
@@ -26,7 +26,9 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
   const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const inCart = variant && hydrated ? quantityOf(variant.id) : 0;
-  const maxAddable = variant ? Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart) : 0;
+  // Weight products: every pack size in the cart draws from the same total, so count them all.
+  const cartQty = (id: string) => (hydrated ? quantityOf(id) : 0);
+  const maxAddable = variant ? addablePacks(product, variant.id, cartQty, MAX_QTY_PER_LINE) : 0;
 
   function addToCart() {
     if (!variant || maxAddable <= 0) return;
@@ -45,12 +47,12 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
   /** Change the quantity already in the cart from the card (0 removes it). */
   function setCartQty(n: number) {
     if (!variant) return;
-    const cap = Math.min(MAX_QTY_PER_LINE, variant.stock);
+    const cap = inCart + addablePacks(product, variant.id, cartQty, MAX_QTY_PER_LINE);
     const next = Math.max(0, Math.min(n, Math.max(cap, 0)));
     setQuantity(variant.id, next);
     if (next === 0) toast(`${product.name} (${variant.label}) removed from cart`);
   }
-  const cartCap = variant ? Math.min(MAX_QTY_PER_LINE, Math.max(variant.stock, inCart)) : 0;
+  const cartCap = variant ? Math.max(inCart, inCart + addablePacks(product, variant.id, cartQty, MAX_QTY_PER_LINE)) : 0;
   return { variant, setVariantId: choosePack, qty, setQty, inCart, maxAddable, addToCart, justAdded, setCartQty, cartCap };
 }
 

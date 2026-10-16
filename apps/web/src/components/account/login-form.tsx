@@ -9,6 +9,8 @@ import { api } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { useSession } from "./session-context";
 import { OtpLogin } from "./otp-login";
+import { SignupCode } from "./signup-code";
+import { sendErrorMessage } from "@/lib/client/otp-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { DevBadge, Notice } from "../ui/feedback";
@@ -33,6 +35,8 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
   const [error, setError] = useState<string | null>(linkError ? LINK_ERRORS[linkError] : null);
   const [info, setInfo] = useState<string | null>(null);
   const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
+  /** Password account waiting for its email code: just signed up, or tried to sign in unconfirmed. */
+  const [confirming, setConfirming] = useState<{ email: string; justSent: boolean } | null>(null);
 
   /** Signed in, but loading the account failed (network / server): retry the check, keep the session. */
   const [checkFailed, setCheckFailed] = useState(false);
@@ -99,8 +103,12 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
         });
         if (error) throw error;
         if (data.session) await done();
-        else {
-          setInfo("Check your email to confirm your account, then sign in.");
+        else if (data.user && data.user.identities && data.user.identities.length === 0) {
+          // Supabase's answer for an email that already has a confirmed account (no email is sent).
+          setError("An account with this email already exists. Sign in instead, or use “Forgot password?”.");
+          setBusy(null);
+        } else {
+          setConfirming({ email: email.trim(), justSent: true });
           setBusy(null);
         }
       }
@@ -111,11 +119,11 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
         setError("Email or password is incorrect. Use “Forgot password?” below, or sign in with an email code instead — no password needed.");
       } else if (/email not confirmed/i.test(raw)) {
         setLastError("unconfirmed");
-        setError("Please confirm your email first — open the link we emailed you (check spam too).");
+        setConfirming({ email: email.trim(), justSent: false });
       } else if (/already registered/i.test(raw)) {
         setError("An account with this email already exists. Sign in instead, or use “Forgot password?”.");
       } else {
-        setError(raw || "Sign in failed. Please try again.");
+        setError(/fetch|network/i.test(raw) || (err as { status?: number }).status === 0 ? sendErrorMessage(err as Error) : raw || "Sign in failed. Please try again.");
       }
       setBusy(null);
     }
@@ -218,6 +226,13 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
           </div>
           {method === "code" ? (
             <OtpLogin next={next} onSignedIn={done} />
+          ) : confirming ? (
+            <SignupCode
+              email={confirming.email}
+              justSent={confirming.justSent}
+              onConfirmed={done}
+              onCancel={() => { setConfirming(null); setTab("signin"); setError(null); setInfo(null); }}
+            />
           ) : (
           <>
           <div role="tablist" className="mt-4 grid grid-cols-2 rounded-full border border-line p-1 text-sm font-semibold">

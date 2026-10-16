@@ -54,6 +54,11 @@ export interface ProductSummary {
   /** min variant price, for sorting/display */
   fromPrice: Paise;
   inStock: boolean;
+  /**
+   * Weight products: the ONE shared total in grams that every pack size draws from (null for
+   * per-pack products like "1 bunch"). Use addablePacks() — never add up the packs' stock.
+   */
+  stockGrams: number | null;
 }
 
 export interface ProductDetail extends ProductSummary {

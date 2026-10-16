@@ -86,7 +86,8 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
               const unit = p?.unitPrice ?? l.priceHint;
               const href = l.productSlug ? `/product/${l.productSlug}` : "/shop";
               const msgEl = msg ? <p className="mt-1 text-sm font-medium text-danger" role="alert">{msg}</p> : null;
-              const stepper = <QuantityStepper size="sm" tone="outline" value={l.quantity} onChange={(n) => setQuantity(l.variantId, n)} label={`${l.productName} ${l.variantLabel}`} className="rounded-lg" />;
+              // The server quote says how many of this pack fit (weight products: after the other sizes in the cart).
+              const stepper = <QuantityStepper size="sm" tone="outline" value={l.quantity} max={p ? Math.max(0, p.maxQuantity) : undefined} onChange={(n) => setQuantity(l.variantId, p ? Math.min(n, Math.max(p.maxQuantity, Math.min(n, l.quantity))) : n)} label={`${l.productName} ${l.variantLabel}`} className="rounded-lg" />;
               const removeBtn = (
                 <button type="button" onClick={() => remove(l.variantId)} aria-label={`Remove ${l.productName}`} className="grid size-9 shrink-0 place-items-center rounded-full text-danger hover:bg-danger-bg">
                   <Trash2 className="size-[1.15rem]" />
