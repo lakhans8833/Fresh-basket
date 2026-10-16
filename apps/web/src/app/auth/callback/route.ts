@@ -3,6 +3,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { env } from "@/lib/env";
 import { supabaseServerClient } from "@/lib/auth";
 import { safeNextPath } from "@/lib/safe-next";
+import { RECOVERY_COOKIE, RECOVERY_TTL_SECONDS, recoveryToken } from "@/lib/tokens";
 
 const OTP_TYPES: EmailOtpType[] = ["signup", "invite", "magiclink", "recovery", "email_change", "email"];
 
@@ -28,6 +29,19 @@ export async function GET(req: Request) {
   const fallbackNext = type === "recovery" ? "/reset-password" : null;
   const next = sp.get("next") ?? fallbackNext;
   const safeNext = safeNextPath(next);
+  // A recovery link: Supabase says so (type=recovery), or a code link that was sent to the reset page.
+  const isRecovery = type === "recovery" || safeNext.startsWith("/reset-password");
+
+  /** Signed in through the link: go on, and for recovery mark THIS browser + user as recovering. */
+  const success = (userId: string | undefined) => {
+    const res = NextResponse.redirect(new URL(safeNext, url.origin));
+    if (isRecovery && userId) {
+      res.cookies.set(RECOVERY_COOKIE, recoveryToken.issue(userId), {
+        httpOnly: true, sameSite: "lax", secure: url.protocol === "https:", path: "/", maxAge: RECOVERY_TTL_SECONDS,
+      });
+    }
+    return res;
+  };
 
   const errorCode = sp.get("error_code") ?? sp.get("error");
   if (errorCode) {
@@ -38,16 +52,16 @@ export async function GET(req: Request) {
   const sb = await supabaseServerClient();
   const tokenHash = sp.get("token_hash");
   if (tokenHash && type && OTP_TYPES.includes(type)) {
-    const { error } = await sb.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) return NextResponse.redirect(new URL(safeNext, url.origin));
+    const { data, error } = await sb.auth.verifyOtp({ type, token_hash: tokenHash });
+    if (!error) return success(data.user?.id);
     console.warn("[auth/callback] verifyOtp failed:", error.code ?? error.message);
     return NextResponse.redirect(loginErrorUrl(url.origin, /expired|invalid/i.test(`${error.code} ${error.message}`) ? "expired" : "link", next));
   }
 
   const code = sp.get("code");
   if (code) {
-    const { error } = await sb.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(safeNext, url.origin));
+    const { data, error } = await sb.auth.exchangeCodeForSession(code);
+    if (!error) return success(data.user?.id);
     console.warn("[auth/callback] code exchange failed:", error.code ?? error.message);
     // PKCE: the link was opened in a different browser/app than the one that asked for it.
     const device = /verifier|pkce/i.test(`${error.code} ${error.message}`);

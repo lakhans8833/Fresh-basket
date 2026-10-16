@@ -1,3 +1,4 @@
+import { safeNextPath } from "@/lib/safe-next";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
@@ -30,11 +31,19 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // A Supabase email link that failed (used twice / too old) or wasn't allowed to return to its page
   // arrives on any page with ?error_code=… — send it to the sign-in page, which explains what to do.
+  // /auth/callback handles its own errors (it knows the link type and keeps `next`). Only the
+  // validated `next` is carried over — never tokens, codes or token_hash values.
   const authError = req.nextUrl.searchParams.get("error_code");
-  if (authError && req.method === "GET" && !pathname.startsWith("/api/") && pathname !== "/login") {
+  if (authError && req.method === "GET" && !pathname.startsWith("/api/") && pathname !== "/login" && pathname !== "/auth/callback") {
     const to = new URL("/login", req.url);
     to.search = "";
+    to.hash = "";
     to.searchParams.set("error", /expired/i.test(authError) ? "expired" : "link");
+    const next = req.nextUrl.searchParams.get("next");
+    if (next) {
+      const safe = safeNextPath(next, "");
+      if (safe) to.searchParams.set("next", safe);
+    }
     return NextResponse.redirect(to);
   }
   if (pathname.startsWith("/api/") && req.method === "OPTIONS") {
