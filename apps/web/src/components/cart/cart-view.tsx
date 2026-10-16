@@ -16,6 +16,7 @@ import { Button, ButtonLink } from "../ui/button";
 import { EmptyState, Notice } from "../ui/feedback";
 import { WhatsAppIcon } from "../ui/whatsapp-icon";
 import { LocationDialog } from "../layout/location-dialog";
+import { takeBuyAgainNotice, type BuyAgainNotice } from "../account/buy-again";
 
 const BLOCKING: QuoteIssue["code"][] = ["OUT_OF_STOCK", "UNAVAILABLE", "INVALID_QUANTITY", "EMPTY_CART", "TOO_MANY_LINES", "BELOW_MIN_ORDER"];
 
@@ -28,6 +29,10 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- device-local details, read after mount
   useEffect(() => setSaved(loadSavedCustomer()), []);
+  // What changed since that past order ("Buy again"): shown once, until dismissed or the page is left.
+  const [buyAgainNotice, setBuyAgainNotice] = useState<BuyAgainNotice | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hand-over from the orders page
+  useEffect(() => setBuyAgainNotice(takeBuyAgainNotice()), []);
 
   if (!hydrated) {
     return (
@@ -58,6 +63,23 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
 
   return (
     <div className="container-page pt-6 md:pt-8">
+      {buyAgainNotice ? (
+        <Notice tone={buyAgainNotice.skipped.length || buyAgainNotice.changed.length || buyAgainNotice.reduced.length ? "warning" : "success"} className="mb-5" title={`Added ${buyAgainNotice.added} item${buyAgainNotice.added === 1 ? "" : "s"} from order ${buyAgainNotice.orderNumber} at today's prices`}>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+            {buyAgainNotice.changed.map((c) => (
+              <li key={`p-${c.name}`}>{c.name}: price {c.price > c.oldPrice ? "went up" : "went down"} from {formatINR(c.oldPrice)} to <b>{formatINR(c.price)}</b></li>
+            ))}
+            {buyAgainNotice.reduced.map((c) => (
+              <li key={`q-${c.name}`}>{c.name}: only {c.quantity} of {c.requested} in stock — added {c.quantity}</li>
+            ))}
+            {buyAgainNotice.skipped.map((c) => (
+              <li key={`s-${c.name}`}>{c.name}: {c.reason === "out_of_stock" ? "out of stock" : "no longer available"} — not added</li>
+            ))}
+            {!buyAgainNotice.changed.length && !buyAgainNotice.reduced.length && !buyAgainNotice.skipped.length ? <li>Same prices as last time, everything in stock.</li> : null}
+          </ul>
+          <button type="button" onClick={() => setBuyAgainNotice(null)} className="mt-2 text-sm font-semibold underline">Dismiss</button>
+        </Notice>
+      ) : null}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_27rem]">
         <section aria-labelledby="cart-items" className="min-w-0 rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">

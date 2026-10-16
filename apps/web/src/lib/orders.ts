@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, PREPAID_METHODS, stateMatchesPincode,
-  type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL } from "@freshbasket/shared";
+  type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
 import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
@@ -519,25 +519,55 @@ export async function customerCancel(userId: string, orderId: string) {
   return getMyOrder(userId, orderId);
 }
 
-/** Items from a past order that can be added to the basket again at today's prices. */
+/**
+ * "Buy again": the items of a past order, re-checked NOW — today's price, the product, its category and
+ * the pack size must still be on sale, and quantities are capped to today's stock (weight products:
+ * every pack size from the order shares the product's one total). Unavailable items and price changes
+ * are reported so the customer sees them; nothing is added at an old price.
+ */
 export async function reorderItems(userId: string, orderId: string) {
   const order = await getMyOrder(userId, orderId);
   if (!order) throw notFound("Order not found.");
   const ids = order.items.map((i) => i.variantId).filter((x): x is string => Boolean(x));
-  const rows = await query<{ id: string; stock: number; active: boolean; slug: string }>(
-    `select v.id, v.stock, (v.active and p.active) as active, p.slug from product_variants v join products p on p.id = v.product_id where v.id = any($1::uuid[])`,
+  const rows = await query<{
+    id: string; stock: number; active: boolean; slug: string; price: number; label: string; product_id: string;
+    product_name: string; stock_grams: number | null; grams: number | null; image_url: string | null;
+  }>(
+    `select v.id, v.stock, (v.active and p.active and c.active) as active, p.slug, v.price, v.label, p.id as product_id,
+            p.name as product_name, p.stock_grams::float8 as stock_grams, pack_label_grams(v.label) as grams,
+            (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image_url
+       from product_variants v join products p on p.id = v.product_id join categories c on c.id = p.category_id
+      where v.id = any($1::uuid[])`,
     [ids],
   );
   const avail = new Map(rows.map((r) => [r.id, r]));
-  const added: { variantId: string; quantity: number; productSlug: string }[] = [];
-  const skipped: string[] = [];
+  const gramsLeft = new Map<string, number>();
+  const items: {
+    variantId: string; productSlug: string; productName: string; variantLabel: string; imageUrl: string | null;
+    quantity: number; requested: number; price: number; oldPrice: number;
+  }[] = [];
+  const skipped: { productName: string; variantLabel: string; reason: "unavailable" | "out_of_stock" }[] = [];
   for (const it of order.items) {
     const v = it.variantId ? avail.get(it.variantId) : undefined;
-    if (!v || !v.active || v.stock <= 0) {
-      skipped.push(`${it.productName} (${it.variantLabel})`);
+    if (!v || !v.active) {
+      skipped.push({ productName: it.productName, variantLabel: it.variantLabel, reason: "unavailable" });
       continue;
     }
-    added.push({ variantId: v.id, quantity: Math.min(it.quantity, v.stock), productSlug: v.slug });
+    let canHave = v.stock;
+    if (v.stock_grams !== null && v.grams) {
+      const left = gramsLeft.get(v.product_id) ?? v.stock_grams;
+      canHave = Math.floor(left / v.grams);
+    }
+    const qty = Math.min(it.quantity, canHave, MAX_QTY_PER_LINE);
+    if (qty <= 0) {
+      skipped.push({ productName: it.productName, variantLabel: it.variantLabel, reason: "out_of_stock" });
+      continue;
+    }
+    if (v.stock_grams !== null && v.grams) gramsLeft.set(v.product_id, (gramsLeft.get(v.product_id) ?? v.stock_grams) - qty * v.grams);
+    items.push({
+      variantId: v.id, productSlug: v.slug, productName: v.product_name, variantLabel: v.label, imageUrl: v.image_url,
+      quantity: qty, requested: it.quantity, price: v.price, oldPrice: it.unitPrice,
+    });
   }
-  return { items: added, skipped };
+  return { items, skipped };
 }

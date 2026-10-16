@@ -9,6 +9,7 @@ import {
   type Order, type OrderStatus, type PlaceOrderResponse, UNAVAILABLE_ITEM_LABEL } from "@freshbasket/shared";
 import { UpiPayPanel, type UpiInfo } from "./upi-pay-panel";
 import { api } from "@/lib/client/api";
+import { buyAgain } from "./buy-again";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button } from "../ui/button";
@@ -71,14 +72,14 @@ export function OrderDetail({
 
   async function reorder() {
     setBusy("reorder");
+    setError(null);
     try {
-      const r = await api<{ items: { variantId: string; quantity: number; productSlug: string }[]; skipped: string[] }>(`/api/orders/${order.id}/reorder`, { method: "POST" });
-      for (const it of r.items) {
-        const src = order.items.find((i) => i.variantId === it.variantId)!;
-        const existing = lines.find((l) => l.variantId === it.variantId)?.quantity ?? 0;
-        if (it.quantity > existing) add({ variantId: it.variantId, productName: src.productName, productSlug: it.productSlug, variantLabel: src.variantLabel, imageUrl: src.imageUrl, priceHint: src.unitPrice }, it.quantity - existing);
+      const added = await buyAgain(order, { lines, add });
+      if (!added) {
+        toast("None of these items are available right now", "error");
+        setBusy(null);
+        return;
       }
-      toast(r.skipped.length ? `Added ${r.items.length} items. Not available: ${r.skipped.join(", ")}` : "Items added to your cart");
       router.push("/cart");
     } catch (e) {
       setError((e as Error).message);
@@ -239,7 +240,7 @@ export function OrderDetail({
                 : `${PAYMENT_METHOD_LABEL[order.paymentMethod]} · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`}</p>
           </section>
           <div className="flex flex-col gap-2.5">
-            {mode === "account" ? <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Reorder these items</Button> : null}
+            {mode === "account" ? <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Buy again</Button> : null}
             {mode === "account" && canCustomerCancel(order.status) ? <Button variant="danger" loading={busy === "cancel"} onClick={cancel}>Cancel order</Button> : null}
             <Link href="/contact" className="text-center text-sm text-muted underline-offset-4 hover:underline">Need help with this order?</Link>
           </div>
