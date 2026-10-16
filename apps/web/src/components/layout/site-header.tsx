@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ChevronDown, LayoutDashboard, MapPin, ShoppingCart, Sprout, Truck, UserRound } from "lucide-react";
 import type { StoreSettings } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
@@ -56,9 +56,21 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
   const { count, hydrated } = useCart();
   const { profile } = useSession();
   const pathname = usePathname();
+  // Publish the header's real height (it changes with breakpoints, the announcement bar and the
+  // phone search row) so in-page links and focused fields scroll to just below it.
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const set = () => document.documentElement.style.setProperty("--header-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-white/95 shadow-[0_1px_0_rgb(11_102_35/0.04),0_6px_20px_-16px_rgb(11_102_35/0.35)] backdrop-blur supports-[backdrop-filter]:bg-white/90">
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-line bg-white/95 shadow-[0_1px_0_rgb(11_102_35/0.04),0_6px_20px_-16px_rgb(11_102_35/0.35)] backdrop-blur supports-[backdrop-filter]:bg-white/90">
       <div className="container-page flex h-[4.25rem] items-center gap-3 sm:h-[5.5rem] lg:gap-8">
         <Logo name={settings.storeName} logoUrl={settings.logoUrl} tagline={settings.tagline} className="min-w-0" />
 
@@ -95,11 +107,12 @@ export function SiteHeader({ settings }: { settings: StoreSettings }) {
           ) : null}
           <Link
             href={profile ? "/account" : "/login"}
-            aria-label={profile ? "Your account" : "Sign in"}
+            // Same words for everyone: what you see is what screen readers announce ("Account" / "Sign in").
+            aria-label={profile ? "Account" : "Sign in"}
             className="inline-flex h-11 items-center gap-2 rounded-full px-2.5 text-ink hover:bg-sage-100 hover:text-forest-800"
           >
             <UserRound className="size-[1.45rem] text-forest-800" />
-            <span className="hidden text-[0.9375rem] font-medium xl:inline">Account</span>
+            <span className="hidden text-[0.9375rem] font-medium xl:inline">{profile ? "Account" : "Sign in"}</span>
           </Link>
           <Link
             href="/cart"

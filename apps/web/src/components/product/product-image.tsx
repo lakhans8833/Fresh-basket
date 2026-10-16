@@ -1,10 +1,17 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 import { LeafMark } from "../layout/logo";
 import { cn } from "../ui/cn";
 
-/** Product photo with a graceful placeholder when no photo has been uploaded yet. */
+/**
+ * Product photo with a clean, neutral placeholder when no photo has been uploaded yet — or when the
+ * saved photo can't be loaded (deleted file, broken link). Never substitutes another product's photo.
+ */
 export function ProductImage({ src, alt, className, sizes, priority }: { src: string | null; alt: string; className?: string; sizes: string; priority?: boolean }) {
-  if (!src) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!src || failed === src) {
     return (
       <div className={cn("@container relative grid place-items-center bg-gradient-to-br from-sage-100 to-lime-50", className)} role="img" aria-label={`${alt} — photo coming soon`}>
         <div className="flex flex-col items-center gap-1.5 text-forest-700/45">
@@ -16,7 +23,7 @@ export function ProductImage({ src, alt, className, sizes, priority }: { src: st
   }
   return (
     <div className={cn("relative overflow-hidden", className)}>
-      <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className="object-cover" />
+      <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className="object-cover" onError={() => setFailed(src)} />
     </div>
   );
 }

@@ -178,7 +178,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   }
 
   const step = (n: number, title: string, icon: React.ReactNode, children: React.ReactNode, id?: string) => (
-    <section id={id} aria-labelledby={`step-${n}`} className="scroll-mt-28 rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-6">
+    <section id={id} aria-labelledby={`step-${n}`} className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-6">
       <h2 id={`step-${n}`} className="flex items-center gap-3 text-xl font-semibold text-forest-900">
         <span className="grid size-9 place-items-center rounded-full bg-lime-100 text-forest-800">{icon}</span>
         <span><span className="sr-only">Step {n}: </span>{title}</span>

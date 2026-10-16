@@ -108,7 +108,7 @@ export default async function ProductPage({ params }: { params: Params }) {
             <ProductPurchase product={product} whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />
           </div>
         </div>
-        <div id="reviews" className="scroll-mt-28">
+        <div id="reviews">
           <ProductTabs
             tabs={[
               {
@@ -130,15 +130,14 @@ export default async function ProductPage({ params }: { params: Params }) {
                   </div>
                 ),
               },
-              {
-                id: "nutrition",
-                label: "Nutrition",
-                content: product.nutrition ? (
-                  <p className="max-w-3xl whitespace-pre-line leading-relaxed text-ink-soft">{product.nutrition}</p>
-                ) : (
-                  <p className="text-muted">Nutrition details haven&apos;t been added for this product yet.</p>
-                ),
-              },
+              // The Nutrition tab only exists when the owner has written nutrition details (no empty tab).
+              ...(product.nutrition?.trim()
+                ? [{
+                    id: "nutrition",
+                    label: "Nutrition",
+                    content: <p className="max-w-3xl whitespace-pre-line leading-relaxed text-ink-soft">{product.nutrition}</p>,
+                  }]
+                : []),
               {
                 id: "reviews",
                 label: reviews.count > 0 ? `Reviews (${reviews.count})` : "Reviews",

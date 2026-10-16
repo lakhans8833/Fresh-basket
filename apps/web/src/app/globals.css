@@ -53,6 +53,9 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
+    /* Anchor links (#reviews, help sections, checkout steps) and focus scrolling stop BELOW the
+       sticky header instead of hiding the heading under it. --header-h is measured by SiteHeader. */
+    scroll-padding-top: calc(var(--header-h, 8.5rem) + 0.75rem);
   }
   body {
     background: var(--color-ivory);

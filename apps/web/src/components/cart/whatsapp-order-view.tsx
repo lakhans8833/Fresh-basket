@@ -454,7 +454,7 @@ export function WhatsAppOrderView({
             </div>
           </fieldset></div>
 
-          <div id="wa-slot-step" className="mt-7 scroll-mt-32 border-t border-line pt-6"><fieldset>
+          <div id="wa-slot-step" className="mt-7 border-t border-line pt-6"><fieldset>
             <legend className="flex items-center gap-3 text-lg font-semibold text-ink"><span className="grid size-8 place-items-center rounded-full bg-forest-800 text-sm font-bold text-white">3</span> <CalendarClock className="size-5 text-forest-800" aria-hidden /> Delivery Date &amp; Time</legend>
             <div className="mt-4">
               {slots === null && slotsError ? (

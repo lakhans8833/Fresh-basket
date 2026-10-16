@@ -143,7 +143,7 @@ export default async function HelpPage() {
       </nav>
 
       {sections.map((sec) => (
-        <section key={sec.id} id={sec.id} aria-labelledby={`${sec.id}-h`} className="mt-10 scroll-mt-28">
+        <section key={sec.id} id={sec.id} aria-labelledby={`${sec.id}-h`} className="mt-10">
           <h2 id={`${sec.id}-h`} className="text-[1.375rem] font-semibold text-forest-900">{sec.title}</h2>
           <div className="mt-3 divide-y divide-line overflow-hidden rounded-[var(--radius-card)] border border-line bg-white">
             {sec.faqs.map((f) => (
