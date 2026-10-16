@@ -83,6 +83,12 @@ export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>)
       d.supportHours || null, d.instagram, d.facebook, d.youtube, d.x, d.codEnabled, d.defaultMinOrder, d.slotDaysAhead, d.announcement || null,
     ],
   );
+  // UPI details: only touched when the request includes them (older admin screens don't send them).
+  const upi: [string, string | null | undefined][] = [["upi_id", d.upiId], ["upi_payee_name", d.upiPayeeName], ["upi_qr_url", d.upiQrUrl]];
+  for (const [col, val] of upi) {
+    if (val === undefined) continue;
+    await query(`update store_settings set ${col} = $1 where id`, [val?.trim() ? val.trim() : null]);
+  }
 }
 
 /* Messages & subscribers */

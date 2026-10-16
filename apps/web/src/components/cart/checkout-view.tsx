@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Banknote, CreditCard, FlaskConical, Lock, MapPin, Plus, ShoppingBasket, CalendarClock } from "lucide-react";
+import { ArrowRight, Banknote, CreditCard, FlaskConical, Lock, MapPin, Plus, ShoppingBasket, CalendarClock, QrCode } from "lucide-react";
 import { formatINR, formatSlotTime, pincodeStateMessage, stateMatchesPincode, type Address, type PlaceOrderResponse, type SlotOption } from "@freshbasket/shared";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { useCart } from "./cart-context";
@@ -17,12 +17,13 @@ import { EmptyState, Notice, Spinner } from "../ui/feedback";
 import { ProductImage } from "../product/product-image";
 import { cn } from "../ui/cn";
 
-type Method = "cod" | "razorpay" | "mock";
+type Method = "cod" | "razorpay" | "mock" | "upi";
 
 const METHOD_INFO: Record<Method, { title: string; sub: string; icon: typeof Banknote }> = {
   razorpay: { title: "Pay online", sub: "UPI, cards or net banking via Razorpay", icon: CreditCard },
   mock: { title: "Test payment", sub: "Development only — no real money moves", icon: FlaskConical },
   cod: { title: "Cash on delivery", sub: "Pay when your order arrives", icon: Banknote },
+  upi: { title: "UPI (scan & pay)", sub: "Pay to our UPI ID — we confirm it before packing", icon: QrCode },
 };
 
 function dayLabel(date: string, today: string) {
@@ -49,6 +50,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
 
   const [method, setMethod] = useState<Method | null>(paymentMethods[0] ?? null);
   const [note, setNote] = useState("");
+  const [whatsappUpdates, setWhatsappUpdates] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
@@ -147,6 +149,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
           deliveryDate: date,
           paymentMethod: method,
           customerNote: note.trim() || null,
+          whatsappUpdates,
           idempotencyKey: idemKey.current,
         },
       });
@@ -280,11 +283,18 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                   })}
                 </div>
                 {method === "mock" ? <Notice tone="warning" title="Test mode">Razorpay keys aren&apos;t configured, so this simulates a payment for testing. No money is charged.</Notice> : null}
-                {method && method !== "cod" ? <p className="text-xs text-muted">Items are held for you for 15 minutes while you pay.</p> : null}
+                {method === "upi" ? (
+                  <p className="text-xs text-muted">After placing the order you&apos;ll see our UPI QR with the exact amount. Your order is confirmed once we see the payment (items held for 24 hours).</p>
+                ) : method && method !== "cod" ? <p className="text-xs text-muted">Items are held for you for 15 minutes while you pay.</p> : null}
                 <div>
                   <label htmlFor="note" className="text-sm font-medium text-ink-soft">Delivery note (optional)</label>
                   <Textarea id="note" maxLength={300} className="mt-1.5 min-h-20" placeholder="e.g. Ring the bell twice, leave with security" value={note} onChange={(e) => setNote(e.target.value)} />
                 </div>
+                <Checkbox
+                  checked={whatsappUpdates}
+                  onChange={(e) => setWhatsappUpdates(e.target.checked)}
+                  label="Send me order updates on WhatsApp (confirmed, packed, out for delivery, delivered)"
+                />
               </div>
             ) : (
               <Notice tone="error">No payment methods are enabled. Please contact the store.</Notice>

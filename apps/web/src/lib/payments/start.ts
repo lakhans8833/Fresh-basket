@@ -2,10 +2,15 @@ import "server-only";
 import type { Order, PlaceOrderResponse } from "@freshbasket/shared";
 import { query } from "../db";
 import { env } from "../env";
-import { payToken } from "../tokens";
+import { payToken, trackToken } from "../tokens";
 import { cancelOrder } from "../orders";
 import { createRazorpayOrder } from "./razorpay";
 import { HttpError } from "../http";
+
+/** Secret tracking page for one order (works without signing in). */
+export function trackUrlFor(orderId: string) {
+  return `${env.appUrl}/track/${orderId}?k=${trackToken.issue(orderId)}`;
+}
 
 export function payUrlFor(orderId: string) {
   return `${env.appUrl}/pay/${orderId}?t=${encodeURIComponent(payToken.issue(orderId))}`;

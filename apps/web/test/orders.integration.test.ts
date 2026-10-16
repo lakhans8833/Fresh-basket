@@ -5,9 +5,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHmac, randomUUID } from "node:crypto";
-import { addDays, istDateString, type PlaceOrderInput } from "@freshbasket/shared";
+import { addDays, istDateString, whatsappOrderSchema, type PlaceOrderInput } from "@freshbasket/shared";
 import { pool, query, queryOne, asUser } from "@/lib/db";
-import { placeOrder, getMyOrder, releaseExpired, customerCancel, reorderItems, getOrderById } from "@/lib/orders";
+import { placeOrder, placeWhatsAppOrder, getMyOrder, releaseExpired, customerCancel, reorderItems, getOrderById } from "@/lib/orders";
+import { adminConfirmUpiPayment, submitUpiReference, upiPaymentInfo } from "@/lib/payments/upi";
+import { notifyOrderEvent, type WhatsAppCloudConfig } from "@/lib/notify/whatsapp";
+import { trackToken } from "@/lib/tokens";
+import { getSettings } from "@/lib/settings";
 import { processPaymentEvent, normaliseRazorpayEvent } from "@/lib/payments/process";
 import { verifyCheckoutSignature, verifyWebhookSignature } from "@/lib/payments/razorpay";
 import { adminGetOrder, adminListOrders, adminStats, adminUpdateOrderStatus, adminUpdatePaymentStatus } from "@/lib/admin/orders";
@@ -503,6 +507,256 @@ describe("product reviews", () => {
     await adminSetReviewStatus(r.id, "hidden");
     expect((await getProductReviews(product.id)).count).toBe(0);
     expect((await reviewEligibility(CUSTOMER, product.id)).mine).toMatchObject({ rating: 2, status: "hidden" });
+  });
+});
+
+describe("WhatsApp orders", () => {
+  let waNo = 0;
+  const wa = (o: Record<string, unknown> = {}) =>
+    whatsappOrderSchema.parse({
+      items: [{ variantId: v["onion:1 kg"]!, quantity: 3 }],
+      // A different mobile per order: guests may only have 2 open orders per mobile number.
+      customer: { name: "Guest Buyer", phone: `98${String(76543210 + ++waNo).padStart(8, "0")}`, address: `House ${waNo}, Lane 2, near park`, area: "", city: "Bengaluru", pincode: "560034", notes: "" },
+      paymentMethod: "cod",
+      idempotencyKey: randomUUID(),
+      ...o,
+    });
+
+  it("saves a guest COD order with server totals before WhatsApp opens, idempotently", async () => {
+    const input = wa();
+    const { order, created } = await placeWhatsAppOrder(null, input);
+    expect(created).toBe(true);
+    expect(order).toMatchObject({ status: "pending_confirmation", paymentMethod: "cod", paymentStatus: "cod_pending", channel: "whatsapp", subtotal: 3 * 4800 });
+    expect(order.total).toBe(order.subtotal + order.deliveryFee);
+    const row = await queryOne<{ user_id: string | null }>("select user_id from orders where id = $1", [order.id]);
+    expect(row!.user_id).toBeNull();
+    // Retry with the same key, and a double tap with a new key, both return the same order.
+    expect((await placeWhatsAppOrder(null, input)).order.id).toBe(order.id);
+    expect((await placeWhatsAppOrder(null, { ...input, idempotencyKey: randomUUID() })).order.id).toBe(order.id);
+    const both = await Promise.all([placeWhatsAppOrder(null, wa()), placeWhatsAppOrder(null, wa())]);
+    expect(new Set(both.map((b) => b.order.id)).size).toBe(2); // different addresses = different orders
+  });
+
+  it("COD WhatsApp orders wait for the store: confirm → placed, cancel → stock back; can't be packed before", async () => {
+    const id = v["onion:1 kg"]!;
+    const before = await stock(id);
+    const { order } = await placeWhatsAppOrder(null, wa());
+    expect(order.status).toBe("pending_confirmation");
+    const held = await stock(id);
+    expect(held).toBeLessThan(before); // stock reserved while waiting
+    await expect(adminUpdateOrderStatus(order.id, "packed", ADMIN)).rejects.toMatchObject({ status: 409 });
+    expect((await adminListOrders({ status: "pending_confirmation" })).some((o) => (o as { id: string }).id === order.id)).toBe(true);
+    expect(((await adminStats()) as { toConfirm?: number }).toConfirm).toBeGreaterThan(0);
+    expect((await adminUpdateOrderStatus(order.id, "placed", ADMIN)).status).toBe("placed");
+
+    const { order: o2 } = await placeWhatsAppOrder(null, wa());
+    expect(await stock(id)).toBeLessThan(held);
+    await adminUpdateOrderStatus(o2.id, "cancelled", ADMIN);
+    expect(await stock(id)).toBe(held);
+  });
+
+  it("unconfirmed WhatsApp orders expire (stock back), confirming clears the hold, guests are capped per mobile", async () => {
+    const id = v["onion:1 kg"]!;
+    const before = await stock(id);
+    const phone = "9" + String(Date.now()).slice(-9);
+    const cust = (n: number) => ({ name: "Cap Test", phone, address: `Flat ${n}, Cap Lane`, area: "", city: "Bengaluru", pincode: "560034", notes: "" });
+    const { order: a } = await placeWhatsAppOrder(null, wa({ customer: cust(1) }));
+    expect(a.reservationExpiresAt).not.toBeNull();
+    const { order: b } = await placeWhatsAppOrder(null, wa({ customer: cust(2) }));
+    await expect(placeWhatsAppOrder(null, wa({ customer: cust(3) }))).rejects.toMatchObject({ status: 409 });
+
+    await query("update orders set reservation_expires_at = now() - interval '1 minute' where id = $1", [a.id]);
+    await releaseExpired();
+    expect((await getOrderById(a.id))!.status).toBe("cancelled");
+    expect(await stock(id)).toBeLessThan(before); // b still holds its stock
+
+    await adminUpdateOrderStatus(b.id, "placed", ADMIN);
+    expect((await getOrderById(b.id))!.reservationExpiresAt).toBeNull();
+    await adminUpdateOrderStatus(b.id, "cancelled", ADMIN);
+    expect(await stock(id)).toBe(before);
+  });
+
+  it("saves the chosen delivery date + slot and shares slot capacity with website orders", async () => {
+    const { order } = await placeWhatsAppOrder(null, wa({ deliveryDate: tomorrow, slotId: eveningSlot }));
+    expect(order.deliveryDate).toBe(tomorrow);
+    expect(order.slotLabel).toMatch(/^Evening, /);
+    // Date outside the booking window, or a date without a slot, is refused.
+    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: addDays(tomorrow, 60), slotId: eveningSlot }))).rejects.toMatchObject({ status: 409, details: { messages: { _slot: expect.any(String) } } });
+    expect(() => wa({ deliveryDate: tomorrow })).toThrow();
+
+    const tiny = (await queryOne<{ id: string }>(
+      "insert into delivery_slots (label, start_time, end_time, cutoff_minutes, capacity) values ('Tiny WA', '18:00', '19:00', 0, 1) returning id",
+    ))!.id;
+    await placeOrder(CUSTOMER, input({ slotId: tiny }));
+    await expect(placeWhatsAppOrder(null, wa({ deliveryDate: tomorrow, slotId: tiny }))).rejects.toMatchObject({ status: 409 });
+    await query("update delivery_slots set active = false where id = $1", [tiny]);
+  });
+
+  it("refuses coupons for guests, unknown PIN codes and methods that aren't enabled", async () => {
+    await expect(placeWhatsAppOrder(null, wa({ couponCode: "FRESH10" }))).rejects.toMatchObject({ status: 400 });
+    await expect(placeWhatsAppOrder(null, wa({ customer: { name: "A B", phone: "9876543210", address: "House 1, Lane 2", city: "Delhi", pincode: "110001" } }))).rejects.toMatchObject({ status: 409 });
+    await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "razorpay_link" }))).rejects.toMatchObject({ status: 400 }); // no Razorpay keys here
+  });
+
+  it("a UPI order paid after it expired and after its delivery date moves to today with a note", async () => {
+    await query("update store_settings set upi_id = 'freshbasket.test@okaxis'");
+    try {
+      const { order } = await placeWhatsAppOrder(null, wa({ paymentMethod: "upi" }));
+      await query("update orders set reservation_expires_at = now() - interval '1 minute', delivery_date = delivery_date - 2 where id = $1", [order.id]);
+      await releaseExpired();
+      const r = await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, "498765432101");
+      expect(r.result).toBe("paid_late");
+      await new Promise((res) => setTimeout(res, 300)); // reschedule runs right after
+      const o = (await getOrderById(order.id))!;
+      expect(o.status).toBe("placed");
+      expect(o.deliveryDate).toBe(istDateString(new Date()));
+      expect(o.events.at(-1)!.note).toMatch(/new delivery time/);
+    } finally {
+      await query("update store_settings set upi_id = null");
+    }
+  });
+
+  it("UPI: reference from the customer keeps it pending; only an admin confirmation marks it paid", async () => {
+    await query("update store_settings set upi_id = 'freshbasket.test@okaxis', upi_payee_name = 'Fresh Basket'");
+    try {
+      const { order } = await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", whatsappUpdates: true }));
+      expect(order).toMatchObject({ status: "pending_payment", paymentStatus: "pending", paymentMethod: "upi" });
+      const hold = await queryOne<{ h: number }>("select extract(epoch from reservation_expires_at - now()) / 3600 as h from orders where id = $1", [order.id]);
+      expect(Number(hold!.h)).toBeCloseTo(3, 1); // guests: 3-hour hold (signed-in customers: 24 hours)
+
+      const info = await upiPaymentInfo(order, await getSettings());
+      expect(info!.uri).toContain("pa=freshbasket.test%40okaxis");
+      expect(info!.uri).toContain(`am=${(order.total / 100).toFixed(2)}`);
+      expect(info!.qrSvg).toContain("<svg");
+
+      await submitUpiReference(order.id, "412345678901");
+      expect((await getOrderById(order.id))).toMatchObject({ paymentStatus: "pending", status: "pending_payment", upiReference: "412345678901" });
+
+      const r = await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, "412345678901");
+      expect(r.result).toBe("paid");
+      expect(await getOrderById(order.id)).toMatchObject({ paymentStatus: "paid", status: "placed" });
+      await expect(submitUpiReference(order.id, "999999999999")).rejects.toMatchObject({ status: 409 });
+
+      // The same UTR can't confirm a second order.
+      const { order: o2 } = await placeWhatsAppOrder(null, wa({ paymentMethod: "upi" }));
+      await expect(adminConfirmUpiPayment(o2.id, { id: ADMIN, email: null }, "412345678901")).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await query("update store_settings set upi_id = null, upi_payee_name = null");
+    }
+  });
+
+  it("limits unpaid guest UPI orders per mobile number", async () => {
+    await query("update store_settings set upi_id = 'freshbasket.test@okaxis'");
+    try {
+      const phone = "9000000001";
+      const cust = (n: number) => ({ name: "Hold Tester", phone, address: `Plot ${n}, Block C, Main Road`, area: "", city: "Bengaluru", pincode: "560034", notes: "" });
+      await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(1) }));
+      await placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(2) }));
+      await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "upi", customer: cust(3) }))).rejects.toMatchObject({ status: 409 });
+      // Cash on delivery counts too (unconfirmed orders hold stock); signed-in customers aren't limited this way.
+      await expect(placeWhatsAppOrder(null, wa({ paymentMethod: "cod", customer: cust(4) }))).rejects.toMatchObject({ status: 409 });
+      expect((await placeWhatsAppOrder(CUSTOMER, wa({ paymentMethod: "upi", customer: cust(5) }))).order.reservationExpiresAt).toBeTruthy();
+    } finally {
+      await query("update store_settings set upi_id = null");
+    }
+  });
+
+  it("tracking keys only open their own order", () => {
+    const a = randomUUID();
+    const b = randomUUID();
+    expect(trackToken.verify(a, trackToken.issue(a))).toBe(true);
+    expect(trackToken.verify(b, trackToken.issue(a))).toBe(false);
+    expect(trackToken.verify(a, "x".repeat(32))).toBe(false);
+    expect(trackToken.verify(a, null)).toBe(false);
+  });
+});
+
+describe("Razorpay payment links", () => {
+  async function linkOrder(linkId: string) {
+    const { order } = await placeOrder(CUSTOMER, input({ paymentMethod: "mock", items: [{ variantId: v["potato:500 g"]!, quantity: 3 }] }));
+    await query("update orders set payment_method = 'razorpay_link', razorpay_payment_link_id = $2 where id = $1", [order.id, linkId]);
+    return (await getOrderById(order.id))!;
+  }
+  const event = (linkId: string, amount: number, extra: { linkPaid?: number; status?: string; ref?: string } = {}) => ({
+    event: "payment_link.paid",
+    payload: {
+      payment_link: { entity: { id: linkId, reference_id: extra.ref ?? "x", amount_paid: extra.linkPaid ?? amount, status: "paid" } },
+      payment: { entity: { id: `pay_${randomUUID().slice(0, 12)}`, order_id: "order_link1", amount, currency: "INR", status: extra.status ?? "captured" } },
+    },
+  });
+
+  it("marks paid only for a verified, fully paid link of the right amount, once", async () => {
+    const o = await linkOrder("plink_ok1");
+    const ev = event("plink_ok1", o.total);
+    expect(await processPaymentEvent(normaliseRazorpayEvent(ev, "evt_link_1"))).toBe("paid");
+    expect(await getOrderById(o.id)).toMatchObject({ status: "placed", paymentStatus: "paid" });
+    expect(await processPaymentEvent(normaliseRazorpayEvent(ev, "evt_link_1"))).toBe("duplicate");
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_ok1", o.total), "evt_link_2"))).toBe("already_processed");
+  });
+
+  it("rejects wrong amounts, unpaid/uncaptured payments and unknown links", async () => {
+    const o = await linkOrder("plink_bad1");
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_bad1", o.total - 100), "evt_link_3"))).toBe("amount_mismatch");
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_bad1", o.total, { linkPaid: o.total - 1 }), "evt_link_4"))).toBe("amount_mismatch");
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_bad1", o.total, { status: "authorized" }), "evt_link_5"))).toBe("ignored");
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_unknown", o.total), "evt_link_6"))).toBe("order_not_found");
+    expect(await getOrderById(o.id)).toMatchObject({ status: "pending_payment", paymentStatus: "pending" });
+  });
+
+  it("cancelling a payment-link order removes its link", async () => {
+    const o = await linkOrder("plink_cancel1");
+    await query("update orders set razorpay_payment_link_url = 'https://rzp.io/l/test' where id = $1", [o.id]);
+    await customerCancel(CUSTOMER, o.id);
+    let url: string | null = "x";
+    for (let i = 0; i < 20 && url; i++) {
+      url = (await queryOne<{ u: string | null }>("select razorpay_payment_link_url as u from orders where id = $1", [o.id]))!.u;
+      if (url) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(url).toBeNull();
+  });
+
+  it("verifies the webhook signature on the raw body", () => {
+    const raw = JSON.stringify(event("plink_sig", 100));
+    const sig = createHmac("sha256", "whsec_test").update(raw).digest("hex");
+    expect(verifyWebhookSignature(raw, sig, "whsec_test")).toBe(true);
+    expect(verifyWebhookSignature(raw.replace("100", "1"), sig, "whsec_test")).toBe(false);
+    expect(verifyWebhookSignature(raw, null, "whsec_test")).toBe(false);
+  });
+});
+
+describe("WhatsApp order notifications (Cloud API)", () => {
+  const cfg: WhatsAppCloudConfig = {
+    accessToken: "test-token", phoneNumberId: "123", apiVersion: "v21.0", apiBase: "https://graph.example.test", language: "en",
+    templates: { confirmed: "order_confirmed", packed: "order_packed" },
+  };
+  const okFetch = (calls: unknown[]) =>
+    (async (_url: string, init: RequestInit) => {
+      calls.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.TEST" }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+  it("sends once per event, only with consent, and logs failures", async () => {
+    const { order } = await placeOrder(CUSTOMER, input({ whatsappUpdates: true, items: [{ variantId: v["onion:1 kg"]!, quantity: 4 }] }));
+    const calls: unknown[] = [];
+    expect(await notifyOrderEvent(order.id, "confirmed", { config: cfg, fetchImpl: okFetch(calls) })).toBe("sent");
+    expect(await notifyOrderEvent(order.id, "confirmed", { config: cfg, fetchImpl: okFetch(calls) })).toBe("duplicate");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ to: "919876543210", type: "template", template: { name: "order_confirmed", language: { code: "en" } } });
+    expect(await notifyOrderEvent(order.id, "delivered", { config: cfg, fetchImpl: okFetch(calls) })).toBe("disabled"); // no template set
+
+    const failing = (async () => new Response(JSON.stringify({ error: { message: "Template not approved", code: 132001 } }), { status: 400 })) as unknown as typeof fetch;
+    expect(await notifyOrderEvent(order.id, "packed", { config: cfg, fetchImpl: failing })).toBe("failed");
+    expect(await notifyOrderEvent(order.id, "packed", { config: cfg, fetchImpl: okFetch(calls) })).toBe("duplicate"); // retry waits a minute
+    const log = await query<{ event: string; status: string; error: string | null }>("select event, status, error from order_notifications where order_id = $1 order by event", [order.id]);
+    expect(log).toEqual([
+      { event: "confirmed", status: "sent", error: null },
+      { event: "packed", status: "failed", error: expect.stringContaining("Template not approved") },
+    ]);
+
+    const { order: noConsent } = await placeOrder(CUSTOMER, input({ items: [{ variantId: v["onion:1 kg"]!, quantity: 5 }] }));
+    expect(await notifyOrderEvent(noConsent.id, "confirmed", { config: cfg, fetchImpl: okFetch(calls) })).toBe("skipped");
+    expect(calls).toHaveLength(1);
+    expect(await notifyOrderEvent(noConsent.id, "confirmed")).toBe("disabled"); // no credentials configured in tests
   });
 });
 

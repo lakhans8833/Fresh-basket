@@ -1,5 +1,6 @@
 export const ORDER_STATUSES = [
   "pending_payment",
+  "pending_confirmation", // WhatsApp cash-on-delivery order: saved, waiting for the store to confirm it
   "placed",
   "packed",
   "out_for_delivery",
@@ -20,11 +21,27 @@ export const PAYMENT_STATUSES = [
 ] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
-export const PAYMENT_METHODS = ["cod", "razorpay", "mock"] as const;
+export const PAYMENT_METHODS = ["cod", "razorpay", "mock", "upi", "razorpay_link"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** How the customer pays. Separate from PAYMENT_STATUS (whether the money has been received). */
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  cod: "Cash on delivery",
+  razorpay: "Online (Razorpay)",
+  mock: "Test payment",
+  upi: "UPI (QR / UPI ID)",
+  razorpay_link: "Razorpay payment link",
+};
+
+/**
+ * Methods whose money is confirmed by a payment provider or by staff, not on delivery.
+ * Orders paid this way wait in "pending_payment" until the payment is verified.
+ */
+export const PREPAID_METHODS: PaymentMethod[] = ["razorpay", "mock", "upi", "razorpay_link"];
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   pending_payment: "Awaiting payment",
+  pending_confirmation: "Pending confirmation",
   placed: "Order placed",
   packed: "Packed",
   out_for_delivery: "Out for delivery",
@@ -49,6 +66,7 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
  */
 const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_payment: ["cancelled"],
+  pending_confirmation: ["placed", "cancelled"], // staff confirm after checking the customer's WhatsApp message
   placed: ["packed", "cancelled"],
   packed: ["out_for_delivery", "cancelled"],
   out_for_delivery: ["delivered"],
@@ -66,8 +84,11 @@ export function canAdminTransition(from: OrderStatus, to: OrderStatus): boolean 
 
 /** Customers may cancel only before the order is packed. */
 export function canCustomerCancel(status: OrderStatus): boolean {
-  return status === "pending_payment" || status === "placed";
+  return status === "pending_payment" || status === "pending_confirmation" || status === "placed";
 }
+
+/** slot_label of WhatsApp orders placed without a delivery slot (time agreed on WhatsApp). */
+export const NO_SLOT_LABEL = "Delivery time confirmed on WhatsApp";
 
 /** Steps shown on the tracking timeline (cancelled is shown separately). */
 export const TRACKING_STEPS: OrderStatus[] = ["placed", "packed", "out_for_delivery", "delivered"];

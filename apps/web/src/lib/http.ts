@@ -77,6 +77,16 @@ export function rateLimit(key: string, limit: number, windowMs: number) {
   if (b.n > limit) throw new HttpError(429, "Too many requests. Please wait a moment.", "RATE_LIMITED");
 }
 
+/**
+ * The caller's IP for rate limits. On Vercel, x-real-ip / x-vercel-forwarded-for are set by the platform
+ * (a client can't fake them); x-forwarded-for is only a fallback for other hosts and local runs.
+ */
 export function clientIp(req: Request) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  const h = req.headers;
+  return (
+    h.get("x-real-ip")?.trim() ||
+    h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "local"
+  );
 }

@@ -9,7 +9,7 @@ import { Input } from "../ui/form";
 import { EmptyState } from "../ui/feedback";
 import { cn } from "../ui/cn";
 import { useAdminData } from "./use-admin-data";
-import { Card, LateBadge, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
+import { Badge, Card, LateBadge, LoadError, LoadingRows, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
 
 interface OrderRow {
   id: string;
@@ -26,11 +26,14 @@ interface OrderRow {
   itemCount: number;
   /** Still "placed" after its delivery slot ended. */
   late: boolean;
+  channel: "web" | "whatsapp";
 }
 
-const TABS: { value: OrderStatus | "" | "late"; label: string }[] = [
+const TABS: { value: OrderStatus | "" | "late" | "whatsapp"; label: string }[] = [
   { value: "", label: "All" },
   { value: "late", label: "Late" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "pending_confirmation", label: "To confirm" },
   { value: "pending_payment", label: "Awaiting payment" },
   { value: "placed", label: "Placed" },
   { value: "packed", label: "Packed" },
@@ -39,7 +42,11 @@ const TABS: { value: OrderStatus | "" | "late"; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const METHOD: Record<PaymentMethod, string> = { cod: "Cash", razorpay: "Online", mock: "Test pay" };
+const METHOD: Record<PaymentMethod, string> = { cod: "Cash", razorpay: "Online", mock: "Test pay", upi: "UPI", razorpay_link: "Pay link" };
+
+function WaBadge() {
+  return <Badge tone="green" className="font-medium">WhatsApp</Badge>;
+}
 
 export function OrdersList({ initial }: { initial: { status: string; q: string; date: string } }) {
   const router = useRouter();
@@ -160,6 +167,7 @@ export function OrdersList({ initial }: { initial: { status: string; q: string; 
                       <div className="flex flex-wrap items-center gap-1">
                         <OrderStatusBadge status={o.status} />
                         {o.late ? <LateBadge /> : null}
+                        {o.channel === "whatsapp" ? <WaBadge /> : null}
                       </div>
                     </td>
                     <td className="px-3 py-3.5">
@@ -187,6 +195,7 @@ export function OrdersList({ initial }: { initial: { status: string; q: string; 
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <OrderStatusBadge status={o.status} />
                     {o.late ? <LateBadge /> : null}
+                    {o.channel === "whatsapp" ? <WaBadge /> : null}
                     <PaymentStatusBadge status={o.paymentStatus} />
                   </div>
                   <p className="mt-2 text-xs text-muted">

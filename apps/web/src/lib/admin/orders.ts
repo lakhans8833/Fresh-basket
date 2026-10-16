@@ -3,13 +3,15 @@ import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@fresh
 import { pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, releaseExpired, type OrderRow } from "../orders";
+import { notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
+import { cancelPaymentLinkFor } from "../payments/link-cancel";
 
 /**
  * A "placed" order whose delivery slot has already ended (India time) — nobody has packed it yet.
  * Needs `left join delivery_slots s on s.id = o.slot_id`; if the slot was deleted, the end of the
  * delivery day counts.
  */
-export const LATE_SQL = `(o.status = 'placed' and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+export const LATE_SQL = `(o.status in ('placed', 'pending_confirmation') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
 
 export async function adminListOrders(f: { status?: string | null; q?: string | null; date?: string | null; limit?: number }) {
   await releaseExpired();
@@ -17,6 +19,8 @@ export async function adminListOrders(f: { status?: string | null; q?: string | 
   const params: unknown[] = [];
   if (f.status === "late") {
     where.push(LATE_SQL);
+  } else if (f.status === "whatsapp") {
+    where.push("o.channel = 'whatsapp'");
   } else if (f.status) {
     params.push(f.status);
     where.push(`o.status = $${params.length}`);
@@ -35,7 +39,7 @@ export async function adminListOrders(f: { status?: string | null; q?: string | 
             o.total, to_char(o.delivery_date, 'YYYY-MM-DD') as "deliveryDate", o.slot_label as "slotLabel",
             o.address->>'fullName' as "customerName", o.address->>'pincode' as pincode, o.created_at as "createdAt",
             (select count(*)::int from order_items i where i.order_id = o.id) as "itemCount",
-            ${LATE_SQL} as late
+            ${LATE_SQL} as late, o.channel
        from orders o left join delivery_slots s on s.id = o.slot_id ${where.length ? "where " + where.join(" and ") : ""}
       order by o.created_at desc limit $${params.length}`,
     params,
@@ -51,7 +55,8 @@ export async function adminGetOrder(id: string) {
   );
   const customer = await query(`select email, full_name as "fullName", phone from profiles where id = $1`, [o.userId]);
   const late = await query<{ late: boolean }>(`select ${LATE_SQL} as late from orders o left join delivery_slots s on s.id = o.slot_id where o.id = $1`, [id]);
-  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false };
+  const notifications = await orderNotifications(id);
+  return { ...o, payments, customer: customer[0] ?? null, late: late[0]?.late ?? false, notifications };
 }
 
 export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorId: string, note?: string | null) {
@@ -64,9 +69,16 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
       await c.query("select cancel_order($1, $2, $3)", [id, `admin:${actorId}`, note || "Cancelled by store"]);
       return;
     }
-    await c.query("update orders set status = $2 where id = $1", [id, to]);
+    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold.
+    await c.query(
+      "update orders set status = $2, reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end where id = $1",
+      [id, to],
+    );
     await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,$4)", [id, to, note ?? null, `admin:${actorId}`]);
   });
+  // Customer's WhatsApp update (packed / out for delivery / delivered), once per event.
+  scheduleOrderNotification(id, notifyEventForStatus(to));
+  if (to === "cancelled") cancelPaymentLinkFor(id);
   return adminGetOrder(id);
 }
 
@@ -105,9 +117,10 @@ export async function adminStats() {
     query<Record<string, number>>(
       `select
          (select count(*)::int from orders where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
-         (select coalesce(sum(total),0)::int from orders where status <> 'cancelled' and payment_status in ('paid','cod_pending','cod_collected')
+         (select coalesce(sum(total),0)::int from orders where status not in ('cancelled', 'pending_confirmation') and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
+         (select count(*)::int from orders where status = 'pending_confirmation') as "toConfirm",
          (select count(*)::int from orders o left join delivery_slots s on s.id = o.slot_id where ${LATE_SQL}) as "lateOrders",
          (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
          (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",

@@ -40,21 +40,64 @@ docs/API.md      API reference
 
 ## WhatsApp ordering
 
-Customers can order **without an account**: Cart → **Order on WhatsApp** → `/order` (name, mobile, address, area,
-city, PIN code, notes) → **Proceed to WhatsApp**. The site opens `https://wa.me/<number>?text=<encoded order>`; the
-order reaches the seller only when the customer presses **Send** in WhatsApp — nothing is submitted automatically.
+Customers can order **without an account** (or signed in): Home / Shop / Product page / Cart → **Order on WhatsApp** →
+`/order` (name, mobile, address, area, city, PIN code, **delivery date + time slot**, notes, payment method, optional "send me order updates on WhatsApp") → **Review order**
+(full summary) → **Confirm & send on WhatsApp**.
 
-- Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (international format, digits only, e.g. `919876543210` — example format)
-  or, if that's empty, the WhatsApp number in **Admin → Settings** (a 10-digit Indian mobile gets `91` added).
-  With no valid number, all WhatsApp buttons are hidden and only the normal checkout is shown.
-- Prices, discount and delivery charge in the message come from the server quote (`/api/quote`, live database prices).
-  If the PIN code isn't in **Admin → Delivery**, the message says "Delivery: to be confirmed" instead of guessing.
-- The message is built in the customer's browser and they can edit it in WhatsApp before sending, so treat it as an
-  order *request*: confirm items and the amount in the chat. It is not a secure payment record — for online payments
-  use the normal checkout (server-side totals + Razorpay verification).
-- Message building/validation: `packages/shared/src/whatsapp.ts` (unit-tested). Customer text is cleaned of WhatsApp
-  formatting/control characters and URL-encoded.
-- The account checkout (`/checkout`, sign-in, slots, COD/Razorpay, order tracking) still works alongside it.
+- The order is **saved in the database first** (`POST /api/whatsapp-orders` → `placeWhatsAppOrder` in `lib/orders.ts`):
+  same server quote, delivery charge, stock reservation and duplicate protection as the website checkout (idempotency
+  key + 2-minute fingerprint, advisory lock per customer / per mobile number for guests). Only then is the WhatsApp
+  message built **by the server** from the saved order: order ID, items, quantities, subtotal, delivery, total,
+  customer details, payment method + status, payment link (if any) and a tracking link.
+- WhatsApp opens with `https://wa.me/<number>?text=…`; the customer presses **Send** themselves (wa.me can't send
+  automatically — automatic updates use the Cloud API below).
+- Seller number: `NEXT_PUBLIC_WHATSAPP_NUMBER` (digits, e.g. `919876543210`) or **Admin → Settings → WhatsApp**.
+- Delivery slots are the same as the website checkout and share their capacity (a full slot can't be picked). If no
+  slots are set up, the delivery time is agreed on WhatsApp.
+- **Cash-on-delivery WhatsApp orders start as _Pending confirmation_** (stock already reserved). Staff check that the
+  customer's WhatsApp message arrived, then press **Confirm order** (→ *Order placed*, sends the "confirmed" update if the
+  customer asked for updates) or **Cancel order** (stock returned). Dashboard tile + **To confirm** filter in Admin → Orders.
+  UPI / payment-link orders are confirmed by the verified payment instead.
+- Staff see all these orders in **Admin → Orders** (filter **WhatsApp**, with a WhatsApp badge).
+- Only PIN codes in **Admin → Delivery** can be ordered (exact charges); others get an "Ask us on WhatsApp" link.
+- Guests can't use coupons (per-customer limits need an account).
+- Guest orders have no `user_id`; they are tracked with a secret link `/track/<order id>?k=<key>` (HMAC with
+  `APP_SECRET`). The tracking page shows status, items and payment but masks the street address and phone.
+
+## Payments
+
+| Method | Who confirms the money | Order / payment status until confirmed |
+| --- | --- | --- |
+| Cash on delivery | Staff record "cash collected" after delivery | Order placed · Cash on delivery |
+| Razorpay Checkout (website) | Signature + payment fetched from Razorpay, or webhook | Awaiting payment · Payment pending |
+| **Razorpay Payment Link** (WhatsApp orders) | Webhook `payment_link.paid` only | Awaiting payment · Payment pending |
+| **UPI** to the store's UPI ID (QR) | An **admin** after checking the bank / UPI app | Awaiting payment · Payment pending |
+
+- Payment method (`orders.payment_method`) and payment status (`orders.payment_status`) are separate fields; order
+  status is a third field (`pending_payment → placed → packed → out_for_delivery → delivered`, or `cancelled`).
+- **UPI**: set the UPI ID (and optionally your QR image) in **Admin → Settings → UPI payments**. Customers see a QR with
+  the exact amount (`upi://pay?pa=…&am=…&tn=Order …`), an "Open UPI app" button and a box for the UTR. The UTR is stored
+  as a *claim*; the order stays **Payment pending** until an admin ticks "I checked: ₹X arrived" and clicks **Mark UPI
+  payment received** (one UTR can confirm only one order). Stock is held for 24 hours.
+- **Payment Link**: created server-side for the order's stored total (`reference_id` = order number, so one link per
+  order), shown at checkout and in the WhatsApp message. The webhook verifies the `X-Razorpay-Signature` on the raw
+  body, matches the link to its order, requires `status = paid`, a *captured* INR payment and `amount_paid` = payment
+  amount = order total, and stores each event once (retries → `duplicate`). Wrong amounts are never marked paid.
+- Secrets (`RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, WhatsApp token) are server-only — never `NEXT_PUBLIC_`.
+
+## WhatsApp order updates (Cloud API)
+
+Automatic messages (order confirmed, packed, out for delivery, delivered) are sent through the official **WhatsApp
+Business Platform Cloud API** (`lib/notify/whatsapp.ts`), only to customers who ticked the consent box and have a
+valid Indian mobile. Off until these server env vars are set:
+
+- `WHATSAPP_CLOUD_ACCESS_TOKEN` (permanent System User token), `WHATSAPP_CLOUD_PHONE_NUMBER_ID`
+- Template names approved in WhatsApp Manager (category *Utility*, language `WHATSAPP_TEMPLATE_LANGUAGE`, default `en`):
+  `WHATSAPP_TEMPLATE_ORDER_CONFIRMED`, `WHATSAPP_TEMPLATE_ORDER_PACKED`, `WHATSAPP_TEMPLATE_OUT_FOR_DELIVERY`,
+  `WHATSAPP_TEMPLATE_ORDER_DELIVERED`. Each template body takes 3 variables: `{{1}}` first name, `{{2}}` order number,
+  `{{3}}` tracking link. Example body: "Hi {{1}}, your order {{2}} has been packed. Track it here: {{3}}".
+- Every send is logged in `order_notifications` (one row per order + event, so a status saved twice never sends twice);
+  API errors are stored and shown in **Admin → Orders → order → WhatsApp updates**; failed sends retry at most 3 times.
 
 ## PWA (install on phone)
 
@@ -124,7 +167,7 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
    reservation clean-up once a day (02:00 IST; Vercel Hobby allows only daily crons). Expired payment holds are also
    released on every checkout and admin order view, so the cron is just a backstop — on Pro you can make it `*/10 * * * *`.
 3. **Razorpay**: Dashboard → API keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Webhooks → URL
-   `https://<domain>/api/webhooks/razorpay`, events `payment.captured`, `order.paid`, `payment.failed`, secret →
+   `https://<domain>/api/webhooks/razorpay`, events `payment.captured`, `order.paid`, `payment.failed`, `payment_link.paid`, secret →
    `RAZORPAY_WEBHOOK_SECRET`. Test with test-mode keys first. The footer and checkout show online payment only when all three are set.
 4. **Mobile**: set `EXPO_PUBLIC_API_URL=https://<domain>`, replace placeholder icon/splash and bundle IDs in `app.json`,
    build with EAS (`npx eas build -p android|ios`). Payments open the site's hosted pay page in an in-app browser and
@@ -143,7 +186,9 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
 - [ ] Delivery PIN codes, fees, minimum order, slots/capacity; coupons (seed values are samples).
 - [ ] Store name, logo, support phone/email/WhatsApp/address/hours, social links (Admin → Settings). Nothing is shown until set.
 - [ ] Review the Returns, Privacy and Terms templates with a legal adviser and fill in the bracketed business details.
-- [ ] Transactional email/SMS (order confirmations) — not included; hook into `order_events` or Supabase webhooks.
+- [ ] WhatsApp Cloud API token, phone number ID and 4 approved templates (optional; see "WhatsApp order updates").
+- [ ] UPI ID / QR in Admin → Settings (optional).
+- [ ] Transactional email (order confirmations) — not included; hook into `order_events` or Supabase webhooks.
 - [ ] App store assets, bundle IDs, privacy labels; optional native Razorpay SDK (needs an Expo development build).
 
 ## Known limitations

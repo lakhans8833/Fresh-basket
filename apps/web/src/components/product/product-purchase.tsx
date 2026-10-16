@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
 import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
@@ -11,12 +12,14 @@ import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
 import { defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
+import { WhatsAppIcon } from "../ui/whatsapp-icon";
 
-export function ProductPurchase({ product }: { product: ProductDetail }) {
+export function ProductPurchase({ product, whatsappEnabled = false }: { product: ProductDetail; whatsappEnabled?: boolean }) {
+  const router = useRouter();
   const first = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(first?.id);
   const [qty, setQty] = useState(1);
-  const { add, quantityOf, hydrated } = useCart();
+  const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const variant = product.variants.find((v) => v.id === variantId) ?? first;
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
@@ -112,6 +115,26 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           </ButtonLink>
         ) : null}
       </div>
+      {whatsappEnabled && !out ? (
+        <button
+          type="button"
+          onClick={() => {
+            // Makes the cart hold the chosen quantity of this pack (never less than already there), then
+            // opens the WhatsApp order form. Before the cart has loaded, just open the form.
+            if (!hydrated) return router.push("/order");
+            if (inCart > 0) {
+              if (qty > inCart) setQuantity(variant.id, Math.min(qty, inCart + maxAddable));
+              return router.push("/order");
+            }
+            const n = Math.min(qty, maxAddable);
+            if (n > 0) add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+            router.push("/order");
+          }}
+          className="mt-3 inline-flex h-12 w-full min-w-56 items-center justify-center gap-2 rounded-full bg-whatsapp-dark px-6 font-semibold text-white transition-colors hover:bg-forest-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime-200 sm:w-auto"
+        >
+          <WhatsAppIcon className="size-5" /> Order on WhatsApp
+        </button>
+      ) : null}
       <p className="mt-4 text-xs text-muted">
         Fresh produce varies in size; you&apos;re charged the listed price for the selected weight. See our{" "}
         <Link href="/returns" className="underline underline-offset-2">returns policy</Link>.

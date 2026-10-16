@@ -16,6 +16,8 @@ export const GET = route(async () => {
       razorpayKeyIdSet: Boolean(env.payments.razorpayKeyId),
       webhookSecretSet: Boolean(env.payments.razorpayWebhookSecret),
       cronSecretSet: Boolean(env.cronSecret),
+      whatsappCloud: Boolean(env.whatsappCloud.accessToken && env.whatsappCloud.phoneNumberId),
+      whatsappTemplates: Object.entries(env.whatsappCloud.templates).filter(([, v]) => Boolean(v)).map(([k]) => k),
     },
   });
 });

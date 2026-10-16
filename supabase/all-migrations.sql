@@ -1560,3 +1560,109 @@ alter table public.promo_banners add column if not exists badge text check (badg
 alter table public.promo_banners add column if not exists cta_label text check (cta_label is null or char_length(cta_label) <= 30);
 create index if not exists promo_banners_placement_idx on public.promo_banners (placement, sort_order, created_at);
 
+-- ===== supabase/migrations/20261017000001_whatsapp_orders_payments.sql =====
+-- WhatsApp orders saved in the database, UPI (manual verification) and Razorpay Payment Links,
+-- and WhatsApp order-update notifications with a send log.
+--
+-- REVIEW BEFORE PRODUCTION: this changes the orders table (nullable user_id for guest WhatsApp
+-- orders, two new payment methods). Existing rows are not modified. Vercel preview builds don't
+-- run migrations; this runs only when the change is merged and deployed to production.
+
+-- Orders placed on WhatsApp without an account have no user (tracked by a secret link instead).
+alter table public.orders alter column user_id drop not null;
+-- Retries of a guest order with the same idempotency key return the same order.
+create unique index if not exists orders_guest_idempotency_idx on public.orders (idempotency_key) where user_id is null;
+
+-- Where the order came from: the website checkout or the "Order on WhatsApp" flow.
+alter table public.orders add column if not exists channel text not null default 'web';
+alter table public.orders drop constraint if exists orders_channel_check;
+alter table public.orders add constraint orders_channel_check check (channel in ('web', 'whatsapp'));
+
+-- Payment methods: cash on delivery, Razorpay Checkout, test payments, UPI to the store's UPI ID
+-- (verified by staff against the bank statement) and Razorpay Payment Links (verified by webhook).
+alter table public.orders drop constraint if exists orders_payment_method_check;
+alter table public.orders add constraint orders_payment_method_check
+  check (payment_method in ('cod', 'razorpay', 'mock', 'upi', 'razorpay_link'));
+
+-- UPI: the reference (UTR) the customer says they paid with. It is NOT proof of payment —
+-- the order stays "payment pending" until staff confirm the money arrived.
+alter table public.orders add column if not exists upi_reference text check (upi_reference is null or upi_reference ~ '^[A-Za-z0-9]{6,35}$');
+alter table public.orders add column if not exists upi_reference_at timestamptz;
+
+-- Razorpay Payment Link created by the server for this order's exact total.
+alter table public.orders add column if not exists razorpay_payment_link_id text unique;
+alter table public.orders add column if not exists razorpay_payment_link_url text;
+
+-- Customer agreed to receive order updates on WhatsApp (unticked by default).
+alter table public.orders add column if not exists whatsapp_updates boolean not null default false;
+
+-- Manual UPI confirmations are recorded as payments too (one per UTR).
+alter table public.payments drop constraint if exists payments_provider_check;
+alter table public.payments add constraint payments_provider_check check (provider in ('razorpay', 'mock', 'upi_manual'));
+
+-- Store UPI details (shown to customers at checkout; not secret).
+alter table public.store_settings add column if not exists upi_id text check (upi_id is null or upi_id ~ '^[A-Za-z0-9._-]{2,200}@[A-Za-z][A-Za-z0-9.-]{1,63}$');
+alter table public.store_settings add column if not exists upi_payee_name text check (upi_payee_name is null or char_length(upi_payee_name) <= 60);
+alter table public.store_settings add column if not exists upi_qr_url text check (upi_qr_url is null or char_length(upi_qr_url) <= 500);
+
+-- One row per (order, channel, event): the unique key stops duplicate notifications when a status
+-- is saved twice or a webhook is retried. Failed sends can be retried a few times.
+create table if not exists public.order_notifications (
+  id bigint generated always as identity primary key,
+  order_id uuid not null references public.orders (id) on delete cascade,
+  channel text not null default 'whatsapp' check (channel in ('whatsapp')),
+  event text not null check (event in ('confirmed', 'packed', 'out_for_delivery', 'delivered')),
+  status text not null check (status in ('sending', 'sent', 'failed', 'skipped')),
+  recipient text,
+  provider_message_id text,
+  error text,
+  attempts integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (order_id, channel, event)
+);
+create index if not exists order_notifications_order_idx on public.order_notifications (order_id);
+-- Server only: no client policies.
+alter table public.order_notifications enable row level security;
+
+-- ===== supabase/migrations/20261017000002_whatsapp_pending_confirmation.sql =====
+-- WhatsApp cash-on-delivery orders start as "pending_confirmation": saved (stock reserved), but the
+-- store confirms them (→ "placed") after the customer's WhatsApp message arrives, or cancels them
+-- (stock returned by cancel_order). Existing rows are not changed.
+alter table public.orders drop constraint if exists orders_status_check;
+alter table public.orders add constraint orders_status_check
+  check (status in ('pending_payment', 'pending_confirmation', 'placed', 'packed', 'out_for_delivery', 'delivered', 'cancelled'));
+create index if not exists orders_to_confirm_idx on public.orders (created_at) where status = 'pending_confirmation';
+
+-- ===== supabase/migrations/20261017000003_unconfirmed_order_expiry.sql =====
+-- WhatsApp cash-on-delivery orders hold stock while "pending_confirmation". If the store doesn't confirm
+-- them in time (reservation_expires_at, set when the order is saved), they are cancelled like unpaid
+-- online orders, so fake or forgotten orders can't keep stock and delivery slots blocked.
+-- The cancel reason differs from 'Payment was not completed in time', so mark_order_paid never revives them.
+create or replace function public.release_expired_reservations() returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_status text;
+  v_count integer := 0;
+begin
+  for v_id, v_status in
+    select id, status from public.orders
+     where status in ('pending_payment', 'pending_confirmation') and reservation_expires_at < now()
+     order by reservation_expires_at
+     for update skip locked
+  loop
+    perform public.cancel_order(
+      v_id, 'system',
+      case when v_status = 'pending_payment' then 'Payment was not completed in time'
+           else 'Not confirmed by the store in time' end);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+
+drop index if exists public.orders_expiry_idx;
+create index if not exists orders_expiry_idx on public.orders (reservation_expires_at)
+  where status in ('pending_payment', 'pending_confirmation');
+revoke all on function public.release_expired_reservations() from public, anon, authenticated;
+

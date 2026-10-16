@@ -57,7 +57,7 @@ export function Badge({ tone = "neutral", children, className }: { tone?: Tone; 
 }
 
 export function orderTone(s: OrderStatus): Tone {
-  return s === "cancelled" ? "red" : s === "delivered" ? "green" : s === "pending_payment" ? "amber" : s === "out_for_delivery" ? "dark" : s === "packed" ? "lime" : "neutral";
+  return s === "cancelled" ? "red" : s === "delivered" ? "green" : s === "pending_payment" || s === "pending_confirmation" ? "amber" : s === "out_for_delivery" ? "dark" : s === "packed" ? "lime" : "neutral";
 }
 export function paymentTone(s: PaymentStatus): Tone {
   return s === "paid" || s === "cod_collected" ? "green" : s === "refund_pending" || s === "failed" ? "red" : s === "pending" ? "amber" : "neutral";

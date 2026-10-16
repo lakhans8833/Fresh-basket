@@ -41,3 +41,14 @@ export const payToken = {
   issue: (orderId: string) => issueToken("pay", { o: orderId }, 60 * 60),
   verify: (orderId: string, token: string | null | undefined) => readToken<{ o: string }>("pay", token)?.o === orderId,
 };
+
+/**
+ * Secret order-tracking key (sent to the customer, e.g. in the WhatsApp message). Deterministic
+ * per order so the same link always works; only the server (APP_SECRET) can make one.
+ * Anyone holding the link sees that one order's status and items — never other customers' data,
+ * and the address is masked on the tracking page.
+ */
+export const trackToken = {
+  issue: (orderId: string) => sign("track", orderId).slice(0, 32),
+  verify: (orderId: string, key: string | null | undefined) => typeof key === "string" && key.length === 32 && safeEqual(key, sign("track", orderId).slice(0, 32)),
+};

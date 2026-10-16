@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, Home, Tag } from "lucide-react";
 import { getProduct, listProducts } from "@/lib/catalog";
 import { getSettings } from "@/lib/settings";
-import { storeConfig } from "@/config/store";
+import { resolveWhatsAppNumber, storeConfig } from "@/config/store";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductPurchase } from "@/components/product/product-purchase";
 import { FavouriteButton } from "@/components/product/favourite-button";
@@ -105,7 +105,7 @@ export default async function ProductPage({ params }: { params: Params }) {
                 ))}
               </ul>
             ) : null}
-            <ProductPurchase product={product} />
+            <ProductPurchase product={product} whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />
           </div>
         </div>
         <div id="reviews" className="scroll-mt-28">

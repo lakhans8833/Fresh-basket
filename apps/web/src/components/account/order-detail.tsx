@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Check, PackageCheck, Truck, ClipboardList, Home as HomeIcon, XCircle, RotateCcw, CreditCard, PartyPopper, Clock } from "lucide-react";
+import { Check, PackageCheck, Truck, ClipboardList, Home as HomeIcon, XCircle, RotateCcw, CreditCard, PartyPopper, Clock, ExternalLink } from "lucide-react";
 import {
-  canCustomerCancel, formatINR, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
+  canCustomerCancel, formatINR, NO_SLOT_LABEL, formatSlotTime, ORDER_STATUS_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS,
   type Order, type OrderStatus, type PlaceOrderResponse,
 } from "@freshbasket/shared";
+import { UpiPayPanel, type UpiInfo } from "./upi-pay-panel";
 import { api } from "@/lib/client/api";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
@@ -17,30 +18,39 @@ import { ProductImage } from "../product/product-image";
 import { cn } from "../ui/cn";
 
 const STEP_ICON: Record<OrderStatus, typeof Check> = {
-  pending_payment: Clock, placed: ClipboardList, packed: PackageCheck, out_for_delivery: Truck, delivered: HomeIcon, cancelled: XCircle,
+  pending_payment: Clock, pending_confirmation: Clock, placed: ClipboardList, packed: PackageCheck, out_for_delivery: Truck, delivered: HomeIcon, cancelled: XCircle,
 };
 
 export function statusTone(s: OrderStatus) {
-  return s === "cancelled" ? "bg-danger-bg text-danger" : s === "delivered" ? "bg-lime-100 text-forest-800" : s === "pending_payment" ? "bg-[#fdf6e7] text-[#7a5212]" : "bg-sage-100 text-forest-800";
+  return s === "cancelled" ? "bg-danger-bg text-danger" : s === "delivered" ? "bg-lime-100 text-forest-800" : s === "pending_payment" || s === "pending_confirmation" ? "bg-[#fdf6e7] text-[#7a5212]" : "bg-sage-100 text-forest-800";
 }
 
 export function formatDeliveryDate(d: string) {
   return new Date(`${d}T00:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 }
 
-export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: boolean }) {
+/**
+ * Order page. mode "account": the signed-in customer's own order (cancel / reorder).
+ * mode "track": opened from a secret tracking link (no account needed) — the server has already
+ * masked the address and phone; no cancel/reorder.
+ */
+export function OrderDetail({
+  order, justPlaced, mode = "account", trackKey, upi,
+}: { order: Order; justPlaced: boolean; mode?: "account" | "track"; trackKey?: string; upi?: UpiInfo | null }) {
   const router = useRouter();
   const { add, lines } = useCart();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // While waiting for a payment confirmation (webhook), refresh periodically.
+  // Always show the latest status from the database: every 5 s while waiting for an online payment
+  // (webhook), every 30 s while the order is on its way; stop once it's delivered or cancelled.
   useEffect(() => {
-    if (order.status !== "pending_payment") return;
-    const t = setInterval(() => router.refresh(), 5000);
+    if (order.status === "delivered" || order.status === "cancelled") return;
+    const waitingForGateway = order.status === "pending_payment" && order.paymentMethod !== "upi";
+    const t = setInterval(() => router.refresh(), waitingForGateway ? 5000 : 30_000);
     return () => clearInterval(t);
-  }, [order.status, router]);
+  }, [order.status, order.paymentMethod, router]);
 
   const currentIdx = TRACKING_STEPS.indexOf(order.status);
   const eventFor = (s: OrderStatus) => [...order.events].reverse().find((e) => e.status === s);
@@ -91,19 +101,19 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
 
   return (
     <div className="container-page pt-6 md:pt-10">
-      {justPlaced && order.status !== "pending_payment" && order.status !== "cancelled" ? (
+      {justPlaced && order.status !== "pending_payment" && order.status !== "pending_confirmation" && order.status !== "cancelled" ? (
         <div className="mb-6 flex items-center gap-4 rounded-[var(--radius-card)] bg-forest-800 p-5 text-white sm:p-6" role="status">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-lime-300 text-forest-900"><PartyPopper className="size-6" aria-hidden /></span>
           <div>
             <h1 className="text-2xl font-semibold">Thank you! Your order is confirmed.</h1>
-            <p className="text-white/75">We&apos;ll deliver on {formatDeliveryDate(order.deliveryDate)}, {order.slotLabel.split(",")[0]}.</p>
+            <p className="text-white/75">{order.slotLabel === NO_SLOT_LABEL ? "We'll agree the delivery time with you on WhatsApp." : <>We&apos;ll deliver on {formatDeliveryDate(order.deliveryDate)}, {order.slotLabel.split(",")[0]}.</>}</p>
           </div>
         </div>
       ) : null}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/account/orders" className="text-sm text-muted hover:text-forest-800">← All orders</Link>
+          {mode === "account" ? <Link href="/account/orders" className="text-sm text-muted hover:text-forest-800">← All orders</Link> : <p className="text-sm text-muted">Order tracking</p>}
           <h2 className="mt-1 text-[2rem] font-semibold text-forest-900 md:text-4xl">Order {order.orderNumber}</h2>
           <p className="text-sm text-muted">Placed {new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}</p>
         </div>
@@ -115,7 +125,30 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
 
       {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
 
-      {order.status === "pending_payment" ? (
+      {order.status === "pending_confirmation" ? (
+        <Notice tone="warning" className="mt-5" title="Waiting for the store to confirm">
+          Your order is saved. Please make sure you pressed <b>Send</b> in WhatsApp — the store confirms your order there, then it&apos;s packed{order.slotLabel === NO_SLOT_LABEL ? " for the delivery time agreed with you" : ` for ${formatDeliveryDate(order.deliveryDate)}`}.
+        </Notice>
+      ) : null}
+
+      {order.status === "pending_payment" && order.paymentMethod === "upi" && upi ? (
+        <UpiPayPanel orderId={order.id} trackKey={trackKey} info={upi} reported={order.upiReference} orderNumber={order.orderNumber} holdUntil={order.reservationExpiresAt} />
+      ) : order.status === "pending_payment" && order.paymentMethod === "razorpay_link" ? (
+        <Notice tone="warning" className="mt-5" title="Waiting for payment">
+          Pay {formatINR(order.total)} with the secure Razorpay link. This page updates once Razorpay confirms the payment — a screenshot isn&apos;t needed.
+          {order.paymentLinkUrl ? (
+            <div className="mt-3">
+              <a href={order.paymentLinkUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-full bg-forest-800 px-4 text-sm font-semibold text-white hover:bg-forest-900">
+                <CreditCard className="size-4" aria-hidden /> Pay {formatINR(order.total)} now <ExternalLink className="size-3.5" aria-hidden />
+              </a>
+            </div>
+          ) : null}
+        </Notice>
+      ) : order.status === "pending_payment" && order.paymentMethod === "upi" ? (
+        <Notice tone="warning" className="mt-5" title="Waiting for UPI payment">
+          UPI payment details aren&apos;t available right now. Please message the store on WhatsApp to pay {formatINR(order.total)}.
+        </Notice>
+      ) : order.status === "pending_payment" && mode === "account" && (order.paymentMethod === "razorpay" || order.paymentMethod === "mock") ? (
         <Notice tone="warning" className="mt-5" title="Waiting for payment">
           Your items are held until {order.reservationExpiresAt ? new Date(order.reservationExpiresAt).toLocaleTimeString("en-IN", { timeStyle: "short", timeZone: "Asia/Kolkata" }) : "shortly"}. If you&apos;ve already paid, this page updates automatically once the payment is confirmed.
           <div className="mt-3"><Button size="sm" variant="dark" loading={busy === "pay"} onClick={resumePayment}><CreditCard className="size-4" aria-hidden /> Complete payment</Button></div>
@@ -181,9 +214,9 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
         <aside className="space-y-4">
           <section className="rounded-[var(--radius-card)] border border-line bg-white p-5 text-[0.9375rem]">
             <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.1em] text-muted">Delivery</h3>
-            <p className="mt-2 font-semibold text-ink">{formatDeliveryDate(order.deliveryDate)}</p>
+            {order.slotLabel !== NO_SLOT_LABEL ? <p className="mt-2 font-semibold text-ink">{formatDeliveryDate(order.deliveryDate)}</p> : null}
             <p className="text-ink-soft">{order.slotLabel.replace(/(\d{2}:\d{2})/g, (t) => formatSlotTime(t))}</p>
-            <p className="mt-3 font-medium text-ink">{order.address.fullName} · {order.address.phone}</p>
+            <p className="mt-3 font-medium text-ink">{order.address.fullName}{order.address.phone ? ` · ${order.address.phone}` : ""}</p>
             <p className="text-muted">{[order.address.line1, order.address.line2, order.address.landmark, order.address.city, order.address.state, order.address.pincode].filter(Boolean).join(", ")}</p>
             {order.customerNote ? <p className="mt-3 rounded-xl bg-sage-50 p-3 text-sm text-ink-soft">“{order.customerNote}”</p> : null}
           </section>
@@ -199,11 +232,11 @@ export function OrderDetail({ order, justPlaced }: { order: Order; justPlaced: b
                 ? order.paymentStatus === "cod_pending"
                   ? `Cash on delivery · pay ${formatINR(order.total)} when it arrives`
                   : `Cash on delivery · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`
-                : `${order.paymentMethod === "mock" ? "Test payment (development)" : "Online payment via Razorpay"} · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`}</p>
+                : `${PAYMENT_METHOD_LABEL[order.paymentMethod]} · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`}</p>
           </section>
           <div className="flex flex-col gap-2.5">
-            <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Reorder these items</Button>
-            {canCustomerCancel(order.status) ? <Button variant="danger" loading={busy === "cancel"} onClick={cancel}>Cancel order</Button> : null}
+            {mode === "account" ? <Button variant="lime" loading={busy === "reorder"} onClick={reorder}><RotateCcw className="size-4" aria-hidden /> Reorder these items</Button> : null}
+            {mode === "account" && canCustomerCancel(order.status) ? <Button variant="danger" loading={busy === "cancel"} onClick={cancel}>Cancel order</Button> : null}
             <Link href="/contact" className="text-center text-sm text-muted underline-offset-4 hover:underline">Need help with this order?</Link>
           </div>
         </aside>
