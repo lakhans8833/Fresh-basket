@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound, Mail, ShieldCheck, UserRound, Store } from "lucide-react";
@@ -19,7 +21,7 @@ const LINK_ERRORS: Record<"expired" | "device" | "link", string> = {
   link: "That sign-in link didn't work. Please request a new one below.",
 };
 
-export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link" }) {
+export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null }) {
   const router = useRouter();
   const { refresh } = useSession();
   const [method, setMethod] = useState<"code" | "password">("code");
@@ -32,11 +34,36 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
   const [info, setInfo] = useState<string | null>(null);
   const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
 
+  /** Signed in, but loading the account failed (network / server): retry the check, keep the session. */
+  const [checkFailed, setCheckFailed] = useState(false);
+  /** The error shown comes from the post-sign-in check (always visible, whatever the sign-in method). */
+  const [sessionProblem, setSessionProblem] = useState(false);
+
+  /**
+   * After signing in: continue only once the server confirms the session. A failed check keeps the
+   * session and offers a retry; "no session after all" asks to sign in again. Never navigates silently.
+   */
   async function done() {
-    await refresh();
-    // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
-    router.replace(next);
-    router.refresh();
+    setError(null);
+    setSessionProblem(false);
+    const r = await refresh();
+    if (r.status === "signed_in") {
+      setCheckFailed(false);
+      // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
+      router.replace(next);
+      router.refresh();
+      return;
+    }
+    if (r.status === "signed_out") {
+      setCheckFailed(false);
+      setError("Sign-in didn't complete. Please try again.");
+      setSessionProblem(true);
+    } else {
+      setSessionProblem(true);
+      setCheckFailed(true);
+      setError("You're signed in, but we couldn't load your account just now (connection or server problem). Please try again.");
+    }
+    setBusy(null);
   }
 
   async function devLogin(e?: FormEvent, preset?: { email: string; name: string }) {
@@ -141,7 +168,18 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         </div>
       </div>
 
-      {error && !(mode === "supabase" && method === "code" && !linkError) ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {error && (sessionProblem || !(mode === "supabase" && method === "code" && !linkError)) ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {checkFailed ? (
+        <Button type="button" variant="outline" className="mt-3 w-full" loading={busy === "check"} onClick={() => { setBusy("check"); void done(); }}>
+          Try again
+        </Button>
+      ) : null}
+      {signedInAs ? (
+        <Notice tone="info" className="mt-3" title={`You're still signed in as ${signedInAs}`}>
+          The email link didn&apos;t sign you in to another account, and nothing about {signedInAs} changed.{" "}
+          <Link href={next.startsWith("/reset-password") ? "/account" : next} className="font-semibold underline">Continue as {signedInAs}</Link>
+        </Notice>
+      ) : null}
       {info && !(mode === "supabase" && method === "code") ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
 
       {mode === "dev" ? (

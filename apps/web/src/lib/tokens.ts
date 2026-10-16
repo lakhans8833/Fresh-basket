@@ -41,3 +41,15 @@ export const payToken = {
   issue: (orderId: string) => issueToken("pay", { o: orderId }, 60 * 60),
   verify: (orderId: string, token: string | null | undefined) => readToken<{ o: string }>("pay", token)?.o === orderId,
 };
+
+/**
+ * Proof that THIS browser just completed a password-recovery email link for a specific account.
+ * Set (httpOnly) by /auth/callback after a successful recovery verification; the reset page only offers
+ * "set a new password" recovery mode when it matches the signed-in user. A session alone is not proof.
+ */
+export const RECOVERY_COOKIE = "fb_recovery";
+export const RECOVERY_TTL_SECONDS = 15 * 60;
+export const recoveryToken = {
+  issue: (userId: string) => issueToken("recovery", { u: userId }, RECOVERY_TTL_SECONDS),
+  verify: (userId: string, token: string | null | undefined) => readToken<{ u: string }>("recovery", token)?.u === userId,
+};
