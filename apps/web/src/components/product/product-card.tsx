@@ -70,7 +70,9 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   const perKg = unitPriceLabel(v.price, v.label);
   const inCartMode = s.inCart > 0;
   // One tap adds one pack; once it's in the cart the button turns into − N + for the cart itself.
-  const action = inCartMode ? (
+  // `stack`: narrow grid cards put the button on its own full-width row under the price, so the
+  // price, MRP and the wider − N + stepper never overlap.
+  const action = (stack: boolean) => inCartMode ? (
     <QuantityStepper
       size="sm"
       tone="lime"
@@ -78,7 +80,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       onChange={s.setCartQty}
       max={s.cartCap}
       label={`${product.name} ${v.label} in cart`}
-      className="relative z-10 w-[5.75rem] shrink-0 rounded-lg font-semibold sm:w-[6.75rem]"
+      className={cn("relative z-10 shrink-0 rounded-lg font-semibold", stack ? "w-full @[12.5rem]:w-[6.75rem]" : "w-[5.75rem] sm:w-[6.75rem]")}
     />
   ) : (
     <button
@@ -87,6 +89,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       onClick={s.addToCart}
       className={cn(
         "relative z-10 inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-3 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
+        stack && "w-full @[12.5rem]:w-auto",
         out || full ? "bg-sage-100 text-xs font-semibold tracking-normal text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "border border-forest-800 bg-lime-50 text-forest-800 hover:bg-forest-800 hover:text-white",
       )}
       aria-label={out ? `${product.name} ${v.label} is out of stock` : full ? `${product.name}: maximum quantity already in cart` : `Add ${product.name} ${v.label} to cart`}
@@ -96,7 +99,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   );
   const price = (
     <p className="leading-tight">
-      <span className="text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
+      <span className="whitespace-nowrap text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
       {/* Always one line tall, so the price and ADD sit at the same height on every card. */}
       <span className="block h-4 truncate text-[0.6875rem] tabular-nums text-muted">{perKg ?? ""}</span>
     </p>
@@ -117,7 +120,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
           {v.mrp && v.mrp > v.price ? <s className="mt-1 text-[0.6875rem] text-muted">MRP {formatINR(v.mrp)}</s> : null}
           <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5 pt-1.5">
             {price}
-            {action}
+            {action(false)}
           </div>
         </div>
       </article>
@@ -150,7 +153,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
         </div>
         <FavouriteButton productId={product.id} name={product.name} className="absolute right-2.5 top-2.5 z-10 size-8 bg-white shadow" />
       </div>
-      <div className="flex flex-1 flex-col gap-1 p-3">
+      <div className="@container flex flex-1 flex-col gap-1 p-3">
         <h3 className="line-clamp-2 font-sans text-sm font-semibold leading-snug text-ink sm:text-[0.9375rem]">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
@@ -159,14 +162,14 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
           <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="shrink-0" />
           {!out && v.stock <= 5 ? <span className="truncate text-[0.6875rem] font-medium text-amber">Only {v.stock} left</span> : null}
         </div>
-        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+        <div className="mt-auto flex flex-col gap-2 pt-2 @[12.5rem]:flex-row @[12.5rem]:items-end @[12.5rem]:justify-between">
           <div className="min-w-0">
-            <s className={cn("block h-4 text-[0.6875rem] tabular-nums text-muted", !(v.mrp && v.mrp > v.price) && "invisible")}>
+            <s className={cn("block h-4 truncate whitespace-nowrap text-[0.6875rem] tabular-nums text-muted", !(v.mrp && v.mrp > v.price) && "invisible")}>
               {v.mrp && v.mrp > v.price ? `MRP ${formatINR(v.mrp)}` : "MRP"}
             </s>
             {price}
           </div>
-          {action}
+          {action(true)}
         </div>
       </div>
     </article>

@@ -145,7 +145,7 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
         <MailCheck className="size-4 shrink-0 text-forest-800" aria-hidden />
         <span className="min-w-0 truncate">Code sent to <b>{email}</b></span>
       </p>
-      <Field label="Enter code" htmlFor="otp-code">
+      <Field label="Enter code" htmlFor="otp-code" hint="Got a link instead of a code? Open it on this device to finish signing in.">
         <Input
           ref={codeRef}
           id="otp-code"

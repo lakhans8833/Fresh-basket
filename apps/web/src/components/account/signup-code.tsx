@@ -108,7 +108,7 @@ export function SignupCode({
       {!justSent && !error && !info ? (
         <Notice tone="info">This account isn&apos;t confirmed yet. Enter the code from the confirmation email, or send a new one.</Notice>
       ) : null}
-      <Field label={`Code sent to ${email}`} htmlFor="signup-code">
+      <Field label={`Code sent to ${email}`} htmlFor="signup-code" hint="Got a link instead of a code? Open it on this device to finish signing in.">
         <Input
           id="signup-code"
           inputMode="numeric"
