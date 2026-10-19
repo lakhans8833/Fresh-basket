@@ -32,7 +32,8 @@ export function CategoryGrid({ categories, seasonalCount }: { categories: Catego
   return (
     <section aria-labelledby="cat-heading" className="container-page mt-10 md:mt-14">
       <SectionHeader id="cat-heading" title="Popular Categories" href="/categories" />
-      <ul className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 lg:grid-cols-5 xl:grid-cols-6">
+      {/* Never more columns than tiles, so a short list fills the row instead of leaving a gap. */}
+      <ul className={cn("no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0", tiles.length >= 6 ? "lg:grid-cols-5 xl:grid-cols-6" : tiles.length === 5 ? "lg:grid-cols-5" : tiles.length === 4 ? "lg:grid-cols-4" : "")}>
         {tiles.map((t) => (
           <li key={t.key} className="w-[40%] shrink-0 snap-start sm:w-auto">
             <Link href={t.href} className="group flex h-full flex-col items-center rounded-[var(--radius-card)] border border-line bg-white p-3 text-center shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:border-forest-700/30 hover:shadow-[var(--shadow-lift)]">
@@ -118,13 +119,15 @@ export function BuyAgainRail({ products, lastVariant, href = "/account/buy-again
 
 export function WhatsAppBand({ whatsappUrl }: { whatsappUrl: string }) {
   return (
-    <section className="mt-14 bg-forest-800 md:mt-20">
-      <div className="container-page flex flex-col items-center justify-center gap-4 py-6 text-center text-white sm:flex-row sm:gap-6 sm:text-left">
+    // The last block on the home page: sits flush on the footer (cancels the footer's top margin)
+    // instead of leaving an empty strip between the green band and the footer.
+    <section className="mb-[-4rem] mt-14 bg-forest-800 md:mb-[-5rem] md:mt-20">
+      <div className="container-page flex flex-col items-center justify-center gap-4 py-6 text-center text-white md:flex-row md:gap-6 md:text-left">
         <WhatsAppIcon className="size-10 shrink-0 text-white" />
-        <p className="text-xl font-semibold">Order on WhatsApp</p>
-        <span aria-hidden className="hidden h-6 w-px bg-white/30 sm:block" />
-        <p className="text-white/85">Fill your cart, pick a delivery slot and send the order to us on WhatsApp.</p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <p className="text-xl font-semibold md:whitespace-nowrap">Order on WhatsApp</p>
+        <span aria-hidden className="hidden h-6 w-px shrink-0 bg-white/30 md:block" />
+        <p className="text-white/85 md:flex-1">Fill your cart, pick a delivery slot and send the order to us on WhatsApp.</p>
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 lg:flex-nowrap">
           <Link href="/order" className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-forest-800 hover:bg-lime-100">
             <WhatsAppIcon className="size-5 text-whatsapp-dark" /> Order on WhatsApp
           </Link>

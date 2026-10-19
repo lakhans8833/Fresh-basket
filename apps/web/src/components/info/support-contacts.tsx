@@ -9,6 +9,11 @@ export function supportWhatsApp(settings: SupportSettings) {
   return resolveWhatsAppNumber(settings.whatsapp) ?? normalizeWhatsAppNumber(settings.whatsapp);
 }
 
+/** "919000000000" → "+91 90000 00000" (Indian mobiles); other numbers just get a leading "+". */
+export function displayWhatsApp(wa: string) {
+  return /^91\d{10}$/.test(wa) ? `+91 ${wa.slice(2, 7)} ${wa.slice(7)}` : `+${wa}`;
+}
+
 /** True when at least one support detail is filled in (otherwise pages keep their plain /contact link). */
 export function hasSupportContacts(settings: SupportSettings) {
   return Boolean(settings.supportPhone || supportWhatsApp(settings) || settings.supportEmail || settings.supportHours);
@@ -26,7 +31,7 @@ export function SupportContacts({
   const waText = orderNumber ? `?text=${encodeURIComponent(`Hi, I need help with order ${orderNumber}.`)}` : "";
   const actions = [
     settings.supportPhone && { key: "call", icon: Phone, label: "Call", value: settings.supportPhone, href: `tel:${settings.supportPhone.replace(/[^\d+]/g, "")}` },
-    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: `+${wa}`, href: `https://wa.me/${wa}${waText}`, external: true },
+    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: displayWhatsApp(wa), href: `https://wa.me/${wa}${waText}`, external: true },
     settings.supportEmail && {
       key: "email", icon: Mail, label: "Email", value: settings.supportEmail,
       href: `mailto:${settings.supportEmail}${orderNumber ? `?subject=${encodeURIComponent(`Order ${orderNumber}`)}` : ""}`,

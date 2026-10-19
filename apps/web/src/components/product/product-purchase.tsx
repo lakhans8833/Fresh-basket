@@ -45,7 +45,8 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
 
       <fieldset className="mt-6">
         <legend className="text-sm font-semibold text-ink-soft">Choose weight</legend>
-        <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {/* 4 sizes sit in one row (2×2 on phones) instead of 3 + a lonely 4th. */}
+        <div className={cn("mt-2.5 grid grid-cols-2 gap-2.5", product.variants.length === 4 ? "sm:grid-cols-4" : product.variants.length === 2 ? "" : "sm:grid-cols-3")}>
           {product.variants.map((v) => {
             const on = v.id === variant.id;
             return (

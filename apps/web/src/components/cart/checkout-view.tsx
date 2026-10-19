@@ -11,6 +11,7 @@ import { useCart } from "./cart-context";
 import { useQuote } from "./use-quote";
 import { OrderSummary } from "./order-summary";
 import { CouponForm } from "./coupon-form";
+import { useSession } from "../account/session-context";
 import { AddressFields, emptyAddress, validateAddress, type AddressDraft } from "../account/address-form";
 import { Button, ButtonLink } from "../ui/button";
 import { Checkbox, Textarea } from "../ui/form";
@@ -76,6 +77,14 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       .catch((e) => setLoadError((e as Error).message));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
   }, []);
+
+  // A new address starts with the name and mobile from the account, so nobody types them twice.
+  const { profile } = useSession();
+  useEffect(() => {
+    if (addressId !== "new" || !profile) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time prefill once the account has loaded
+    setDraft((d) => ({ ...d, fullName: d.fullName || profile.fullName || "", phone: d.phone || profile.phone || "" }));
+  }, [addressId, profile]);
 
   const selectedAddress = addressId && addressId !== "new" ? addresses?.find((a) => a.id === addressId) : null;
   const pincode = selectedAddress?.pincode ?? (draft.pincode.length === 6 ? draft.pincode : null);
@@ -311,7 +320,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
           ))}
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-28">
+        <aside id="checkout-summary" className="scroll-mt-[calc(var(--header-h,5rem)+1rem)] space-y-4 lg:sticky lg:top-28">
           <OrderSummary
             quote={quote}
             delivery={data?.area ? "known" : "unknown"}
@@ -347,6 +356,19 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
           </OrderSummary>
           {loading && !quote ? <Spinner className="mx-auto size-5 text-muted" /> : null}
         </aside>
+      </div>
+      {/* Phones: the summary is below a long form, so keep the total and a way to it in view. */}
+      <div className="h-20 lg:hidden" aria-hidden />
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-16px_rgb(11_102_35/0.35)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+          <p className="leading-tight">
+            <span className="block text-xs text-muted">Total{data?.area ? "" : " (+ delivery)"}</span>
+            <span className="text-lg font-bold tabular-nums text-forest-900">{quote ? formatINR(quote.total) : "…"}</span>
+          </p>
+          <a href="#checkout-summary" className="inline-flex h-11 items-center gap-2 rounded-full bg-forest-800 px-5 font-semibold text-white hover:bg-forest-900">
+            Review &amp; place order <ArrowRight className="size-4" aria-hidden />
+          </a>
+        </div>
       </div>
     </div>
   );
