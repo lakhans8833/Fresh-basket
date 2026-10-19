@@ -99,9 +99,12 @@ export function OrderDetail({
     }
   }
 
+  // One h1 per page: the "order confirmed" banner when it shows, otherwise the order number.
+  const celebrate = justPlaced && order.status !== "pending_payment" && order.status !== "pending_confirmation" && order.status !== "cancelled";
+  const OrderHeading = celebrate ? "h2" : "h1";
   return (
     <div className="container-page pt-6 md:pt-10">
-      {justPlaced && order.status !== "pending_payment" && order.status !== "pending_confirmation" && order.status !== "cancelled" ? (
+      {celebrate ? (
         <div className="mb-6 flex items-center gap-4 rounded-[var(--radius-card)] bg-forest-800 p-5 text-white sm:p-6" role="status">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-lime-300 text-forest-900"><PartyPopper className="size-6" aria-hidden /></span>
           <div>
@@ -114,7 +117,7 @@ export function OrderDetail({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           {mode === "account" ? <Link href="/account/orders" className="text-sm text-muted hover:text-forest-800">← All orders</Link> : <p className="text-sm text-muted">Order tracking</p>}
-          <h2 className="mt-1 text-[2rem] font-semibold text-forest-900 md:text-4xl">Order {order.orderNumber}</h2>
+          <OrderHeading className="mt-1 text-[2rem] font-semibold text-forest-900 md:text-4xl">Order {order.orderNumber}</OrderHeading>
           <p className="text-sm text-muted">Placed {new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}</p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -110,6 +110,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   if (lines.length === 0) {
     return (
       <div className="container-page py-12">
+        <h1 className="sr-only">Checkout</h1>
         <EmptyState icon={<ShoppingBasket className="size-7" />} title="Your cart is empty" action={<ButtonLink href="/shop">Shop fresh</ButtonLink>}>
           Add items to your cart before checking out.
         </EmptyState>

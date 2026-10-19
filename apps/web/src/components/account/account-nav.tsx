@@ -17,7 +17,7 @@ const LINKS = [
 ];
 
 const item =
-  "inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors md:flex md:w-full md:rounded-xl md:px-3.5 md:py-2.5";
+  "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors md:flex md:w-full md:rounded-xl md:px-3.5 md:py-2.5";
 
 /** Account navigation: horizontal pills on mobile, a side list on larger screens. */
 export function AccountNav({ isStaff }: { isStaff: boolean }) {
@@ -39,7 +39,7 @@ export function AccountNav({ isStaff }: { isStaff: boolean }) {
         {LINKS.map(({ href, label, icon: Icon, match }) => {
           const active = match(pathname);
           return (
-            <li key={href}>
+            <li key={href} className="shrink-0">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
@@ -57,7 +57,7 @@ export function AccountNav({ isStaff }: { isStaff: boolean }) {
           );
         })}
         {isStaff ? (
-          <li>
+          <li className="shrink-0">
             <Link href="/admin" className={cn(item, "border border-line bg-white text-ink-soft hover:bg-sage-50 md:border-transparent md:bg-transparent")}>
               <LayoutDashboard className="size-4" aria-hidden />
               Admin dashboard

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound, Star } from "lucide-react";
-import { requestLeave } from "./unsaved-guard";
+import { LEAVE_HELD_EVENT, requestLeave } from "./unsaved-guard";
 import { useSession } from "../account/session-context";
 import { LeafMark } from "../layout/logo";
 import { DevBadge } from "../ui/feedback";
@@ -60,6 +60,14 @@ export function AdminShell({
   }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- close menu on route change
   useEffect(() => setOpen(false), [pathname]);
+  // A link tapped in the menu was held back by an unsaved-changes prompt: close the menu so the
+  // prompt (and, after "Stay", the form) isn't hidden behind it.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener(LEAVE_HELD_EVENT, close);
+    return () => window.removeEventListener(LEAVE_HELD_EVENT, close);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);

@@ -109,6 +109,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
         subtitle={<span className="font-medium">{storeConfig.serviceArea}</span>}
         image="/images/site/banner-market.webp"
         script={storeConfig.secondaryTagline}
+        as="h2" // the listing title below ("All products" / category name) is the page's one h1
       />
 
       <div className="container-page pt-5">

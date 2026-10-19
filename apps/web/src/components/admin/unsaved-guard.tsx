@@ -12,6 +12,9 @@ import { Button } from "../ui/button";
  * After a successful save the page is no longer dirty, so no warning appears.
  */
 const LEAVE_EVENT = "fb:request-leave";
+/** Fired when a guard holds a navigation back to ask Save / Discard / Stay (the mobile menu closes so the dialog and the form are in view). */
+export const LEAVE_HELD_EVENT = "fb:leave-held";
+const announceHeld = () => window.dispatchEvent(new Event(LEAVE_HELD_EVENT));
 
 /**
  * For actions that leave the page without a link (e.g. Sign out): asks every mounted guard first.
@@ -46,11 +49,13 @@ export function useUnsavedGuard({ dirty, save, saving }: { dirty: boolean; save?
       e.preventDefault();
       e.stopPropagation();
       setPending({ href: `${url.pathname}${url.search}${url.hash}` });
+      announceHeld();
     };
     const onLeaveRequest = (e: Event) => {
       if (!dirtyRef.current) return;
       e.preventDefault();
       setPending({ run: (e as CustomEvent<{ proceed: () => void }>).detail.proceed });
+      announceHeld();
     };
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", onClick, true);
