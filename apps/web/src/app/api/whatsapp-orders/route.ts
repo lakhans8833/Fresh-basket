@@ -16,9 +16,9 @@ import { upiPaymentInfo } from "@/lib/payments/upi";
  * Payment: cash on delivery, UPI (verified by staff) or a Razorpay Payment Link for the exact total.
  */
 export const POST = route(async (req) => {
-  rateLimit(`wa-order:${clientIp(req)}`, 8, 10 * 60_000);
+  await rateLimit(`wa-order:${clientIp(req)}`, 8, 10 * 60_000);
   const input = await parseBody(req, whatsappOrderSchema);
-  rateLimit(`wa-order-phone:${input.customer.phone}`, 6, 10 * 60_000);
+  await rateLimit(`wa-order-phone:${input.customer.phone}`, 6, 10 * 60_000);
   const settings = await getSettings();
   const number = resolveWhatsAppNumber(settings.whatsapp);
   if (!number) throw new HttpError(503, "WhatsApp ordering isn't set up yet. Please use the website checkout.");

@@ -2134,6 +2134,20 @@ end $$;
 
 revoke all on function public.mark_order_paid(uuid, text, text, text, integer, text) from public, anon, authenticated;
 
+-- ===== supabase/migrations/20261020000001_rate_limits.sql =====
+-- Shared rate-limit counters. On Vercel every server instance has its own memory, so an in-memory
+-- limit can be bypassed by requests that land on different instances. Keys are stored hashed
+-- (they can contain a phone number or IP). Only the server's database connection uses this table:
+-- RLS is on with no policies, so the public API (anon / signed-in users) can't read or write it.
+create table if not exists public.rate_limits (
+  key_hash text primary key,
+  hits integer not null,
+  reset_at timestamptz not null
+);
+alter table public.rate_limits enable row level security;
+revoke all on public.rate_limits from anon, authenticated;
+create index if not exists rate_limits_reset_at_idx on public.rate_limits (reset_at);
+
 -- ===== record the migrations above as applied (for apps/web/scripts/migrate.mjs) =====
 create table if not exists public._fb_migrations (name text primary key, applied_at timestamptz not null default now());
 alter table public._fb_migrations enable row level security;
@@ -2165,5 +2179,6 @@ insert into public._fb_migrations (name) values
   ('20261017000010_profile_identity_lockdown.sql'),
   ('20261017200001_unavailable_item_preference.sql'),
   ('20261017200002_pack_label_spaces.sql'),
-  ('20261017200003_late_payment_keep_future_date.sql')
+  ('20261017200003_late_payment_keep_future_date.sql'),
+  ('20261020000001_rate_limits.sql')
 on conflict (name) do nothing;

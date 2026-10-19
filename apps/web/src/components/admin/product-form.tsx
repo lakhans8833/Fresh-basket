@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight, ImagePlus, Plus, Trash2, X, Archive, Save, ExternalLink, Scale } from "lucide-react";
 import { adminProductSchema, packGrams, type AdminProductInput } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
@@ -171,6 +171,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const totalGramsNow = byWeight && stockKgNum !== null ? Math.round(stockKgNum * 1000) : null;
   const [uploading, setUploading] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -213,6 +214,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   async function onFiles(files: FileList | null) {
     if (!files?.length) return;
     setUploadError(null);
+    setUploadWarning(null);
     const list = Array.from(files).slice(0, Math.max(0, 8 - images.length));
     if (files.length > list.length) setUploadError("A product can have up to 8 photos.");
     const problems = list.map(validateImage).filter(Boolean) as string[];
@@ -222,7 +224,11 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     await Promise.all(
       ok.map(async (f) => {
         try {
+          const width = await imageWidth(f);
           const url = await uploadImage(f);
+          if (width !== null && width < MIN_PHOTO_WIDTH) {
+            setUploadWarning(`“${f.name}” is only ${width} px wide, so it will look blurry on the product page. A photo at least ${MIN_PHOTO_WIDTH} px wide looks sharp.`);
+          }
           setImages((imgs) => [...imgs, { key: k(), url, alt: imgs.length === 0 ? name : "" }]);
           touch();
         } catch (e) {
@@ -444,6 +450,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
             />
             <div className="p-5 sm:p-6">
               {uploadError ? <Notice tone="error" className="mb-4">{uploadError}</Notice> : null}
+              {uploadWarning ? <Notice tone="warning" className="mb-4">{uploadWarning}</Notice> : null}
               {images.length === 0 && uploading === 0 ? (
                 <button
                   type="button"
@@ -460,6 +467,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                       <div className="relative">
                         <ProductImage src={img.url} alt={img.alt || name || "Product photo"} sizes="(min-width: 1024px) 240px, 50vw" className="aspect-[4/3] w-full" />
                         {i === 0 ? <span className="absolute left-2 top-2 rounded-full bg-forest-900/85 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">Main photo</span> : null}
+                        <LowResBadge url={img.url} />
                       </div>
                       <div className="space-y-2 p-3">
                         <label className="sr-only" htmlFor={`alt-${img.key}`}>Alt text for photo {i + 1}</label>
@@ -634,5 +642,37 @@ function IconBtn({ label, onClick, disabled, danger, children }: { label: string
     >
       {children}
     </button>
+  );
+}
+
+/** Product pages show the main photo up to ~650 px wide (×2 on sharp phone screens). */
+const MIN_PHOTO_WIDTH = 800;
+
+async function imageWidth(file: File): Promise<number | null> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const w = bmp.width;
+    bmp.close();
+    return w;
+  } catch {
+    return null;
+  }
+}
+
+/** Flags photos already saved that are too small to look sharp (measured from the original file). */
+function LowResBadge({ url }: { url: string }) {
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    const im = new Image();
+    im.onload = () => { if (live) setWidth(im.naturalWidth); };
+    im.src = url;
+    return () => { live = false; };
+  }, [url]);
+  if (width === null || width >= MIN_PHOTO_WIDTH) return null;
+  return (
+    <span className="absolute bottom-2 left-2 rounded-full bg-[#fdf6e7] px-2 py-0.5 text-[0.6875rem] font-semibold text-[#7a5212]" title={`Only ${width} px wide — upload a photo at least ${MIN_PHOTO_WIDTH} px wide`}>
+      Low resolution · {width}px
+    </span>
   );
 }

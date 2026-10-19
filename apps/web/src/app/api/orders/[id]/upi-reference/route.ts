@@ -15,7 +15,7 @@ const body = upiReferenceSchema.extend({ k: z.string().max(64).optional().nullab
 export const POST = route<{ params: Promise<{ id: string }> }>(async (req, { params }) => {
   const id = (await params).id;
   if (!z.uuid().safeParse(id).success) throw badRequest("Invalid order.");
-  rateLimit(`upi-ref:${clientIp(req)}:${id}`, 6, 10 * 60_000);
+  await rateLimit(`upi-ref:${clientIp(req)}:${id}`, 6, 10 * 60_000);
   const { reference, k } = await parseBody(req, body);
   let allowed = trackToken.verify(id, k);
   if (!allowed) {

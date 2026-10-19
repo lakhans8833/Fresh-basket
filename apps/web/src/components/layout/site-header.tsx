@@ -27,19 +27,20 @@ export function TopBar({ announcement, serviceArea }: { announcement: string | n
   return (
     <div className="bg-forest-800 text-white">
       <div className="container-page flex h-9 items-center justify-between gap-3 text-[0.8125rem] sm:h-10">
-        <p className="hidden items-center gap-2 font-medium text-white/90 md:flex">
+        <p className="hidden shrink-0 items-center gap-2 font-medium text-white/90 xl:flex">
           <Sprout className="size-4 text-lime-300" aria-hidden />
           Fresh Vegetables <span aria-hidden className="text-white/40">|</span> Better Health <span aria-hidden className="text-white/40">|</span> Happy You
         </p>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 md:flex-none md:justify-end">
+        {/* Announcement + delivery area may shrink (the announcement truncates), so a long announcement never makes the page wider than a tablet screen. */}
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 xl:flex-none xl:justify-end">
           {announcement ? (
             <p className="flex min-w-0 items-center gap-2 truncate">
               <Truck className="size-4 shrink-0 text-lime-300" aria-hidden />
-              <span className="truncate">{announcement}</span>
+              <span className="truncate" title={announcement}>{announcement}</span>
             </p>
           ) : null}
           {announcement ? <span aria-hidden className="hidden h-4 w-px bg-white/30 sm:block" /> : null}
-          <button type="button" onClick={() => setOpen(true)} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 font-medium hover:bg-white/10 md:ml-0">
+          <button type="button" onClick={() => setOpen(true)} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 font-medium hover:bg-white/10 xl:ml-0">
             <MapPin className="size-4 text-lime-300" aria-hidden />
             <span className="max-w-44 truncate">{location ? `Delivering to ${location.areaName}` : serviceArea}</span>
             <ChevronDown className="size-3.5" aria-hidden />

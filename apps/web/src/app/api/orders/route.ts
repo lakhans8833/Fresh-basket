@@ -12,7 +12,7 @@ export const GET = route(async () => {
 
 export const POST = route(async (req) => {
   const s = await requireUser();
-  rateLimit(`order:${s.userId}`, 10, 60_000);
+  await rateLimit(`order:${s.userId}`, 10, 60_000);
   const input = await parseBody(req, placeOrderSchema);
   const { order, created } = await placeOrder(s.userId, input);
   const full = await getOrderById(order.id);
