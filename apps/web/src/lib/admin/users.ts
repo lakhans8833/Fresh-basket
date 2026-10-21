@@ -104,3 +104,40 @@ export async function adminResendConfirmation(userId: string): Promise<{ id: str
   }
   return { id: userId, email: u.email };
 }
+
+/**
+ * Edit a user's name, mobile and sign-in email (Admin → Users → Edit).
+ * The email is the login: it is changed in Supabase Auth (the source of truth) and marked confirmed,
+ * because an admin is vouching for it; the profile copy follows. Refused if another account already
+ * uses that address.
+ */
+export async function adminUpdateUser(
+  userId: string,
+  input: { fullName: string; phone: string | null; email: string },
+): Promise<{ id: string; email: string; fullName: string; phone: string | null; emailConfirmedAt: string | null }> {
+  const u = await authUser(userId);
+  const email = input.email.trim().toLowerCase();
+  const emailChanged = (u.email ?? "").toLowerCase() !== email;
+  if (emailChanged) {
+    const taken = await queryOne("select 1 from auth.users where lower(email) = $1 and id <> $2", [email, userId]);
+    if (taken) throw conflict("Another account already uses that email.", undefined, "EMAIL_TAKEN");
+    if (env.auth.mode === "supabase") {
+      if (!env.storage.serviceRoleKey) throw new HttpError(503, "Set SUPABASE_SERVICE_ROLE_KEY on the server to change emails from Admin.");
+      const sb = createClient(env.auth.supabaseUrl!, env.storage.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { error } = await sb.auth.admin.updateUserById(userId, { email, email_confirm: true });
+      if (error) {
+        if (/already|exists|registered/i.test(error.message)) throw conflict("Another account already uses that email.", undefined, "EMAIL_TAKEN");
+        throw new HttpError(502, `Supabase couldn't change the email: ${error.message}`);
+      }
+    } else {
+      await query("update auth.users set email = $2, email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [userId, email]);
+    }
+  }
+  const row = await queryOne<{ full_name: string; phone: string | null; email: string; confirmed: Date | null }>(
+    `update profiles p set full_name = $2, phone = $3, email = $4 where p.id = $1
+     returning p.full_name, p.phone, p.email, (select email_confirmed_at from auth.users where id = $1) as confirmed`,
+    [userId, input.fullName.trim(), input.phone, email],
+  );
+  if (!row) throw notFound("User not found.");
+  return { id: userId, email: row.email, fullName: row.full_name, phone: row.phone, emailConfirmedAt: row.confirmed ? new Date(row.confirmed).toISOString() : null };
+}

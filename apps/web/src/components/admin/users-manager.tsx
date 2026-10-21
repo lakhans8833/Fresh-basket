@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, MailCheck, Search, Send, Users } from "lucide-react";
+import { CheckCircle2, CircleAlert, MailCheck, Pencil, Search, Send, Users } from "lucide-react";
 import type { Profile } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
-import { Input } from "../ui/form";
+import { Field, Input } from "../ui/form";
+import { Notice } from "../ui/feedback";
 import { Button } from "../ui/button";
 import { EmptyState } from "../ui/feedback";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { errorMessage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
-import { Badge, ConfirmDialog, LoadError, LoadingRows, PageHeader, formatDateTime } from "./ui";
+import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, formatDateTime, useEditorDialogBusy, useEditorDialogMarkDirty } from "./ui";
 
 interface AdminUser {
   id: string;
@@ -54,6 +55,7 @@ function Inner() {
   const [promote, setPromote] = useState<AdminUser | null>(null);
   const [confirmFor, setConfirmFor] = useState<AdminUser | null>(null);
   const [emailBusy, setEmailBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
   const users = data?.users ?? [];
 
   async function setRole(u: AdminUser, role: Profile["role"]) {
@@ -131,8 +133,15 @@ function Inner() {
               return (
                 <li key={u.id} className="grid grid-cols-1 gap-2 px-4 py-3.5 sm:px-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_4.5rem_11rem] lg:items-center lg:gap-4">
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">{u.fullName || "—"}{self ? <span className="ml-1.5 text-xs font-medium text-muted">(you)</span> : null}</p>
-                    <p className="truncate text-sm text-muted">{u.email ?? "no email"}{u.phone ? ` · ${u.phone}` : ""}</p>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-ink">{u.fullName || "—"}{self ? <span className="ml-1.5 text-xs font-medium text-muted">(you)</span> : null}</p>
+                        <p className="truncate text-sm text-muted">{u.email ?? "no email"}{u.phone ? ` · ${u.phone}` : ""}</p>
+                      </div>
+                      <Button type="button" size="sm" variant="ghost" className="h-9 shrink-0 px-2.5 text-xs" aria-label={`Edit ${u.fullName || u.email || "user"}`} onClick={() => setEditing(u)}>
+                        <Pencil className="size-3.5" aria-hidden /> Edit
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     {u.emailConfirmedAt ? (
@@ -201,6 +210,21 @@ function Inner() {
         {ROLES.map((r) => <li key={r.value}><b className="text-ink-soft">{r.label}:</b> {r.hint}</li>)}
       </ul>
 
+      <EditorDialog open={editing !== null} title={`Edit ${editing?.fullName || editing?.email || "user"}`} onClose={() => setEditing(null)}>
+        {editing ? (
+          <EditUserForm
+            user={editing}
+            self={me?.id === editing.id}
+            onCancel={() => setEditing(null)}
+            onSaved={(next) => {
+              setData((d) => (d ? { users: d.users.map((x) => (x.id === next.id ? { ...x, ...next } : x)) } : d));
+              toast(`Saved ${next.fullName || next.email}`);
+              setEditing(null);
+            }}
+          />
+        ) : null}
+      </EditorDialog>
+
       <ConfirmDialog
         open={promote !== null}
         title={`Make ${promote?.fullName || promote?.email || "this user"} an admin?`}
@@ -229,5 +253,56 @@ function Inner() {
         Only do this if you know this address belongs to the customer (for example, they called the store). They can then sign in without clicking the email link.
       </ConfirmDialog>
     </>
+  );
+}
+
+/** Name, mobile and sign-in email. Changing the email changes how this person signs in. */
+function EditUserForm({ user, self, onCancel, onSaved }: {
+  user: AdminUser; self: boolean; onCancel: () => void;
+  onSaved: (u: Pick<AdminUser, "id" | "email" | "fullName" | "phone" | "emailConfirmedAt">) => void;
+}) {
+  const markDirty = useEditorDialogMarkDirty();
+  const [fullName, setFullName] = useState(user.fullName ?? "");
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [email, setEmail] = useState(user.email ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEditorDialogBusy(saving);
+  const emailChanged = email.trim().toLowerCase() !== (user.email ?? "").toLowerCase();
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api<{ user: Pick<AdminUser, "id" | "email" | "fullName" | "phone" | "emailConfirmedAt"> }>(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        json: { fullName, phone: phone.trim() ? phone : null, email: email.trim() },
+      });
+      onSaved(r.user);
+    } catch (err) {
+      setError(errorMessage(err));
+      setSaving(false);
+    }
+  }
+
+  const change = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => { set(e.target.value); markDirty(); };
+  return (
+    <form onSubmit={save} className="space-y-4">
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      <Field label="Name" htmlFor="eu-name"><Input id="eu-name" value={fullName} onChange={change(setFullName)} required minLength={2} maxLength={80} /></Field>
+      <Field label="Mobile number" htmlFor="eu-phone" hint="10-digit Indian mobile (optional)"><Input id="eu-phone" inputMode="tel" value={phone} onChange={change(setPhone)} maxLength={16} /></Field>
+      <Field label="Email (used to sign in)" htmlFor="eu-email"><Input id="eu-email" type="email" value={email} onChange={change(setEmail)} required maxLength={160} autoComplete="off" /></Field>
+      {emailChanged ? (
+        <Notice tone="warning">
+          {self ? "You" : "They"} will sign in with <b>{email.trim() || "the new email"}</b> from now on. The new address is marked as confirmed, so only change it when you know it
+          belongs to {self ? "you" : "this person"}. Their password stays the same.
+        </Notice>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>Cancel</Button>
+        <Button type="submit" variant="dark" loading={saving}>Save</Button>
+      </div>
+    </form>
   );
 }
