@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound, Mail, ShieldCheck, UserRound, Store } from "lucide-react";
@@ -7,6 +9,8 @@ import { api } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { useSession } from "./session-context";
 import { OtpLogin } from "./otp-login";
+import { SignupCode } from "./signup-code";
+import { sendErrorMessage } from "@/lib/client/otp-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { DevBadge, Notice } from "../ui/feedback";
@@ -19,7 +23,7 @@ const LINK_ERRORS: Record<"expired" | "device" | "link", string> = {
   link: "That sign-in link didn't work. Please request a new one below.",
 };
 
-export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link" }) {
+export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null }) {
   const router = useRouter();
   const { refresh } = useSession();
   const [method, setMethod] = useState<"code" | "password">("code");
@@ -31,12 +35,41 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
   const [error, setError] = useState<string | null>(linkError ? LINK_ERRORS[linkError] : null);
   const [info, setInfo] = useState<string | null>(null);
   const [lastError, setLastError] = useState<"credentials" | "unconfirmed" | null>(null);
+  /** Password account waiting for its email code: just signed up, or tried to sign in unconfirmed. */
+  const [confirming, setConfirming] = useState<{ email: string; justSent: boolean } | null>(null);
 
-  async function done() {
-    await refresh();
-    // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
-    router.replace(next);
-    router.refresh();
+  /** Signed in, but loading the account failed (network / server): retry the check, keep the session. */
+  const [checkFailed, setCheckFailed] = useState(false);
+  /** The error shown comes from the post-sign-in check (always visible, whatever the sign-in method). */
+  const [sessionProblem, setSessionProblem] = useState(false);
+
+  /**
+   * After signing in: continue only once the server confirms the session. A failed check keeps the
+   * session and offers a retry; "no session after all" asks to sign in again. Never navigates silently.
+   */
+  /** Returns true when the session is confirmed and we're moving on; false → the caller unlocks its form. */
+  async function done(): Promise<boolean> {
+    setError(null);
+    setSessionProblem(false);
+    const r = await refresh();
+    if (r.status === "signed_in") {
+      setCheckFailed(false);
+      // Customers' sign-in never jumps into Admin; staff sign in at /admin/login.
+      router.replace(next);
+      router.refresh();
+      return true;
+    }
+    if (r.status === "signed_out") {
+      setCheckFailed(false);
+      setError("Sign-in didn't complete. Please try again.");
+      setSessionProblem(true);
+    } else {
+      setSessionProblem(true);
+      setCheckFailed(true);
+      setError("You're signed in, but we couldn't load your account just now (connection or server problem). Please try again.");
+    }
+    setBusy(null);
+    return false;
   }
 
   async function devLogin(e?: FormEvent, preset?: { email: string; name: string }) {
@@ -72,8 +105,12 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         });
         if (error) throw error;
         if (data.session) await done();
-        else {
-          setInfo("Check your email to confirm your account, then sign in.");
+        else if (data.user && data.user.identities && data.user.identities.length === 0) {
+          // Supabase's answer for an email that already has a confirmed account (no email is sent).
+          setError("An account with this email already exists. Sign in instead, or use “Forgot password?”.");
+          setBusy(null);
+        } else {
+          setConfirming({ email: email.trim(), justSent: true });
           setBusy(null);
         }
       }
@@ -84,11 +121,11 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         setError("Email or password is incorrect. Use “Forgot password?” below, or sign in with an email code instead — no password needed.");
       } else if (/email not confirmed/i.test(raw)) {
         setLastError("unconfirmed");
-        setError("Please confirm your email first — open the link we emailed you (check spam too).");
+        setConfirming({ email: email.trim(), justSent: false });
       } else if (/already registered/i.test(raw)) {
         setError("An account with this email already exists. Sign in instead, or use “Forgot password?”.");
       } else {
-        setError(raw || "Sign in failed. Please try again.");
+        setError(/fetch|network/i.test(raw) || (err as { status?: number }).status === 0 ? sendErrorMessage(err as Error) : raw || "Sign in failed. Please try again.");
       }
       setBusy(null);
     }
@@ -141,7 +178,18 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
         </div>
       </div>
 
-      {error && !(mode === "supabase" && method === "code" && !linkError) ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {error && (sessionProblem || !(mode === "supabase" && method === "code" && !linkError)) ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {checkFailed ? (
+        <Button type="button" variant="outline" className="mt-3 w-full" loading={busy === "check"} onClick={() => { setBusy("check"); void done(); }}>
+          Try again
+        </Button>
+      ) : null}
+      {signedInAs ? (
+        <Notice tone="info" className="mt-3" title={`You're still signed in as ${signedInAs}`}>
+          The email link didn&apos;t sign you in to another account, and nothing about {signedInAs} changed.{" "}
+          <Link href={next.startsWith("/reset-password") ? "/account" : next} className="font-semibold underline">Continue as {signedInAs}</Link>
+        </Notice>
+      ) : null}
       {info && !(mode === "supabase" && method === "code") ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
 
       {mode === "dev" ? (
@@ -180,6 +228,15 @@ export function LoginForm({ mode, next, linkError }: { mode: "supabase" | "dev" 
           </div>
           {method === "code" ? (
             <OtpLogin next={next} onSignedIn={done} />
+          ) : confirming ? (
+            <SignupCode
+              email={confirming.email}
+              justSent={confirming.justSent}
+              onConfirmed={done}
+              password={password}
+              onCancel={() => { setConfirming(null); setTab("signin"); setError(null); setInfo(null); }}
+              onFailed={() => { setConfirming(null); setTab("signin"); }}
+            />
           ) : (
           <>
           <div role="tablist" className="mt-4 grid grid-cols-2 rounded-full border border-line p-1 text-sm font-semibold">

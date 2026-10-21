@@ -1,7 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { invalidateAfter } from "./cache";
+import { query, queryOne } from "./db";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string, public details?: unknown) {
@@ -64,19 +66,65 @@ export function route<C = unknown>(fn: Handler<C>): Handler<C> {
   };
 }
 
-/** Very small in-memory rate limiter (per server instance). Use a shared store in production at scale. */
+/**
+ * Rate limiter shared by all server instances (counters in public.rate_limits). Throws 429 when `key`
+ * has been used more than `limit` times in the current window. A local in-memory copy answers repeat
+ * offenders without a database round trip, and is the fallback if the database can't be reached
+ * (a limiter outage must not stop customers from ordering).
+ */
 const buckets = new Map<string, { n: number; reset: number }>();
-export function rateLimit(key: string, limit: number, windowMs: number) {
+const tooMany = () => new HttpError(429, "Too many requests. Please wait a moment.", "RATE_LIMITED");
+
+function memoryHit(key: string, windowMs: number) {
   const now = Date.now();
   const b = buckets.get(key);
   if (!b || b.reset < now) {
-    buckets.set(key, { n: 1, reset: now + windowMs });
-    return;
+    const fresh = { n: 1, reset: now + windowMs };
+    buckets.set(key, fresh);
+    return fresh;
   }
   b.n += 1;
-  if (b.n > limit) throw new HttpError(429, "Too many requests. Please wait a moment.", "RATE_LIMITED");
+  return b;
 }
 
+export async function rateLimit(key: string, limit: number, windowMs: number) {
+  const local = memoryHit(key, windowMs);
+  if (local.n > limit) throw tooMany();
+  try {
+    const keyHash = createHash("sha256").update(key).digest("hex");
+    const row = await queryOne<{ hits: number; reset_ms: string }>(
+      `insert into public.rate_limits (key_hash, hits, reset_at)
+       values ($1, 1, now() + $2 * interval '1 millisecond')
+       on conflict (key_hash) do update set
+         hits = case when rate_limits.reset_at <= now() then 1 else rate_limits.hits + 1 end,
+         reset_at = case when rate_limits.reset_at <= now() then excluded.reset_at else rate_limits.reset_at end
+       returning hits, (extract(epoch from reset_at) * 1000)::bigint::text as reset_ms`,
+      [keyHash, windowMs],
+    );
+    if (row) {
+      // Keep the local copy in step, so the next over-limit request is refused without the database.
+      local.n = Math.max(local.n, row.hits);
+      local.reset = Number(row.reset_ms);
+      if (row.hits > limit) throw tooMany();
+    }
+    // Housekeeping: now and then, drop counters whose window ended a day ago.
+    if (Math.random() < 0.01) void query("delete from public.rate_limits where reset_at < now() - interval '1 day'").catch(() => undefined);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    console.warn("[rate-limit] shared counter unavailable, using this instance's memory only");
+  }
+}
+
+/**
+ * The caller's IP for rate limits. On Vercel, x-real-ip / x-vercel-forwarded-for are set by the platform
+ * (a client can't fake them); x-forwarded-for is only a fallback for other hosts and local runs.
+ */
 export function clientIp(req: Request) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  const h = req.headers;
+  return (
+    h.get("x-real-ip")?.trim() ||
+    h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "local"
+  );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, LayoutGrid, ShoppingCart, UserRound } from "lucide-react";
 import { useCart } from "../cart/cart-context";
+import { useSession } from "../account/session-context";
 import { cn } from "../ui/cn";
 
 const TABS = [
@@ -17,16 +18,23 @@ const TABS = [
 export function MobileTabBar() {
   const pathname = usePathname();
   const { count, hydrated } = useCart();
+  const { profile } = useSession();
   if (pathname.startsWith("/checkout") || pathname.startsWith("/pay")) return null;
   const n = hydrated ? count : 0;
   return (
     <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       <ul className="grid grid-cols-4">
-        {TABS.map(({ href, label, icon: Icon, match }) => {
+        {TABS.map((tab) => {
+          // Signed out, the account tab is a "Sign in" tab (visible label and accessible name agree).
+          // (The profile comes from the server on first render, so there's no signed-out flash.)
+          const signIn = tab.href === "/account" && !profile;
+          const { icon: Icon, match } = tab;
+          const href = signIn ? "/login" : tab.href;
+          const label = signIn ? "Sign in" : tab.label;
           const active = match(pathname);
-          const isCart = href === "/cart";
+          const isCart = tab.href === "/cart";
           return (
-            <li key={href}>
+            <li key={tab.href}>
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}

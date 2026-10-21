@@ -85,7 +85,7 @@ with sync_playwright() as p:
 
     # Cancel the first (COD) order is still allowed; reorder works
     page.goto(order_url)
-    page.get_by_role("button", name="Reorder these items").click()
+    page.get_by_role("button", name="Buy again").click()
     page.wait_for_url(re.compile(r"/cart"))
     print("E2E OK", order_url)
     if errors:

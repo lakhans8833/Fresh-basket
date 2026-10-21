@@ -13,6 +13,7 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { ProductImage } from "../product/product-image";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData, validateImage } from "./use-admin-data";
+import { useUnsavedGuard } from "./unsaved-guard";
 import { AdminOnly } from "./admin-context";
 import { inputToPaise, paiseToInput, parseIntOrNull } from "./money";
 import { Card, CardHeader, ConfirmDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle } from "./ui";
@@ -38,7 +39,7 @@ interface LoadedProduct {
 }
 interface CategoryOpt { id: string; name: string; active: boolean }
 
-type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; active: boolean; hasOrders: boolean };
+type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean };
 type ImageRow = { key: string; url: string; alt: string };
 
 let keySeq = 0;
@@ -149,7 +150,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [images, setImages] = useState<ImageRow[]>(() => (initial?.images ?? []).map((i) => ({ key: k(), url: i.url, alt: i.alt ?? "" })));
   const [variants, setVariants] = useState<VariantRow[]>(() =>
     initial?.variants.length
-      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), active: v.active, hasOrders: v.hasOrders }))
+      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders }))
       : [emptyVariant()],
   );
   // Stock by weight: one total in kg shared by every weight pack (used when all options are weights).
@@ -159,7 +160,10 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     if (!vs.length || vs.some((v) => !packGrams(v.label))) return "";
     return String(Math.max(...vs.map((v) => v.stock * (packGrams(v.label) ?? 0))) / 1000);
   });
-  const byWeight = variants.length > 0 && variants.every((v) => packGrams(v.label) !== null);
+  // Judged on the sizes customers can buy: a hidden old size (e.g. "1 bunch" kept for past orders)
+  // must not switch a weight product back to per-pack stock (that would clear its shared total).
+  const activeVariants = variants.filter((v) => v.active);
+  const byWeight = activeVariants.length > 0 && activeVariants.every((v) => packGrams(v.label) !== null);
   // Only send the total when it was edited here (or the stock mode changes), so saving a description
   // never overwrites sales that happened since this page was opened.
   const [stockTouched, setStockTouched] = useState(false);
@@ -167,6 +171,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const totalGramsNow = byWeight && stockKgNum !== null ? Math.round(stockKgNum * 1000) : null;
   const [uploading, setUploading] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -180,12 +185,8 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   // Mark dirty on any edit (cheap: every setter below goes through `touch`).
   const touch = () => setDirty(true);
 
-  useEffect(() => {
-    if (!dirty) return;
-    const h = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", h);
-    return () => window.removeEventListener("beforeunload", h);
-  }, [dirty]);
+  // Leaving with unsaved edits (tab close, sidebar, links): Save / Discard / Stay.
+  const guard = useUnsavedGuard({ dirty: dirty && !deleting, saving, save: () => submit() });
 
   function onName(v: string) {
     setName(v);
@@ -213,6 +214,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   async function onFiles(files: FileList | null) {
     if (!files?.length) return;
     setUploadError(null);
+    setUploadWarning(null);
     const list = Array.from(files).slice(0, Math.max(0, 8 - images.length));
     if (files.length > list.length) setUploadError("A product can have up to 8 photos.");
     const problems = list.map(validateImage).filter(Boolean) as string[];
@@ -222,7 +224,11 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     await Promise.all(
       ok.map(async (f) => {
         try {
+          const width = await imageWidth(f);
           const url = await uploadImage(f);
+          if (width !== null && width < MIN_PHOTO_WIDTH) {
+            setUploadWarning(`“${f.name}” is only ${width} px wide, so it will look blurry on the product page. A photo at least ${MIN_PHOTO_WIDTH} px wide looks sharp.`);
+          }
           setImages((imgs) => [...imgs, { key: k(), url, alt: imgs.length === 0 ? name : "" }]);
           touch();
         } catch (e) {
@@ -260,7 +266,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       if (mrp !== null && Number.isNaN(mrp)) errs[`variants.${i}.mrp`] = "Use a rupee amount";
       else if (mrp !== null && price !== null && !Number.isNaN(price) && mrp < price) errs[`variants.${i}.mrp`] = "MRP should be at least the price";
       if (!byWeight && (stock === null || Number.isNaN(stock))) errs[`variants.${i}.stock`] = "Whole number";
-      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, sortOrder: i, active: v.active };
+      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active };
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,
@@ -283,15 +289,16 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
     return { payload: r.success && Object.keys(errs).length === 0 ? r.data : undefined, errs };
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(e?: React.FormEvent): Promise<boolean> {
+    e?.preventDefault();
+    if (saving) return false; // no double submit
     setFormError(null);
     const { payload, errs } = build();
     setErrors(errs);
     if (!payload) {
       setFormError("Please fix the highlighted fields.");
       requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -300,11 +307,13 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       toast(isNew ? "Product created" : "Product saved");
       if (isNew) router.replace(`/admin/products/${r.id}`);
       else await onSaved(); // reload so new weight options get their ids
+      return true;
     } catch (err) {
       const fe = serverFieldErrors(err);
       if (err instanceof ApiError && err.code === "DUPLICATE") fe.slug = "Another product already uses this URL slug.";
       setErrors(fe);
       setFormError(errorMessage(err));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -331,7 +340,8 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
 
   return (
     <>
-    <form ref={formRef} onSubmit={submit} noValidate>
+    <form ref={formRef} onSubmit={(e) => void submit(e)} noValidate>
+      {guard.dialog}
       {back}
       <PageHeader
         title={isNew ? "New product" : name || "Edit product"}
@@ -440,6 +450,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
             />
             <div className="p-5 sm:p-6">
               {uploadError ? <Notice tone="error" className="mb-4">{uploadError}</Notice> : null}
+              {uploadWarning ? <Notice tone="warning" className="mb-4">{uploadWarning}</Notice> : null}
               {images.length === 0 && uploading === 0 ? (
                 <button
                   type="button"
@@ -456,6 +467,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                       <div className="relative">
                         <ProductImage src={img.url} alt={img.alt || name || "Product photo"} sizes="(min-width: 1024px) 240px, 50vw" className="aspect-[4/3] w-full" />
                         {i === 0 ? <span className="absolute left-2 top-2 rounded-full bg-forest-900/85 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">Main photo</span> : null}
+                        <LowResBadge url={img.url} />
                       </div>
                       <div className="space-y-2 p-3">
                         <label className="sr-only" htmlFor={`alt-${img.key}`}>Alt text for photo {i + 1}</label>
@@ -630,5 +642,37 @@ function IconBtn({ label, onClick, disabled, danger, children }: { label: string
     >
       {children}
     </button>
+  );
+}
+
+/** Product pages show the main photo up to ~650 px wide (×2 on sharp phone screens). */
+const MIN_PHOTO_WIDTH = 800;
+
+async function imageWidth(file: File): Promise<number | null> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const w = bmp.width;
+    bmp.close();
+    return w;
+  } catch {
+    return null;
+  }
+}
+
+/** Flags photos already saved that are too small to look sharp (measured from the original file). */
+function LowResBadge({ url }: { url: string }) {
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    const im = new Image();
+    im.onload = () => { if (live) setWidth(im.naturalWidth); };
+    im.src = url;
+    return () => { live = false; };
+  }, [url]);
+  if (width === null || width >= MIN_PHOTO_WIDTH) return null;
+  return (
+    <span className="absolute bottom-2 left-2 rounded-full bg-[#fdf6e7] px-2 py-0.5 text-[0.6875rem] font-semibold text-[#7a5212]" title={`Only ${width} px wide — upload a photo at least ${MIN_PHOTO_WIDTH} px wide`}>
+      Low resolution · {width}px
+    </span>
   );
 }

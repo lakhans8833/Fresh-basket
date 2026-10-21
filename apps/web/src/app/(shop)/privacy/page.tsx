@@ -68,7 +68,7 @@ export default async function PrivacyPage() {
         <h2>7. Your choices and rights</h2>
         <ul>
           <li>You can view and update your name, mobile number and saved addresses in <Link href="/account" className={a}>your account</Link>.</li>
-          <li>You can ask us for a copy of your information, to correct it, or to delete your account by <Link href="/contact" className={a}>contacting us</Link>.</li>
+          <li>You can ask us for a copy of your information, to correct it, or to delete your account. You can <Link href="/delete-account" className={a}>delete your account yourself</Link> at any time, or <Link href="/contact" className={a}>contact us</Link>.</li>
           <li>[Describe rights under applicable data protection law, e.g. India&apos;s Digital Personal Data Protection Act, 2023, and grievance officer details.]</li>
         </ul>
 

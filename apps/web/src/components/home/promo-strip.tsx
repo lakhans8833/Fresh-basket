@@ -49,7 +49,8 @@ export function PromoStrip({ banners }: { banners: PromoBanner[] }) {
   return (
     <section aria-label="Offers" className="container-page mt-6 md:mt-8">
       {/* phone: swipe through all; tablet: 2×2; laptop: 3; wide screens: 4 */}
-      <ul className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3 xl:grid-cols-4">
+      {/* Columns follow the number of banners, so two banners fill the width instead of half of it. */}
+      <ul className={cn("no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0", banners.length >= 4 ? "lg:grid-cols-3 xl:grid-cols-4" : banners.length === 3 ? "lg:grid-cols-3" : "")}>
         {banners.slice(0, 8).map((b, i) => (
           <li key={b.id} className={cn("w-[82%] shrink-0 snap-start sm:w-auto", i >= 4 && "sm:hidden", i === 3 && "lg:hidden xl:block")}>
             <PromoCard banner={b} priority={i < 2} />

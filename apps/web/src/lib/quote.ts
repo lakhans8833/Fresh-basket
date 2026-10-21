@@ -1,7 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import {
-  computeQuote, describeIssue, formatINR,
+  computeQuote, describeIssue, effectiveMinOrder, formatINR, MAX_QTY_PER_LINE,
   type CouponRule, type DeliveryArea, type PricedLineInput, type Quote, type QuoteResponse,
 } from "@freshbasket/shared";
 import { pool } from "./db";
@@ -14,6 +14,8 @@ export interface QuoteContext {
   area: DeliveryArea | null;
   couponId: string | null;
   variants: Map<string, { productId: string; productName: string; label: string; imageUrl: string | null }>;
+  /** Store-wide minimum (applies before a PIN code is known, and as a floor for every area). */
+  storeMinOrder: number;
 }
 
 type VariantRow = {
@@ -65,22 +67,33 @@ export async function buildQuote(
     : { rows: [] as VariantRow[] };
   const byId = new Map(vrows.map((r) => [r.id, r]));
 
-  // Stock by weight: several pack sizes of one product share its total grams, so each line can
-  // only use what the earlier lines of the same product left (e.g. 20 kg total, 15 × 1 kg in the
-  // cart → at most 10 × 500 g more).
-  const gramsLeft = new Map<string, number>();
+  // Stock by weight: several pack sizes of one product share its total grams. Each line may use
+  // what the OTHER lines of the same product leave (e.g. 20 kg total, 15 × 1 kg in the cart → at
+  // most 10 × 500 g). Every line passes exactly when the product's total fits, so an oversized
+  // basket flags each size involved (not just whichever line happened to come last).
+  // Only lines that can actually be bought use stock: a switched-off size or an invalid quantity
+  // is reported on its own and must not make the other sizes look out of stock.
+  const sellable = (r: VariantRow) => r.active && r.product_active && Number.isInteger(qty.get(r.id)) && qty.get(r.id)! >= 1 && qty.get(r.id)! <= MAX_QTY_PER_LINE;
+  const gramsInBasket = new Map<string, number>();
+  for (const r of vrows) {
+    if (sellable(r) && r.stock_grams !== null && r.stock_grams !== undefined && r.grams) {
+      gramsInBasket.set(r.product_id, (gramsInBasket.get(r.product_id) ?? 0) + qty.get(r.id)! * r.grams);
+    }
+  }
+  const linesPerProduct = new Map<string, number>();
+  for (const r of vrows) if (sellable(r)) linesPerProduct.set(r.product_id, (linesPerProduct.get(r.product_id) ?? 0) + 1);
+  const isShared = (r: VariantRow) => r.stock_grams !== null && r.stock_grams !== undefined && Boolean(r.grams);
   const available = (r: VariantRow): number => {
-    if (r.stock_grams === null || r.stock_grams === undefined || !r.grams) return r.stock;
-    const left = gramsLeft.get(r.product_id) ?? Number(r.stock_grams);
-    const packs = Math.floor(left / r.grams);
-    gramsLeft.set(r.product_id, Math.max(0, left - Math.min(qty.get(r.id)!, packs) * r.grams));
-    return packs;
+    if (!isShared(r)) return r.stock;
+    const others = (gramsInBasket.get(r.product_id) ?? 0) - (sellable(r) ? qty.get(r.id)! * r.grams! : 0);
+    return Math.max(0, Math.floor((Number(r.stock_grams) - others) / r.grams!));
   };
 
   const lines: PricedLineInput[] = ids.map((id) => {
     const r = byId.get(id);
     return r
-      ? { variantId: id, productName: r.product_name, variantLabel: r.label, unitPrice: r.price, quantity: qty.get(id)!, stock: available(r), active: r.active && r.product_active }
+      ? { variantId: id, productName: r.product_name, variantLabel: r.label, unitPrice: r.price, quantity: qty.get(id)!, stock: available(r), active: r.active && r.product_active,
+          sharedStock: isShared(r) && (linesPerProduct.get(r.product_id) ?? 0) > 1 }
       : { variantId: id, productName: "Unavailable item", variantLabel: "", unitPrice: 0, quantity: qty.get(id)!, stock: 0, active: false };
   });
 
@@ -125,7 +138,7 @@ export async function buildQuote(
     lines,
     coupon,
     couponCodeRequested: code,
-    delivery: area ? { fee: area.fee, freeAbove: area.freeAbove, minOrder: Math.max(area.minOrder, globalMin) } : null,
+    delivery: area ? { fee: area.fee, freeAbove: area.freeAbove, minOrder: effectiveMinOrder(area.minOrder, globalMin) } : null,
     deliveryRequired: opts.deliveryRequired ?? Boolean(input.pincode),
   });
   if (!quote.couponCode) couponId = null;
@@ -133,7 +146,7 @@ export async function buildQuote(
   const variants = new Map(
     vrows.map((r) => [r.id, { productId: r.product_id, productName: r.product_name, label: r.label, imageUrl: r.image_url }]),
   );
-  return { quote, area, couponId, variants };
+  return { quote, area, couponId, variants, storeMinOrder: globalMin };
 }
 
 export function quoteMessages(quote: Quote): Record<string, string> {
@@ -146,5 +159,5 @@ export function quoteMessages(quote: Quote): Record<string, string> {
 }
 
 export function toQuoteResponse(ctx: QuoteContext): QuoteResponse {
-  return { quote: ctx.quote, messages: quoteMessages(ctx.quote), area: ctx.area };
+  return { quote: ctx.quote, messages: quoteMessages(ctx.quote), area: ctx.area, minOrder: ctx.area ? ctx.area.minOrder : ctx.storeMinOrder };
 }

@@ -14,7 +14,7 @@ const schema = z.object({ email: z.email().max(160).transform((e) => e.toLowerCa
 
 export const POST = route(async (req) => {
   if (env.auth.mode !== "dev") throw forbidden("Development login is disabled.");
-  rateLimit(`devlogin:${clientIp(req)}`, 30, 60_000);
+  await rateLimit(`devlogin:${clientIp(req)}`, 30, 60_000);
   const { email, name } = await parseBody(req, schema);
   const user = await queryOne<{ id: string }>(
     `insert into auth.users (email, raw_user_meta_data) values ($1, jsonb_build_object('full_name', $2::text))

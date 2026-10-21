@@ -23,6 +23,8 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  /** Signed in, but the access check failed (network / server): retry without signing in again. */
+  const [checkFailed, setCheckFailed] = useState(false);
 
   /** Emails a password-reset link; after setting the new password the staff member lands on /admin/login. */
   async function forgotPassword() {
@@ -46,17 +48,35 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
     else setInfo(`If ${email.trim()} has an account, we've emailed a link to set a new password. Check your inbox (and spam).`);
   }
 
+  /**
+   * After a successful sign-in: go to the panel ONLY once the server confirms a staff/admin role.
+   * - confirmed customer → signed out again + "no admin access";
+   * - no session after all → ask to sign in again;
+   * - the check itself failed (offline / server error) → keep the session, show a retry (not "no access").
+   */
   async function finish() {
-    const p = await refresh();
-    if (!p || (p.role !== "admin" && p.role !== "staff")) {
+    setBusy(true);
+    setError(null);
+    const r = await refresh();
+    if (r.status === "signed_in" && (r.profile.role === "admin" || r.profile.role === "staff")) {
+      setCheckFailed(false);
+      // Full page load: the panel layout is rendered on the server with the new session.
+      window.location.assign(next);
+      return;
+    }
+    if (r.status === "signed_in") {
+      setCheckFailed(false);
       await logout();
       setError(NO_ACCESS);
       setPassword("");
-      setBusy(false);
-      return;
+    } else if (r.status === "signed_out") {
+      setCheckFailed(false);
+      setError("Sign-in didn't complete. Please try again.");
+    } else {
+      setCheckFailed(true);
+      setError("You're signed in, but we couldn't check your staff access just now (connection or server problem). Please try again.");
     }
-    // Full page load: the panel layout is rendered on the server with the new session.
-    window.location.assign(next);
+    setBusy(false);
   }
 
   async function submit(e: FormEvent) {
@@ -99,6 +119,11 @@ export function AdminLoginForm({ mode, next, signedInAs }: { mode: "supabase" | 
         <Notice tone="warning" className="mt-5">You&apos;re signed in as {signedInAs}, which doesn&apos;t have admin access. Sign in with a staff account.</Notice>
       ) : null}
       {error ? <Notice tone="error" className="mt-5">{error}</Notice> : null}
+      {checkFailed ? (
+        <Button type="button" variant="outline" className="mt-3 w-full" loading={busy} onClick={() => void finish()}>
+          Try again
+        </Button>
+      ) : null}
       {info ? <Notice tone="success" className="mt-5">{info}</Notice> : null}
       {mode === "unconfigured" ? <Notice tone="error" className="mt-5">Sign-in isn&apos;t configured on this server.</Notice> : null}
 

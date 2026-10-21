@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowRight, Loader2, Plus, Search, X } from "lucide-react";
-import { formatINR, type ProductSummary } from "@freshbasket/shared";
+import { formatINR, type ProductSummary, addablePacks, MAX_QTY_PER_LINE } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "../product/product-image";
@@ -64,11 +64,32 @@ export function SearchBox() {
     return () => document.removeEventListener("pointerdown", onDown);
   }, [open]);
 
-  // Close after navigating.
+  // Close after navigating, and keep the box in step with the URL: "See all products", "Clear
+  // filters", back/forward or leaving the shop change ?q=, and the box must show what the results show.
   const [lastPath, setLastPath] = useState(pathname);
+  const urlQ = pathname === "/shop" ? params.get("q") ?? "" : "";
+  const [lastUrlQ, setLastUrlQ] = useState(urlQ);
   if (lastPath !== pathname) {
     setLastPath(pathname);
     setOpen(false);
+  }
+  if (lastUrlQ !== urlQ) {
+    setLastUrlQ(urlQ);
+    setQ(urlQ);
+    setData(null);
+  }
+
+  /** ✕: empty the box — and on a search results page, show all products again. */
+  function clearSearch() {
+    setQ("");
+    setData(null);
+    setActive(-1);
+    if (pathname === "/shop" && params.get("q")) {
+      const next = new URLSearchParams(params.toString());
+      next.delete("q");
+      next.delete("page");
+      router.push(next.toString() ? `/shop?${next}` : "/shop");
+    }
   }
 
   // Only show (and allow Enter / Add on) suggestions that belong to what's typed now — never older ones.
@@ -117,7 +138,7 @@ export function SearchBox() {
         maxLength={60}
       />
       {q ? (
-        <button type="button" aria-label="Clear search" onClick={() => { setQ(""); setData(null); }} className="absolute right-11 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted hover:bg-sage-100">
+        <button type="button" aria-label="Clear search" onClick={clearSearch} className="absolute right-11 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted hover:bg-sage-100">
           <X className="size-4" />
         </button>
       ) : null}
@@ -158,7 +179,8 @@ function SuggestionRow({ id, product, active, onHover }: { id: string; product: 
   if (!v) return null;
   const out = v.stock <= 0;
   const pct = percentOff(v.price, v.mrp);
-  const full = hydrated && quantityOf(v.id) >= v.stock;
+  // Weight products: other sizes already in the cart use the same stock; also respects the per-line cap.
+  const full = hydrated && addablePacks(product, v.id, quantityOf, MAX_QTY_PER_LINE) <= 0;
 
   return (
     <li id={id} role="option" aria-selected={active} onPointerEnter={onHover} className={cn("relative flex items-center gap-3 px-4 py-2.5", active && "bg-lime-50")}>

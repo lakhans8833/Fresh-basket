@@ -11,6 +11,8 @@ export interface PricedLineInput {
   quantity: number;
   stock: number;
   active: boolean;
+  /** This pack shares a weight total with other pack sizes of the same product in the basket. */
+  sharedStock?: boolean;
 }
 
 export interface CouponRule {
@@ -40,7 +42,7 @@ export interface DeliveryRule {
 }
 
 export type QuoteIssue =
-  | { code: "OUT_OF_STOCK"; variantId: string; available: number }
+  | { code: "OUT_OF_STOCK"; variantId: string; available: number; shared?: boolean }
   | { code: "UNAVAILABLE"; variantId: string }
   | { code: "INVALID_QUANTITY"; variantId: string }
   | { code: "EMPTY_CART" }
@@ -56,6 +58,8 @@ export interface QuoteLine {
   unitPrice: Paise;
   quantity: number;
   lineTotal: Paise;
+  /** Most of this pack the basket can hold right now (stock left after the basket's other lines, capped per line). */
+  maxQuantity: number;
 }
 
 export interface Quote {
@@ -68,6 +72,14 @@ export interface Quote {
   issues: QuoteIssue[];
   /** true when the order can be placed exactly as quoted */
   ok: boolean;
+}
+
+/**
+ * The one minimum-order rule: the store-wide minimum (Admin → Settings) is a floor for every delivery
+ * area, and an area may set a higher minimum of its own. 0 means "no minimum".
+ */
+export function effectiveMinOrder(areaMinOrder: Paise | null | undefined, storeMinOrder: Paise | null | undefined): Paise {
+  return Math.max(0, areaMinOrder ?? 0, storeMinOrder ?? 0);
 }
 
 export function couponProblem(c: CouponRule, subtotal: Paise, now: Date): string | null {
@@ -117,7 +129,7 @@ export function computeQuote(args: {
       continue;
     }
     if (l.stock < l.quantity) {
-      issues.push({ code: "OUT_OF_STOCK", variantId: l.variantId, available: Math.max(0, l.stock) });
+      issues.push({ code: "OUT_OF_STOCK", variantId: l.variantId, available: Math.max(0, l.stock), ...(l.sharedStock ? { shared: true } : {}) });
     }
     lines.push({
       variantId: l.variantId,
@@ -126,6 +138,7 @@ export function computeQuote(args: {
       unitPrice: l.unitPrice,
       quantity: l.quantity,
       lineTotal: l.unitPrice * l.quantity,
+      maxQuantity: Math.max(0, Math.min(MAX_QTY_PER_LINE, l.stock)),
     });
   }
 
@@ -170,6 +183,11 @@ export function computeQuote(args: {
 export function describeIssue(issue: QuoteIssue, formatMoney: (p: Paise) => string): string {
   switch (issue.code) {
     case "OUT_OF_STOCK":
+      if (issue.shared) {
+        return issue.available > 0
+          ? `Only ${issue.available} of this size fit — other sizes of this item in your basket use the same stock.`
+          : "Not enough left — other sizes of this item in your basket already use the stock.";
+      }
       return issue.available > 0 ? `Only ${issue.available} left in stock.` : "Out of stock.";
     case "UNAVAILABLE":
       return "This item is no longer available.";

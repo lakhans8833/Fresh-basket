@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, Home, Tag } from "lucide-react";
 import { getProduct, listProducts } from "@/lib/catalog";
 import { getSettings } from "@/lib/settings";
-import { storeConfig } from "@/config/store";
+import { resolveWhatsAppNumber, storeConfig } from "@/config/store";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { ProductPurchase } from "@/components/product/product-purchase";
 import { FavouriteButton } from "@/components/product/favourite-button";
@@ -75,7 +75,7 @@ export default async function ProductPage({ params }: { params: Params }) {
     <>
       <div className="container-page pt-6 md:pt-10">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-ink-soft">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center [&_a]:-my-2.5 [&_a]:py-2.5 gap-1.5 text-sm text-ink-soft">
           <Link href="/" className="inline-flex items-center gap-1.5 hover:text-forest-800"><Home className="size-4 text-forest-800" aria-hidden /> Home</Link>
           <ChevronRight className="size-3.5" aria-hidden />
           <Link href={`/category/${product.categorySlug}`} className="hover:text-forest-800">{product.categoryName}</Link>
@@ -105,10 +105,10 @@ export default async function ProductPage({ params }: { params: Params }) {
                 ))}
               </ul>
             ) : null}
-            <ProductPurchase product={product} />
+            <ProductPurchase product={product} whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />
           </div>
         </div>
-        <div id="reviews" className="scroll-mt-28">
+        <div id="reviews">
           <ProductTabs
             tabs={[
               {
@@ -130,15 +130,14 @@ export default async function ProductPage({ params }: { params: Params }) {
                   </div>
                 ),
               },
-              {
-                id: "nutrition",
-                label: "Nutrition",
-                content: product.nutrition ? (
-                  <p className="max-w-3xl whitespace-pre-line leading-relaxed text-ink-soft">{product.nutrition}</p>
-                ) : (
-                  <p className="text-muted">Nutrition details haven&apos;t been added for this product yet.</p>
-                ),
-              },
+              // The Nutrition tab only exists when the owner has written nutrition details (no empty tab).
+              ...(product.nutrition?.trim()
+                ? [{
+                    id: "nutrition",
+                    label: "Nutrition",
+                    content: <p className="max-w-3xl whitespace-pre-line leading-relaxed text-ink-soft">{product.nutrition}</p>,
+                  }]
+                : []),
               {
                 id: "reviews",
                 label: reviews.count > 0 ? `Reviews (${reviews.count})` : "Reviews",

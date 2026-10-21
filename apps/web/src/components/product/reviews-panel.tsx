@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, useId } from "react";
 import { MessageSquareText, Star } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
@@ -89,6 +89,9 @@ export function ReviewsPanel({
 }
 
 function ReviewForm({ productId, mine, onSaved }: { productId: string; mine: Eligibility["mine"]; onSaved: (m: NonNullable<Eligibility["mine"]>) => void }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const [rating, setRating] = useState(mine?.rating ?? 0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState(mine?.comment ?? "");
@@ -125,7 +128,7 @@ function ReviewForm({ productId, mine, onSaved }: { productId: string; mine: Eli
         <div className="mt-1 flex gap-1" onPointerLeave={() => setHover(0)}>
           {[1, 2, 3, 4, 5].map((i) => (
             <label key={i} className="cursor-pointer" onPointerEnter={() => setHover(i)}>
-              <input type="radio" name="rating" value={i} checked={rating === i} onChange={() => setRating(i)} className="peer sr-only" />
+              <input type="radio" name={`${rg}-rating`} value={i} checked={rating === i} onChange={() => setRating(i)} className="peer sr-only" />
               <span className="sr-only">{i} star{i === 1 ? "" : "s"}</span>
               <Star
                 className={cn("size-7 rounded peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-leaf-500", i <= shown ? "text-[#e8a317]" : "text-sage-200")}

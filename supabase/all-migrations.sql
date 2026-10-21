@@ -1560,3 +1560,625 @@ alter table public.promo_banners add column if not exists badge text check (badg
 alter table public.promo_banners add column if not exists cta_label text check (cta_label is null or char_length(cta_label) <= 30);
 create index if not exists promo_banners_placement_idx on public.promo_banners (placement, sort_order, created_at);
 
+-- ===== supabase/migrations/20261017000001_whatsapp_orders_payments.sql =====
+-- WhatsApp orders saved in the database, UPI (manual verification) and Razorpay Payment Links,
+-- and WhatsApp order-update notifications with a send log.
+--
+-- REVIEW BEFORE PRODUCTION: this changes the orders table (nullable user_id for guest WhatsApp
+-- orders, two new payment methods). Existing rows are not modified. Vercel preview builds don't
+-- run migrations; this runs only when the change is merged and deployed to production.
+
+-- Orders placed on WhatsApp without an account have no user (tracked by a secret link instead).
+alter table public.orders alter column user_id drop not null;
+-- Retries of a guest order with the same idempotency key return the same order.
+create unique index if not exists orders_guest_idempotency_idx on public.orders (idempotency_key) where user_id is null;
+
+-- Where the order came from: the website checkout or the "Order on WhatsApp" flow.
+alter table public.orders add column if not exists channel text not null default 'web';
+alter table public.orders drop constraint if exists orders_channel_check;
+alter table public.orders add constraint orders_channel_check check (channel in ('web', 'whatsapp'));
+
+-- Payment methods: cash on delivery, Razorpay Checkout, test payments, UPI to the store's UPI ID
+-- (verified by staff against the bank statement) and Razorpay Payment Links (verified by webhook).
+alter table public.orders drop constraint if exists orders_payment_method_check;
+alter table public.orders add constraint orders_payment_method_check
+  check (payment_method in ('cod', 'razorpay', 'mock', 'upi', 'razorpay_link'));
+
+-- UPI: the reference (UTR) the customer says they paid with. It is NOT proof of payment —
+-- the order stays "payment pending" until staff confirm the money arrived.
+alter table public.orders add column if not exists upi_reference text check (upi_reference is null or upi_reference ~ '^[A-Za-z0-9]{6,35}$');
+alter table public.orders add column if not exists upi_reference_at timestamptz;
+
+-- Razorpay Payment Link created by the server for this order's exact total.
+alter table public.orders add column if not exists razorpay_payment_link_id text unique;
+alter table public.orders add column if not exists razorpay_payment_link_url text;
+
+-- Customer agreed to receive order updates on WhatsApp (unticked by default).
+alter table public.orders add column if not exists whatsapp_updates boolean not null default false;
+
+-- Manual UPI confirmations are recorded as payments too (one per UTR).
+alter table public.payments drop constraint if exists payments_provider_check;
+alter table public.payments add constraint payments_provider_check check (provider in ('razorpay', 'mock', 'upi_manual'));
+
+-- Store UPI details (shown to customers at checkout; not secret).
+alter table public.store_settings add column if not exists upi_id text check (upi_id is null or upi_id ~ '^[A-Za-z0-9._-]{2,200}@[A-Za-z][A-Za-z0-9.-]{1,63}$');
+alter table public.store_settings add column if not exists upi_payee_name text check (upi_payee_name is null or char_length(upi_payee_name) <= 60);
+alter table public.store_settings add column if not exists upi_qr_url text check (upi_qr_url is null or char_length(upi_qr_url) <= 500);
+
+-- One row per (order, channel, event): the unique key stops duplicate notifications when a status
+-- is saved twice or a webhook is retried. Failed sends can be retried a few times.
+create table if not exists public.order_notifications (
+  id bigint generated always as identity primary key,
+  order_id uuid not null references public.orders (id) on delete cascade,
+  channel text not null default 'whatsapp' check (channel in ('whatsapp')),
+  event text not null check (event in ('confirmed', 'packed', 'out_for_delivery', 'delivered')),
+  status text not null check (status in ('sending', 'sent', 'failed', 'skipped')),
+  recipient text,
+  provider_message_id text,
+  error text,
+  attempts integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (order_id, channel, event)
+);
+create index if not exists order_notifications_order_idx on public.order_notifications (order_id);
+-- Server only: no client policies.
+alter table public.order_notifications enable row level security;
+
+-- ===== supabase/migrations/20261017000002_whatsapp_pending_confirmation.sql =====
+-- WhatsApp cash-on-delivery orders start as "pending_confirmation": saved (stock reserved), but the
+-- store confirms them (→ "placed") after the customer's WhatsApp message arrives, or cancels them
+-- (stock returned by cancel_order). Existing rows are not changed.
+alter table public.orders drop constraint if exists orders_status_check;
+alter table public.orders add constraint orders_status_check
+  check (status in ('pending_payment', 'pending_confirmation', 'placed', 'packed', 'out_for_delivery', 'delivered', 'cancelled'));
+create index if not exists orders_to_confirm_idx on public.orders (created_at) where status = 'pending_confirmation';
+
+-- ===== supabase/migrations/20261017000003_unconfirmed_order_expiry.sql =====
+-- WhatsApp cash-on-delivery orders hold stock while "pending_confirmation". If the store doesn't confirm
+-- them in time (reservation_expires_at, set when the order is saved), they are cancelled like unpaid
+-- online orders, so fake or forgotten orders can't keep stock and delivery slots blocked.
+-- The cancel reason differs from 'Payment was not completed in time', so mark_order_paid never revives them.
+create or replace function public.release_expired_reservations() returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_status text;
+  v_count integer := 0;
+begin
+  for v_id, v_status in
+    select id, status from public.orders
+     where status in ('pending_payment', 'pending_confirmation') and reservation_expires_at < now()
+     order by reservation_expires_at
+     for update skip locked
+  loop
+    perform public.cancel_order(
+      v_id, 'system',
+      case when v_status = 'pending_payment' then 'Payment was not completed in time'
+           else 'Not confirmed by the store in time' end);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+
+drop index if exists public.orders_expiry_idx;
+create index if not exists orders_expiry_idx on public.orders (reservation_expires_at)
+  where status in ('pending_payment', 'pending_confirmation');
+revoke all on function public.release_expired_reservations() from public, anon, authenticated;
+
+-- ===== supabase/migrations/20261017000004_tighten_client_grants.sql =====
+-- Tighter direct-database (Supabase REST) rights. The website does all of this through its own server,
+-- so nothing in the app changes; this only closes doors for someone calling the Supabase API directly.
+
+-- Customers may change only their name and phone on their profile — not the email the admin panel
+-- shows (or any other column). Roles were already protected by a trigger.
+revoke update on public.profiles from authenticated;
+grant update (full_name, phone) on public.profiles to authenticated;
+
+-- Product sizes: only admins may create/change/delete them directly (staff use the admin panel).
+drop policy if exists variants_admin on public.product_variants;
+create policy variants_admin on public.product_variants for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+-- Support messages: staff may only change the status, not rewrite what the customer wrote.
+revoke update on public.support_messages from authenticated;
+grant update (status) on public.support_messages to authenticated;
+
+-- ===== supabase/migrations/20261017000005_late_payment_revival_checks.sql =====
+-- Late payments: reviving an expired order is now validated completely and atomically.
+--
+-- Before: mark_order_paid() re-took stock (checking only variant.active, and silently skipping items
+-- whose variant row was gone), re-redeemed the coupon without checking its limits, and set the order
+-- back to "placed" on its old date/slot. The app then tried to fix past dates/closed slots in a
+-- background callback after the payment had committed.
+--
+-- Now, inside the same transaction that revives the order (lock order as checkout: order → products
+-- → variants → coupon → slot):
+--   1. every order item must still exist and be sellable (variant, product and category active);
+--   2. stock is re-taken with the pack label that was sold;
+--   3. the coupon (if any) is locked and re-checked: still exists and active, not expired, global
+--      usage limit, per-customer limit and first-order rule — the order being revived is excluded from
+--      its own counts (its redemption was removed when it expired);
+--   4. the delivery slot row is locked and re-checked (active, cutoff, capacity, date not past). If the
+--      slot can't be used, the order is revived WITHOUT a slot for today ("delivery time to be agreed",
+--      the same state as WhatsApp orders without a slot) and an order event explains it.
+-- If 1–3 fail, everything is rolled back (no stock or coupon change), the order stays cancelled and the
+-- captured payment is flagged refund_pending for a refund / manual review. The paid amount is never
+-- changed. Idempotency is unchanged: one payments row per provider payment id, and a payment for an
+-- order that is already paid / refund-pending returns 'already_processed'.
+
+create or replace function public.mark_order_paid(
+  p_order_id uuid,
+  p_provider text,
+  p_provider_order_id text,
+  p_payment_id text,
+  p_amount integer,
+  p_source text
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order public.orders;
+  v_item record;
+  v_coupon public.coupons;
+  v_coupon_id uuid;
+  v_slot public.delivery_slots;
+  v_n integer;
+  v_today date := (now() at time zone 'Asia/Kolkata')::date;
+  v_reason text;
+  v_slot_note text;
+  v_detail text;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    return 'not_found';
+  end if;
+
+  insert into public.payments (order_id, provider, provider_order_id, provider_payment_id, amount, status, source)
+  values (p_order_id, p_provider, p_provider_order_id, p_payment_id, p_amount, 'captured', p_source)
+  on conflict (provider, provider_payment_id) do nothing;
+
+  if v_order.payment_status in ('paid', 'refund_pending', 'refunded') then
+    return 'already_processed';
+  end if;
+
+  if p_amount <> v_order.total then
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, v_order.status, format('Payment %s amount %s does not match order total %s — needs review', p_payment_id, p_amount, v_order.total), 'system');
+    return 'amount_mismatch';
+  end if;
+
+  if v_order.status = 'pending_payment' then
+    update public.orders
+       set status = 'placed', payment_status = 'paid', paid_at = now(), reservation_expires_at = null
+     where id = p_order_id;
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'placed', 'Payment confirmed', 'system');
+    return 'paid';
+  end if;
+
+  if v_order.status = 'cancelled' and v_order.stock_released and v_order.cancelled_reason = 'Payment was not completed in time' then
+    begin
+      -- 1. Every item must still exist and be sellable. No inner join: a missing variant/product fails.
+      select count(*) into v_n
+        from public.order_items oi
+        left join public.product_variants v on v.id = oi.variant_id
+        left join public.products p on p.id = v.product_id
+        left join public.categories c on c.id = p.category_id
+       where oi.order_id = p_order_id
+         and (v.id is null or not v.active or p.id is null or not p.active or c.id is null or not c.active);
+      if v_n > 0 then
+        raise exception 'revival_blocked' using detail = 'an item in the order is no longer available';
+      end if;
+
+      -- 2. Stock, same lock order as checkout (products by id), with the pack size that was sold.
+      for v_item in
+        select oi.variant_id, oi.quantity, oi.variant_label
+          from public.order_items oi join public.product_variants v on v.id = oi.variant_id
+         where oi.order_id = p_order_id
+         order by v.product_id, oi.variant_id
+      loop
+        if not public.take_stock(v_item.variant_id, v_item.quantity, true, v_item.variant_label) then
+          raise exception 'revival_blocked' using detail = 'items are out of stock';
+        end if;
+      end loop;
+
+      -- 3. Coupon: locked and re-validated, this order excluded from its own counts.
+      if v_order.coupon_id is null and v_order.discount > 0 then
+        raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+      end if;
+      if v_order.coupon_id is not null then
+        select * into v_coupon from public.coupons where id = v_order.coupon_id for update;
+        if not found then
+          raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+        end if;
+        if not v_coupon.active or (v_coupon.ends_at is not null and v_coupon.ends_at < now()) then
+          raise exception 'revival_blocked' using detail = format('coupon %s is no longer valid', v_coupon.code);
+        end if;
+        if v_coupon.usage_limit is not null then
+          select count(*) into v_n from public.coupon_redemptions where coupon_id = v_coupon.id and order_id <> p_order_id;
+          if greatest(v_n, v_coupon.used_count) >= v_coupon.usage_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s has reached its usage limit', v_coupon.code);
+          end if;
+        end if;
+        if v_coupon.per_user_limit is not null and v_order.user_id is not null then
+          select count(*) into v_n from public.coupon_redemptions
+           where coupon_id = v_coupon.id and user_id = v_order.user_id and order_id <> p_order_id;
+          if v_n >= v_coupon.per_user_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s was already used by this customer', v_coupon.code);
+          end if;
+        end if;
+        if coalesce(v_coupon.first_order_only, false) then
+          select count(*) into v_n from public.orders
+           where user_id = v_order.user_id and status <> 'cancelled' and id <> p_order_id;
+          if v_order.user_id is null or v_n > 0 then
+            raise exception 'revival_blocked' using detail = format('coupon %s is for a first order only', v_coupon.code);
+          end if;
+        end if;
+        insert into public.coupon_redemptions (coupon_id, order_id, user_id)
+        values (v_coupon.id, p_order_id, v_order.user_id)
+        on conflict (order_id) do nothing
+        returning coupon_id into v_coupon_id;
+        if v_coupon_id is not null then
+          update public.coupons set used_count = used_count + 1 where id = v_coupon_id;
+        end if;
+      end if;
+
+      -- 4. Delivery slot (locked last, like checkout). Not usable → no slot, today, agreed with customer.
+      v_slot_note := null;
+      if v_order.slot_id is not null then
+        select * into v_slot from public.delivery_slots where id = v_order.slot_id for update;
+        if not found or not v_slot.active then
+          v_slot_note := 'the delivery slot is no longer offered';
+        elsif v_order.delivery_date < v_today then
+          v_slot_note := 'the delivery date had passed';
+        elsif now() >= ((v_order.delivery_date + v_slot.start_time) at time zone 'Asia/Kolkata') - make_interval(mins => v_slot.cutoff_minutes) then
+          v_slot_note := 'the delivery slot had closed';
+        else
+          select count(*) into v_n from public.orders
+           where slot_id = v_order.slot_id and delivery_date = v_order.delivery_date and status <> 'cancelled' and id <> p_order_id;
+          if v_n >= v_slot.capacity then
+            v_slot_note := 'the delivery slot was full';
+          end if;
+        end if;
+      elsif v_order.delivery_date < v_today then
+        v_slot_note := 'the delivery date had passed';
+      end if;
+
+      if v_slot_note is null then
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed', 'Payment confirmed after reservation expired; stock re-reserved', 'system');
+      else
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null,
+               slot_id = null, delivery_date = v_today, slot_label = 'Delivery time confirmed on WhatsApp'
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed',
+                format('Payment confirmed after reservation expired; stock re-reserved. %s, so the store will agree a new delivery time with you.', initcap(left(v_slot_note, 1)) || substr(v_slot_note, 2)),
+                'system');
+      end if;
+      return 'paid_late';
+    exception when others then
+      -- Nothing above is kept (stock, coupon). Keep the order cancelled; flag the captured payment.
+      get stacked diagnostics v_detail = pg_exception_detail;
+      v_reason := case when sqlerrm = 'revival_blocked' then coalesce(nullif(v_detail, ''), 'the order can no longer be fulfilled') else 'the order could not be restored' end;
+      update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, 'cancelled', format('Payment received after expiry but %s — refund required', v_reason), 'system');
+      return 'refund_required';
+    end;
+  end if;
+
+  if v_order.status = 'cancelled' then
+    update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'cancelled', 'Payment received for a cancelled order — refund required', 'system');
+    return 'refund_required';
+  end if;
+
+  update public.orders set payment_status = 'paid', paid_at = now() where id = p_order_id;
+  return 'paid';
+end $$;
+
+revoke all on function public.mark_order_paid(uuid, text, text, text, integer, text) from public, anon, authenticated;
+
+-- ===== supabase/migrations/20261017000006_payment_prep_claim.sql =====
+-- Razorpay payment preparation is coordinated with a short-lived claim on the order row instead of a
+-- lock held for the whole gateway call (which kept a database connection busy for up to 15 s per order).
+-- One request claims, calls Razorpay without holding a connection, then saves the gateway order id;
+-- others wait and reuse it. A claim older than 30 s (longer than the 15 s gateway timeout) is from a
+-- request that died and can be taken over. Server-only columns: no client grants.
+alter table public.orders add column if not exists payment_prep_token uuid;
+alter table public.orders add column if not exists payment_prep_at timestamptz;
+
+-- ===== supabase/migrations/20261017000010_profile_identity_lockdown.sql =====
+-- Customers could update ANY column of their own profile through the Supabase API (table-level UPDATE
+-- grant), including `email`. The admin panel and the ADMIN_EMAILS deploy bootstrap trusted that column,
+-- so a customer could pose as the owner's address. Now customers may change only their name and phone;
+-- identity fields (id, email, role, timestamps) are written only by the server.
+revoke update on public.profiles from authenticated;
+grant update (full_name, phone) on public.profiles to authenticated;
+
+-- Repair any profile email that no longer matches its Supabase Auth account (the source of truth).
+do $$
+begin
+  if to_regclass('auth.users') is not null then
+    update public.profiles p set email = u.email
+      from auth.users u
+     where u.id = p.id and p.email is distinct from u.email;
+  end if;
+end $$;
+
+-- ===== supabase/migrations/20261017200001_unavailable_item_preference.sql =====
+-- What the customer wants if an item can't be supplied (out of stock at packing, poor quality):
+--   'call'   → the store calls/messages before changing anything (no substitute, no extra charge
+--              without the customer's OK);
+--   'remove' → leave the item out; the customer pays only for what is delivered (refund if prepaid).
+-- There is deliberately NO "substitute automatically" option. Orders placed before this column
+-- existed keep NULL ("not asked").
+alter table public.orders add column if not exists unavailable_item_preference text
+  check (unavailable_item_preference is null or unavailable_item_preference in ('call', 'remove'));
+
+-- ===== supabase/migrations/20261017200002_pack_label_spaces.sql =====
+-- Pack labels like "500 g" pasted from a website can contain a NON-BREAKING space (U+00A0) or a thin
+-- space. The website (JavaScript) read those labels as 500 g, but pack_label_grams() did not, so a
+-- product's shared weight stock and its packs went out of step (shown "in stock" but not sellable).
+-- Now the database treats every kind of space as a plain space, and existing labels are cleaned up.
+create or replace function public.pack_label_grams(p_label text)
+returns integer
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when m[2] in ('kg', 'kgs', 'kilo', 'kilogram', 'kilograms') then round(m[1]::numeric * 1000)::integer
+    when m[2] in ('g', 'gm', 'gms', 'gram', 'grams', 'gr') then round(m[1]::numeric)::integer
+  end
+  from (
+    select regexp_match(
+      lower(trim(regexp_replace(translate(p_label, U&'\00A0\2007\202F\2009\200A', '     '), '\s+', ' ', 'g'))),
+      '^(\d+(?:\.\d+)?)\s*(kg|kgs|kilo|kilograms?|g|gm|gms|grams?|gr)$'
+    ) as m
+  ) s
+$$;
+
+-- Clean existing labels (the stock-by-weight trigger re-derives each pack's stock on update).
+update public.product_variants
+   set label = btrim(regexp_replace(translate(label, U&'\00A0\2007\202F\2009\200A', '     '), '\s+', ' ', 'g'))
+ where label <> btrim(regexp_replace(translate(label, U&'\00A0\2007\202F\2009\200A', '     '), '\s+', ' ', 'g'));
+
+-- ===== supabase/migrations/20261017200003_late_payment_keep_future_date.sql =====
+-- Late payments (follow-up to 20261017000005): when the chosen slot can't be used any more (full,
+-- switched off), the revived order no longer jumps to TODAY if the customer had picked a later day — it
+-- keeps that day and only loses the slot ("delivery time confirmed on WhatsApp"). A date that has
+-- already passed still becomes today. Everything else is unchanged from 20261017000005.
+
+create or replace function public.mark_order_paid(
+  p_order_id uuid,
+  p_provider text,
+  p_provider_order_id text,
+  p_payment_id text,
+  p_amount integer,
+  p_source text
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order public.orders;
+  v_item record;
+  v_coupon public.coupons;
+  v_coupon_id uuid;
+  v_slot public.delivery_slots;
+  v_n integer;
+  v_today date := (now() at time zone 'Asia/Kolkata')::date;
+  v_reason text;
+  v_slot_note text;
+  v_detail text;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    return 'not_found';
+  end if;
+
+  insert into public.payments (order_id, provider, provider_order_id, provider_payment_id, amount, status, source)
+  values (p_order_id, p_provider, p_provider_order_id, p_payment_id, p_amount, 'captured', p_source)
+  on conflict (provider, provider_payment_id) do nothing;
+
+  if v_order.payment_status in ('paid', 'refund_pending', 'refunded') then
+    return 'already_processed';
+  end if;
+
+  if p_amount <> v_order.total then
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, v_order.status, format('Payment %s amount %s does not match order total %s — needs review', p_payment_id, p_amount, v_order.total), 'system');
+    return 'amount_mismatch';
+  end if;
+
+  if v_order.status = 'pending_payment' then
+    update public.orders
+       set status = 'placed', payment_status = 'paid', paid_at = now(), reservation_expires_at = null
+     where id = p_order_id;
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'placed', 'Payment confirmed', 'system');
+    return 'paid';
+  end if;
+
+  if v_order.status = 'cancelled' and v_order.stock_released and v_order.cancelled_reason = 'Payment was not completed in time' then
+    begin
+      -- 1. Every item must still exist and be sellable. No inner join: a missing variant/product fails.
+      select count(*) into v_n
+        from public.order_items oi
+        left join public.product_variants v on v.id = oi.variant_id
+        left join public.products p on p.id = v.product_id
+        left join public.categories c on c.id = p.category_id
+       where oi.order_id = p_order_id
+         and (v.id is null or not v.active or p.id is null or not p.active or c.id is null or not c.active);
+      if v_n > 0 then
+        raise exception 'revival_blocked' using detail = 'an item in the order is no longer available';
+      end if;
+
+      -- 2. Stock, same lock order as checkout (products by id), with the pack size that was sold.
+      for v_item in
+        select oi.variant_id, oi.quantity, oi.variant_label
+          from public.order_items oi join public.product_variants v on v.id = oi.variant_id
+         where oi.order_id = p_order_id
+         order by v.product_id, oi.variant_id
+      loop
+        if not public.take_stock(v_item.variant_id, v_item.quantity, true, v_item.variant_label) then
+          raise exception 'revival_blocked' using detail = 'items are out of stock';
+        end if;
+      end loop;
+
+      -- 3. Coupon: locked and re-validated, this order excluded from its own counts.
+      if v_order.coupon_id is null and v_order.discount > 0 then
+        raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+      end if;
+      if v_order.coupon_id is not null then
+        select * into v_coupon from public.coupons where id = v_order.coupon_id for update;
+        if not found then
+          raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+        end if;
+        if not v_coupon.active or (v_coupon.ends_at is not null and v_coupon.ends_at < now()) then
+          raise exception 'revival_blocked' using detail = format('coupon %s is no longer valid', v_coupon.code);
+        end if;
+        if v_coupon.usage_limit is not null then
+          select count(*) into v_n from public.coupon_redemptions where coupon_id = v_coupon.id and order_id <> p_order_id;
+          if greatest(v_n, v_coupon.used_count) >= v_coupon.usage_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s has reached its usage limit', v_coupon.code);
+          end if;
+        end if;
+        if v_coupon.per_user_limit is not null and v_order.user_id is not null then
+          select count(*) into v_n from public.coupon_redemptions
+           where coupon_id = v_coupon.id and user_id = v_order.user_id and order_id <> p_order_id;
+          if v_n >= v_coupon.per_user_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s was already used by this customer', v_coupon.code);
+          end if;
+        end if;
+        if coalesce(v_coupon.first_order_only, false) then
+          select count(*) into v_n from public.orders
+           where user_id = v_order.user_id and status <> 'cancelled' and id <> p_order_id;
+          if v_order.user_id is null or v_n > 0 then
+            raise exception 'revival_blocked' using detail = format('coupon %s is for a first order only', v_coupon.code);
+          end if;
+        end if;
+        insert into public.coupon_redemptions (coupon_id, order_id, user_id)
+        values (v_coupon.id, p_order_id, v_order.user_id)
+        on conflict (order_id) do nothing
+        returning coupon_id into v_coupon_id;
+        if v_coupon_id is not null then
+          update public.coupons set used_count = used_count + 1 where id = v_coupon_id;
+        end if;
+      end if;
+
+      -- 4. Delivery slot (locked last, like checkout). Not usable → no slot, today, agreed with customer.
+      v_slot_note := null;
+      if v_order.slot_id is not null then
+        select * into v_slot from public.delivery_slots where id = v_order.slot_id for update;
+        if not found or not v_slot.active then
+          v_slot_note := 'the delivery slot is no longer offered';
+        elsif v_order.delivery_date < v_today then
+          v_slot_note := 'the delivery date had passed';
+        elsif now() >= ((v_order.delivery_date + v_slot.start_time) at time zone 'Asia/Kolkata') - make_interval(mins => v_slot.cutoff_minutes) then
+          v_slot_note := 'the delivery slot had closed';
+        else
+          select count(*) into v_n from public.orders
+           where slot_id = v_order.slot_id and delivery_date = v_order.delivery_date and status <> 'cancelled' and id <> p_order_id;
+          if v_n >= v_slot.capacity then
+            v_slot_note := 'the delivery slot was full';
+          end if;
+        end if;
+      elsif v_order.delivery_date < v_today then
+        v_slot_note := 'the delivery date had passed';
+      end if;
+
+      if v_slot_note is null then
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed', 'Payment confirmed after reservation expired; stock re-reserved', 'system');
+      else
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null,
+               slot_id = null, delivery_date = greatest(v_order.delivery_date, v_today), slot_label = 'Delivery time confirmed on WhatsApp'
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed',
+                format('Payment confirmed after reservation expired; stock re-reserved. %s, so the store will agree a new delivery time with you.', initcap(left(v_slot_note, 1)) || substr(v_slot_note, 2)),
+                'system');
+      end if;
+      return 'paid_late';
+    exception when others then
+      -- Nothing above is kept (stock, coupon). Keep the order cancelled; flag the captured payment.
+      get stacked diagnostics v_detail = pg_exception_detail;
+      v_reason := case when sqlerrm = 'revival_blocked' then coalesce(nullif(v_detail, ''), 'the order can no longer be fulfilled') else 'the order could not be restored' end;
+      update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, 'cancelled', format('Payment received after expiry but %s — refund required', v_reason), 'system');
+      return 'refund_required';
+    end;
+  end if;
+
+  if v_order.status = 'cancelled' then
+    update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'cancelled', 'Payment received for a cancelled order — refund required', 'system');
+    return 'refund_required';
+  end if;
+
+  update public.orders set payment_status = 'paid', paid_at = now() where id = p_order_id;
+  return 'paid';
+end $$;
+
+revoke all on function public.mark_order_paid(uuid, text, text, text, integer, text) from public, anon, authenticated;
+
+-- ===== supabase/migrations/20261020000001_rate_limits.sql =====
+-- Shared rate-limit counters. On Vercel every server instance has its own memory, so an in-memory
+-- limit can be bypassed by requests that land on different instances. Keys are stored hashed
+-- (they can contain a phone number or IP). Only the server's database connection uses this table:
+-- RLS is on with no policies, so the public API (anon / signed-in users) can't read or write it.
+create table if not exists public.rate_limits (
+  key_hash text primary key,
+  hits integer not null,
+  reset_at timestamptz not null
+);
+alter table public.rate_limits enable row level security;
+revoke all on public.rate_limits from anon, authenticated;
+create index if not exists rate_limits_reset_at_idx on public.rate_limits (reset_at);
+
+-- ===== record the migrations above as applied (for apps/web/scripts/migrate.mjs) =====
+create table if not exists public._fb_migrations (name text primary key, applied_at timestamptz not null default now());
+alter table public._fb_migrations enable row level security;
+insert into public._fb_migrations (name) values
+  ('20261014000001_schema.sql'),
+  ('20261014000002_auth_and_rls.sql'),
+  ('20261014000003_order_functions.sql'),
+  ('20261014000004_storage.sql'),
+  ('20261015000005_ram_avatar_brand.sql'),
+  ('20261015000006_standard_pack_sizes.sql'),
+  ('20261015000007_safe_standard_pack_sizes.sql'),
+  ('20261015000008_dedupe_addresses.sql'),
+  ('20261015000009_promo_banners.sql'),
+  ('20261016000001_product_info.sql'),
+  ('20261016000002_order_fingerprint.sql'),
+  ('20261016000003_cod_cancelled.sql'),
+  ('20261016000004_first_order_coupons.sql'),
+  ('20261016000005_stock_by_weight.sql'),
+  ('20261016000006_reviews_nutrition.sql'),
+  ('20261016000007_stock_lock_order.sql'),
+  ('20261016000008_late_payment_only_after_expiry.sql'),
+  ('20261016000009_hero_banners.sql'),
+  ('20261017000001_whatsapp_orders_payments.sql'),
+  ('20261017000002_whatsapp_pending_confirmation.sql'),
+  ('20261017000003_unconfirmed_order_expiry.sql'),
+  ('20261017000004_tighten_client_grants.sql'),
+  ('20261017000005_late_payment_revival_checks.sql'),
+  ('20261017000006_payment_prep_claim.sql'),
+  ('20261017000010_profile_identity_lockdown.sql'),
+  ('20261017200001_unavailable_item_preference.sql'),
+  ('20261017200002_pack_label_spaces.sql'),
+  ('20261017200003_late_payment_keep_future_date.sql'),
+  ('20261020000001_rate_limits.sql')
+on conflict (name) do nothing;

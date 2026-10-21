@@ -179,7 +179,7 @@ export function AddressBook({ initial }: { initial: Address[] }) {
           onSubmit={submit}
           noValidate
           aria-labelledby="address-form-heading"
-          className="mt-6 scroll-mt-28 rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)] sm:p-7"
+          className="mt-6 rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)] sm:p-7"
         >
           <h2 id="address-form-heading" className="text-xl font-semibold text-forest-900">{editing.id ? "Edit address" : "New address"}</h2>
           <p className="mb-5 mt-1 text-sm text-muted">We&apos;ll tell you right away whether we deliver to the PIN code.</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useId } from "react";
 import { GalleryHorizontalEnd, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { adminBannerSchema, BANNER_THEMES, type PromoBanner } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
@@ -12,7 +12,7 @@ import { cn } from "../ui/cn";
 import { PromoCard } from "../home/promo-strip";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
-import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle } from "./ui";
+import { Badge, ConfirmDialog, EditorDialog, LoadError, LoadingRows, PageHeader, Toggle, useEditorDialogBusy, useEditorDialogMarkDirty, type EditorDialogHandle } from "./ui";
 
 interface Banner extends PromoBanner {
   active: boolean;
@@ -56,6 +56,7 @@ function Inner() {
   const toast = useToast();
   const { data, error, reload } = useAdminData<{ banners: Banner[] }>("/api/admin/banners");
   const [editing, setEditing] = useState<Banner | "new" | null>(null);
+  const editorRef1 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Banner | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const banners = data?.banners ?? [];
@@ -114,13 +115,13 @@ function Inner() {
         </ul>
       )}
 
-      <EditorDialog open={editing !== null} title={editing === "new" ? "New banner" : `Edit “${editing?.title ?? ""}”`} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef1} open={editing !== null} title={editing === "new" ? "New banner" : `Edit “${editing?.title ?? ""}”`} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <BannerForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
             nextSort={(banners.reduce((m, b) => Math.max(m, b.sortOrder), 0) || 0) + 1}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef1.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Banner created" : "Banner saved");
               setEditing(null);
@@ -138,6 +139,9 @@ function Inner() {
 }
 
 function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner | null; nextSort: number; onCancel: () => void; onSaved: (created: boolean) => Promise<void> }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [subtitle, setSubtitle] = useState(initial?.subtitle ?? "");
   const [linkUrl, setLinkUrl] = useState(initial?.linkUrl ?? "/deals");
@@ -153,6 +157,8 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
+  const markDirty = useEditorDialogMarkDirty();
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -214,7 +220,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
         <div className="flex flex-wrap gap-2">
           {([["strip", "Offer strip (cards under the slider)"], ["hero", "Home hero slider (big slide)"]] as const).map(([v, label]) => (
             <label key={v} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", placement === v ? "border-forest-800 bg-lime-50" : "border-line")}>
-              <input type="radio" name="placement" value={v} checked={placement === v} onChange={() => setPlacement(v)} className="sr-only" />
+              <input type="radio" name={`${rg}-placement`} value={v} checked={placement === v} onChange={() => setPlacement(v)} className="sr-only" />
               {label}
             </label>
           ))}
@@ -245,7 +251,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
       </datalist>
       <div className="flex flex-wrap gap-1.5">
         {LINK_SUGGESTIONS.map((s) => (
-          <button key={s.value} type="button" onClick={() => setLinkUrl(s.value)} className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", linkUrl === s.value ? "border-forest-800 bg-forest-800 text-white" : "border-line text-ink-soft hover:border-forest-700/40")}>
+          <button key={s.value} type="button" onClick={() => { setLinkUrl(s.value); markDirty(); }} className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", linkUrl === s.value ? "border-forest-800 bg-forest-800 text-white" : "border-line text-ink-soft hover:border-forest-700/40")}>
             {s.label}
           </button>
         ))}
@@ -255,7 +261,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
         <div className="mt-1.5 flex flex-wrap gap-2">
           {BANNER_THEMES.map((t) => (
             <label key={t} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", theme === t ? "border-forest-800" : "border-line")}>
-              <input type="radio" name="theme" value={t} checked={theme === t} onChange={() => setTheme(t)} className="sr-only" />
+              <input type="radio" name={`${rg}-theme`} value={t} checked={theme === t} onChange={() => setTheme(t)} className="sr-only" />
               <span className={cn("size-4 rounded-full border border-line", THEME_SWATCH[t])} aria-hidden /> {THEME_LABEL[t]}
             </label>
           ))}
@@ -268,7 +274,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
           <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => fileRef.current?.click()}>
             {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {imageUrl ? "Replace" : "Upload"}
           </Button>
-          {imageUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => setImageUrl(null)}><X className="size-4" aria-hidden /> Remove</Button> : null}
+          {imageUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => { setImageUrl(null); markDirty(); }}><X className="size-4" aria-hidden /> Remove</Button> : null}
         </div>
         <p className="mt-1.5 text-[0.8125rem] text-muted">JPEG, PNG or WebP up to 5 MB. Use your own photos or ones you have the right to use.</p>
       </div>

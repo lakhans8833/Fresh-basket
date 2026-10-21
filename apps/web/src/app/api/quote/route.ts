@@ -8,7 +8,7 @@ import { getSession } from "@/lib/auth";
 export const POST = route(async (req) => {
   const body = await parseBody(req, quoteRequestSchema);
   // Coupon checks are rate-limited so codes can't be guessed by brute force.
-  if (body.couponCode) rateLimit(`quote-coupon:${clientIp(req)}`, 30, 60_000);
+  if (body.couponCode) await rateLimit(`quote-coupon:${clientIp(req)}`, 30, 60_000);
   const session = await getSession();
   const ctx = await buildQuote(body, { userId: session?.userId ?? null });
   return json({ ...toQuoteResponse(ctx), commonFreeAbove: ctx.area ? null : await commonFreeAbove() });

@@ -1,14 +1,14 @@
 "use client";
 
-import { isValidPincode, type Address, type DeliveryArea } from "@freshbasket/shared";
+import { isValidPincode, type Address, type DeliveryArea, type SlotOption } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 
-export type CheckedPin = { serviceable: true; area: DeliveryArea } | { serviceable: false; area: null };
+export type CheckedPin = { serviceable: true; area: DeliveryArea; nextSlots: SlotOption[] } | { serviceable: false; area: null; nextSlots?: undefined };
 
 /** Asks the server whether we deliver to this PIN code (the delivery list in Admin → Delivery). */
 export async function checkPincode(pincode: string): Promise<CheckedPin> {
-  const r = await api<{ serviceable: boolean; area: DeliveryArea | null }>(`/api/delivery/check?pincode=${pincode}`);
-  return r.serviceable && r.area ? { serviceable: true, area: r.area } : { serviceable: false, area: null };
+  const r = await api<{ serviceable: boolean; area: DeliveryArea | null; nextSlots?: SlotOption[] }>(`/api/delivery/check?pincode=${pincode}`);
+  return r.serviceable && r.area ? { serviceable: true, area: r.area, nextSlots: r.nextSlots ?? [] } : { serviceable: false, area: null };
 }
 
 /** The signed-in customer's saved addresses, default first (empty if signed out or on error). */

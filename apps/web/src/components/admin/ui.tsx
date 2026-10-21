@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ComponentProps, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
 import { ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
 import { cn } from "../ui/cn";
@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { inputClass } from "../ui/form";
 import { LeafMark } from "../layout/logo";
 import { ProductImage } from "../product/product-image";
+import { DiscardPrompt } from "./unsaved-guard";
 
 export function PageHeader({ title, description, actions, eyebrow }: { title: string; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
   return (
@@ -57,7 +58,7 @@ export function Badge({ tone = "neutral", children, className }: { tone?: Tone; 
 }
 
 export function orderTone(s: OrderStatus): Tone {
-  return s === "cancelled" ? "red" : s === "delivered" ? "green" : s === "pending_payment" ? "amber" : s === "out_for_delivery" ? "dark" : s === "packed" ? "lime" : "neutral";
+  return s === "cancelled" ? "red" : s === "delivered" ? "green" : s === "pending_payment" || s === "pending_confirmation" ? "amber" : s === "out_for_delivery" ? "dark" : s === "packed" ? "lime" : "neutral";
 }
 export function paymentTone(s: PaymentStatus): Tone {
   return s === "paid" || s === "cod_collected" ? "green" : s === "refund_pending" || s === "failed" ? "red" : s === "pending" ? "amber" : "neutral";
@@ -66,7 +67,7 @@ export function paymentTone(s: PaymentStatus): Tone {
 export function LateBadge() {
   return (
     <Badge tone="red" className="uppercase tracking-wide">
-      <span title="Delivery slot has ended and the order is still not packed">Late</span>
+      <span title="Delivery slot has ended and the order isn't delivered yet">Late</span>
     </Badge>
   );
 }
@@ -152,6 +153,14 @@ export function ConfirmDialog({
         e.preventDefault();
         if (!busy) onClose();
       }}
+      // Repeated Escape can close it natively: keep the page's state in step (re-open while busy).
+      onClose={() => {
+        const d = ref.current;
+        if (open && d && !d.open) {
+          if (busy) d.showModal();
+          else onClose();
+        }
+      }}
       className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-[var(--radius-card)] border border-line bg-white p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40 backdrop:backdrop-blur-[2px]"
     >
       <form
@@ -174,22 +183,78 @@ export function ConfirmDialog({
 }
 
 /** Generic "slide-over"-ish editor panel rendered as a modal dialog for create/edit forms. */
-export function EditorDialog({ open, title, onClose, children, busy, wide }: { open: boolean; title: string; onClose: () => void; children: ReactNode; busy?: boolean; wide?: boolean }) {
+/** Lets a form inside an EditorDialog report "saving…" so the dialog can't be closed meanwhile. */
+const EditorDialogCtx = createContext<{ setBusy: (b: boolean) => void; markDirty: () => void } | null>(null);
+export function useEditorDialogBusy(busy: boolean) {
+  const ctx = useContext(EditorDialogCtx);
+  useEffect(() => {
+    ctx?.setBusy(busy);
+  }, [ctx, busy]);
+}
+/** For edits that aren't typing into a field (chips, "Remove image" buttons): count as unsaved. */
+export function useEditorDialogMarkDirty(): () => void {
+  return useContext(EditorDialogCtx)?.markDirty ?? (() => {});
+}
+
+export interface EditorDialogHandle {
+  /** Close like Escape / Cancel: asks first when the form has unsaved edits, never while saving. */
+  requestClose: () => void;
+}
+
+/**
+ * Modal editor. Any typing/choosing inside marks it as edited; Escape, the Cancel button (via
+ * controlRef.requestClose) and the backdrop then ask "Discard your changes?" instead of silently
+ * losing the draft. While the form reports it is saving (useEditorDialogBusy) it can't be closed.
+ * A successful save closes it by setting `open` to false (no prompt).
+ */
+export function EditorDialog({
+  open, title, onClose, children, busy, wide, controlRef,
+}: { open: boolean; title: string; onClose: () => void; children: ReactNode; busy?: boolean; wide?: boolean; controlRef?: Ref<EditorDialogHandle> }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [dirty, setDirty] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [childBusy, setChildBusy] = useState(false);
+  const isBusy = Boolean(busy) || childBusy;
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
   }, [open]);
+  // A fresh start each time the dialog opens.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setDirty(false);
+      setConfirming(false);
+      setChildBusy(false);
+    }
+  }
+  const requestClose = () => {
+    if (isBusy) return;
+    if (dirty) setConfirming(true);
+    else onClose();
+  };
+  useImperativeHandle(controlRef, () => ({ requestClose }));
+  const ctx = useMemo(() => ({ setBusy: setChildBusy, markDirty: () => setDirty(true) }), []);
   return (
     <dialog
       ref={ref}
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();
-        if (!busy) onClose();
+        requestClose();
+      }}
+      // A repeated Escape can make the browser close the modal even though cancel was prevented.
+      // While the page still wants it open, put it back (draft and prompt intact).
+      onClose={() => {
+        const d = ref.current;
+        if (open && d && !d.open) {
+          d.showModal();
+          if (dirty) setConfirming(true);
+        }
       }}
       className={cn(
         "m-auto max-h-[calc(100dvh-2rem)] rounded-[var(--radius-card)] border border-line bg-ivory p-0 text-ink shadow-[var(--shadow-lift)] backdrop:bg-forest-950/40 backdrop:backdrop-blur-[2px]",
@@ -197,10 +262,13 @@ export function EditorDialog({ open, title, onClose, children, busy, wide }: { o
       )}
     >
       {open ? (
-        <div className="p-5 sm:p-6">
-          <h2 id={titleId} className="text-xl font-semibold text-forest-900">{title}</h2>
-          <div className="mt-4">{children}</div>
-        </div>
+        <EditorDialogCtx.Provider value={ctx}>
+          <div className="p-5 sm:p-6" onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
+            <h2 id={titleId} className="text-xl font-semibold text-forest-900">{title}</h2>
+            {confirming && !isBusy ? <DiscardPrompt onKeep={() => setConfirming(false)} onDiscard={() => { setConfirming(false); onClose(); }} /> : null}
+            <div className="mt-4">{children}</div>
+          </div>
+        </EditorDialogCtx.Provider>
       ) : null}
     </dialog>
   );

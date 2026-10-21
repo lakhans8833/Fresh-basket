@@ -5,13 +5,27 @@ import type { Profile } from "@freshbasket/shared";
 import { api, SESSION_RECOVERED_EVENT, UNAUTHORIZED_EVENT } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 
+/**
+ * Result of re-loading the signed-in profile. Callers must tell these apart:
+ * - "signed_in": the server confirmed the session (profile has the role);
+ * - "signed_out": the server answered and there is NO session;
+ * - "error": the check itself failed (offline, timeout, 5xx) — the session may well be fine; keep it
+ *   and offer a retry. Never treat this as "signed out" or "no permission".
+ */
+export type RefreshResult =
+  | { status: "signed_in"; profile: Profile }
+  | { status: "signed_out" }
+  | { status: "error"; message: string };
+
 interface SessionState {
   profile: Profile | null;
   loading: boolean;
-  refresh: () => Promise<Profile | null>;
+  refresh: () => Promise<RefreshResult>;
   logout: () => Promise<void>;
 }
-const Ctx = createContext<SessionState>({ profile: null, loading: true, refresh: async () => null, logout: async () => {} });
+const Ctx = createContext<SessionState>({
+  profile: null, loading: true, refresh: async () => ({ status: "error", message: "Not ready" }), logout: async () => {},
+});
 
 export function SessionProvider({ children, initial }: { children: ReactNode; initial: Profile | null }) {
   const [profile, setProfile] = useState<Profile | null>(initial);
@@ -21,14 +35,15 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
     current.current = profile;
   }, [profile]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<RefreshResult> => {
     setLoading(true);
     try {
       const { profile } = await api<{ profile: Profile | null }>("/api/me", { cache: "no-store" });
       setProfile(profile);
-      return profile;
-    } catch {
-      return null;
+      return profile ? { status: "signed_in", profile } : { status: "signed_out" };
+    } catch (e) {
+      // Keep the current profile: a failed check is not a sign-out.
+      return { status: "error", message: (e as Error).message || "Couldn't check your account." };
     } finally {
       setLoading(false);
     }
@@ -55,11 +70,13 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
       if (checking) return;
       checking = true;
       try {
-        const p = await refresh();
-        if (p) {
+        const r = await refresh();
+        if (r.status === "signed_in") {
           window.dispatchEvent(new Event(SESSION_RECOVERED_EVENT));
           return;
         }
+        // Couldn't check (offline / server error): keep the user where they are, signed in.
+        if (r.status === "error") return;
         setProfile(null);
         const { pathname, search } = window.location;
         const isAdmin = /^\/admin(\/|$)/.test(pathname);
@@ -90,7 +107,8 @@ export function SessionProvider({ children, initial }: { children: ReactNode; in
   }, [profile]);
 
   const logout = useCallback(async () => {
-    await getBrowserSupabase()?.auth.signOut();
+    // This device only — signing out on the phone must not end the desktop session.
+    await getBrowserSupabase()?.auth.signOut({ scope: "local" });
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     setProfile(null);
   }, []);

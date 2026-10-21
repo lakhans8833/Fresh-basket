@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useId } from "react";
 import { Pencil, Plus, TicketPercent, Trash2 } from "lucide-react";
 import { adminCouponSchema, formatINR } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
@@ -12,7 +12,7 @@ import { cn } from "../ui/cn";
 import { errorMessage, serverFieldErrors, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
 import { inputToPaise, paiseToInput, parseIntOrNull } from "./money";
-import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle, formatDateTime } from "./ui";
+import { Badge, Card, ConfirmDialog, EditorDialog, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle, formatDateTime, useEditorDialogBusy, type EditorDialogHandle } from "./ui";
 
 interface Coupon {
   id: string;
@@ -69,6 +69,7 @@ function Inner() {
   const toast = useToast();
   const { data, error, reload } = useAdminData<{ coupons: Coupon[] }>("/api/admin/coupons");
   const [editing, setEditing] = useState<Coupon | "new" | null>(null);
+  const editorRef1 = useRef<EditorDialogHandle>(null);
   const [deleting, setDeleting] = useState<Coupon | null>(null);
   const [busy, setBusy] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -148,12 +149,12 @@ function Inner() {
         </ul>
       )}
 
-      <EditorDialog wide open={editing !== null} title={editing === "new" ? "New coupon" : `Edit ${editing?.code ?? ""}`} onClose={() => setEditing(null)}>
+      <EditorDialog controlRef={editorRef1} wide open={editing !== null} title={editing === "new" ? "New coupon" : `Edit ${editing?.code ?? ""}`} onClose={() => setEditing(null)}>
         {editing !== null ? (
           <CouponForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
-            onCancel={() => setEditing(null)}
+            onCancel={() => editorRef1.current?.requestClose()}
             onSaved={async (created) => {
               toast(created ? "Coupon created" : "Coupon saved");
               setEditing(null);
@@ -170,6 +171,9 @@ function Inner() {
 }
 
 function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; onCancel: () => void; onSaved: (created: boolean) => Promise<void> }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const [f, setF] = useState({
     code: initial?.code ?? "",
     description: initial?.description ?? "",
@@ -187,6 +191,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useEditorDialogBusy(saving);
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
 
   async function submit(e: React.FormEvent) {
@@ -259,7 +264,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
         <div className="mt-1.5 inline-flex rounded-full border border-line bg-white p-1">
           {(["percent", "flat"] as const).map((k) => (
             <label key={k} className={cn("cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-leaf-500", f.kind === k ? "bg-forest-800 text-white" : "text-ink-soft hover:bg-sage-100")}>
-              <input type="radio" name="cp-kind" value={k} checked={f.kind === k} onChange={() => set({ kind: k, value: "" })} className="sr-only" />
+              <input type="radio" name={`${rg}-cp-kind`} value={k} checked={f.kind === k} onChange={() => set({ kind: k, value: "" })} className="sr-only" />
               {k === "percent" ? "Percentage" : "Flat amount"}
             </label>
           ))}

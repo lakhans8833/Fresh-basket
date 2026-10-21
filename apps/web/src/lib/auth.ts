@@ -14,6 +14,23 @@ export const DEV_COOKIE = "fb_dev_session";
 export const ACCESS_HEADER = "x-fb-sb-access-token";
 /** Set by src/proxy.ts: the requested path + query (client values are stripped). */
 export const PATH_HEADER = "x-fb-path";
+/** Set by the proxy when Supabase Auth couldn't be reached to check this request's session. */
+export const AUTH_UNAVAILABLE_HEADER = "x-fb-auth-unavailable";
+
+/**
+ * True when this request's session couldn't be checked because Supabase Auth was unreachable or
+ * failing (as opposed to "no session"). /api/me turns it into a 503 so the browser keeps the session
+ * and offers a retry instead of signing the customer or admin out.
+ */
+export async function authUnavailable(): Promise<boolean> {
+  if (env.auth.mode !== "supabase") return false;
+  if ((await headers()).get(AUTH_UNAVAILABLE_HEADER) === "1") return true;
+  return (await sessionState()).unavailable;
+}
+/** verifyAccessToken result when Supabase Auth couldn't be asked (network / 5xx) — not "no session". */
+const UNAVAILABLE = "unavailable" as const;
+const retryable = (e: { name?: string; status?: number } | null | undefined) =>
+  Boolean(e && (e.name === "AuthRetryableFetchError" || e.status === 0 || (typeof e.status === "number" && e.status >= 500)));
 const DEV_TTL = 60 * 60 * 24 * 7;
 
 export interface Session {
@@ -48,7 +65,7 @@ export async function supabaseServerClient() {
   });
 }
 
-async function resolveUserId(): Promise<{ id: string; email: string | null } | null> {
+async function resolveUserId(): Promise<{ id: string; email: string | null } | typeof UNAVAILABLE | null> {
   const h = await headers();
   const bearer = h.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
 
@@ -81,13 +98,15 @@ let verifier: ReturnType<typeof createClient> | null = null;
  * public signing keys (cached), falling back to Supabase Auth for legacy shared-secret projects.
  * Never refreshes anything (see src/proxy.ts).
  */
-async function verifyAccessToken(token: string, strict = false): Promise<{ id: string; email: string | null } | null> {
+async function verifyAccessToken(token: string, strict = false): Promise<{ id: string; email: string | null } | typeof UNAVAILABLE | null> {
   verifier ??= createClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, { auth: { persistSession: false, autoRefreshToken: false } });
   if (strict) {
-    const { data } = await verifier.auth.getUser(token);
+    const { data, error } = await verifier.auth.getUser(token);
+    if (!data.user && retryable(error)) return UNAVAILABLE;
     return data.user ? { id: data.user.id, email: data.user.email ?? null } : null;
   }
-  const { data } = await verifier.auth.getClaims(token);
+  const { data, error } = await verifier.auth.getClaims(token);
+  if (!data?.claims?.sub && retryable(error)) return UNAVAILABLE;
   const c = data?.claims;
   return c?.sub ? { id: c.sub, email: typeof c.email === "string" && c.email ? c.email : null } : null;
 }
@@ -95,8 +114,16 @@ async function verifyAccessToken(token: string, strict = false): Promise<{ id: s
 type ProfileRow = { id: string; email: string | null; full_name: string | null; phone: string | null; role: Profile["role"] };
 
 /** The signed-in user and profile. Cached per request, so the layout and page share one lookup. */
-export const getSession = cache(async (): Promise<Session | null> => {
+export const getSession = cache(async (): Promise<Session | null> => (await sessionState()).session);
+
+/** The session lookup, plus whether it failed because Supabase Auth couldn't be reached. */
+const sessionState = cache(async (): Promise<{ session: Session | null; unavailable: boolean }> => {
   const u = await resolveUserId();
+  if (u === UNAVAILABLE) return { session: null, unavailable: true };
+  return { session: await loadSession(u), unavailable: false };
+});
+
+async function loadSession(u: { id: string; email: string | null } | null): Promise<Session | null> {
   if (!u) return null;
   let row = await queryOne<ProfileRow>("select id, email, full_name, phone, role from profiles where id = $1", [u.id]);
   if (!row && env.auth.mode === "supabase") {
@@ -110,7 +137,7 @@ export const getSession = cache(async (): Promise<Session | null> => {
     userId: row.id,
     profile: { id: row.id, email: row.email, fullName: row.full_name, phone: row.phone, role: row.role },
   };
-});
+}
 
 export async function requireUser(): Promise<Session> {
   const s = await getSession();

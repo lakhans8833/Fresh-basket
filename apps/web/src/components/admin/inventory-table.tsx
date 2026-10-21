@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Boxes, RotateCcw, Save, Search } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { Button } from "../ui/button";
@@ -13,6 +13,8 @@ import { errorMessage, useAdminData } from "./use-admin-data";
 import { useAdmin } from "./admin-context";
 import { inputToPaise, paiseToInput } from "./money";
 import { Badge, Card, LoadError, LoadingRows, PageHeader } from "./ui";
+import { productStockSummary } from "@freshbasket/shared";
+import { useUnsavedGuard } from "./unsaved-guard";
 
 interface Row {
   variantId: string;
@@ -109,29 +111,43 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
   const changedProducts = new Set(productUpdates.map((u) => u.productId));
   const dirty = updates.length > 0 || invalid.size > 0 || productUpdates.length > 0 || invalidTotals.size > 0;
 
-  useEffect(() => {
-    if (!dirty) return;
-    const h = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", h);
-    return () => window.removeEventListener("beforeunload", h);
-  }, [dirty]);
+  // Leaving with unsaved edits (tab close, sidebar, links): Save / Discard / Stay.
+  const guard = useUnsavedGuard({ dirty, saving, save: () => save() });
+
+  // Low / out for weight products is decided on the product's shared total (2 kg of mint is not
+  // "low" just because the 1 kg size can only be made twice); other packs are judged one by one.
+  const productLevel = useMemo(() => {
+    const byProduct = new Map<string, Row[]>();
+    for (const r of rows) if (r.productStockGrams !== null) byProduct.set(r.productId, [...(byProduct.get(r.productId) ?? []), r]);
+    const out = new Map<string, ReturnType<typeof productStockSummary>>();
+    for (const [id, rs] of byProduct) {
+      out.set(id, productStockSummary(rs[0]!.productStockGrams, rs.map((r) => ({ id: r.variantId, label: r.label, stock: r.stock, active: r.active }))));
+    }
+    return out;
+  }, [rows]);
+  const stockState = (r: Row): "out" | "low" | "ok" => {
+    const pl = r.productStockGrams !== null ? productLevel.get(r.productId) : undefined;
+    if (pl && pl.kind === "weight") return pl.out ? "out" : pl.low ? "low" : "ok";
+    return r.stock === 0 ? "out" : r.stock <= LOW ? "low" : "ok";
+  };
 
   const counts = useMemo(() => {
     let low = 0, out = 0, inactive = 0;
     for (const r of rows) {
       if (!r.active || !r.productActive) inactive++;
-      else if (r.stock === 0) out++;
-      else if (r.stock <= LOW) low++;
+      else if (stockState(r) === "out") out++;
+      else if (stockState(r) === "low") low++;
     }
     return { all: rows.length, low, out, inactive };
-  }, [rows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stockState only reads productLevel
+  }, [rows, productLevel]);
 
   const visible = rows.filter((r) => {
     const needle = q.trim().toLowerCase();
     if (needle && !`${r.productName} ${r.label} ${r.categoryName}`.toLowerCase().includes(needle)) return false;
     const live = r.active && r.productActive;
-    if (filter === "low") return live && r.stock > 0 && r.stock <= LOW;
-    if (filter === "out") return live && r.stock === 0;
+    if (filter === "low") return live && stockState(r) === "low";
+    if (filter === "out") return live && stockState(r) === "out";
     if (filter === "inactive") return !live;
     return true;
   });
@@ -140,13 +156,14 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
+    if (saving) return false; // no double submit
     setSaveError(null);
     if (invalid.size || invalidTotals.size) {
       setSaveError("Some prices or stock values aren't valid numbers (total stock: kg, e.g. 25 or 2.5). Fix the highlighted cells.");
-      return;
+      return false;
     }
-    if (!updates.length && !productUpdates.length) return;
+    if (!updates.length && !productUpdates.length) return true;
     setSaving(true);
     try {
       // The API accepts up to 200 rows per request.
@@ -158,8 +175,10 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       await reload();
       setEdits({});
       setTotals({});
+      return true;
     } catch (e) {
       setSaveError(errorMessage(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -174,6 +193,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
 
   return (
     <>
+      {guard.dialog}
       <PageHeader
         title="Inventory"
         description="Update prices and stock at once. Products sold by weight have one total stock in kg — every pack size (100 g, 250 g, 500 g, 1 kg…) is worked out from it. Changes are saved together."
@@ -345,7 +365,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
           <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={() => { setEdits({}); setTotals({}); setSaveError(null); }} disabled={saving} tabIndex={dirty ? 0 : -1}>
             <RotateCcw className="size-4" aria-hidden /> Discard
           </Button>
-          <Button size="sm" variant="lime" onClick={save} loading={saving} tabIndex={dirty ? 0 : -1}>
+          <Button size="sm" variant="lime" onClick={() => void save()} loading={saving} tabIndex={dirty ? 0 : -1}>
             {!saving ? <Save className="size-4" aria-hidden /> : null} Save changes
           </Button>
         </div>

@@ -23,13 +23,14 @@ export async function adminListUsers(q?: string | null): Promise<AdminUser[]> {
   let where = "";
   if (q && q.trim()) {
     params.push(`%${q.trim().toLowerCase().replace(/[%_\\]/g, (m) => "\\" + m)}%`);
-    where = `where lower(coalesce(p.email, '')) like $1 or lower(coalesce(p.full_name, '')) like $1 or coalesce(p.phone, '') like $1`;
+    where = `where lower(coalesce(u.email, p.email, '')) like $1 or lower(coalesce(p.full_name, '')) like $1 or coalesce(p.phone, '') like $1`;
   }
   const rows = await query<{
     id: string; email: string | null; full_name: string | null; phone: string | null; role: Profile["role"];
     created_at: Date | null; email_confirmed_at: Date | null; last_sign_in_at: Date | null; orders: number;
   }>(
-    `select p.id, coalesce(p.email, u.email) as email, p.full_name, p.phone, p.role,
+    `select p.id, coalesce(u.email, p.email) as email, -- the Supabase Auth address is the trusted one
+            p.full_name, p.phone, p.role,
             u.created_at, u.email_confirmed_at, u.last_sign_in_at,
             (select count(*) from orders o where o.user_id = p.id and o.status <> 'cancelled')::int as orders
        from profiles p

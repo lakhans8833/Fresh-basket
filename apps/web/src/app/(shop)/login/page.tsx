@@ -14,10 +14,14 @@ function safeNext(n: string | undefined) {
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   const sp = await searchParams;
   const next = safeNext(sp.next);
-  if (await getSession()) redirect(next);
+  const linkError = sp.error === "expired" || sp.error === "device" || sp.error === "link" ? sp.error : undefined;
+  const session = await getSession();
+  // Already signed in → straight on. EXCEPT after a failed email link: the error must be shown, and a
+  // session of another account is no proof the link worked (it must never lead to password reset).
+  if (session && !linkError) redirect(next);
   return (
     <div className="container-page grid min-h-[60vh] place-items-center py-10">
-      <LoginForm mode={env.auth.mode} next={next} linkError={sp.error === "expired" || sp.error === "device" || sp.error === "link" ? sp.error : undefined} />
+      <LoginForm mode={env.auth.mode} next={next} linkError={linkError} signedInAs={linkError && session ? (session.profile.email ?? "your account") : null} />
     </div>
   );
 }

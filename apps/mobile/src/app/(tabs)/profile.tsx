@@ -86,12 +86,59 @@ export default function ProfileTab() {
           />
         ) : null}
 
+        {auth.signedIn && auth.profile?.role === "customer" ? <DeleteAccountCard onSite={() => openSite("/delete-account")} /> : null}
+
         <Text style={[type.small, { textAlign: "center" }]}>
           {settings?.storeName ?? "Fresh Basket"} app v{version}
           {auth.mode === "dev" ? " · development server" : ""}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/** "Delete my account" (required by Google Play for apps with sign-up): type DELETE, then confirm. */
+function DeleteAccountCard({ onSite }: { onSite: () => void }) {
+  const auth = useAuth();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const ok = typed.trim().toUpperCase() === "DELETE";
+
+  const remove = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api("/api/me", { method: "DELETE", body: { confirm: "DELETE" } });
+      await auth.signOut().catch(() => undefined);
+    } catch (e) {
+      setMsg(errorMessage(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Delete account">
+      <Text style={type.small}>
+        Removes your login, profile, saved addresses and reviews. Past orders stay in the store’s records but are no longer linked to you.
+        This can’t be undone.
+      </Text>
+      <Pressable onPress={onSite} accessibilityRole="link">
+        <Text style={[type.small, { color: colors.leaf600, marginTop: 6 }]}>What gets deleted</Text>
+      </Pressable>
+      {!open ? (
+        <Button label="Delete my account" variant="danger" onPress={() => setOpen(true)} style={{ marginTop: 12, alignSelf: "flex-start" }} />
+      ) : (
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {msg ? <InlineMessage tone="danger">{msg}</InlineMessage> : null}
+          <TextField label="Type DELETE to confirm" value={typed} onChangeText={setTyped} autoCapitalize="characters" autoCorrect={false} />
+          <Button label="Permanently delete my account" variant="danger" loading={busy} disabled={!ok || busy} onPress={() => void remove()} fullWidth />
+          <Button label="Keep my account" variant="outline" disabled={busy} onPress={() => { setOpen(false); setTyped(""); setMsg(null); }} fullWidth />
+        </View>
+      )}
+    </Card>
   );
 }
 

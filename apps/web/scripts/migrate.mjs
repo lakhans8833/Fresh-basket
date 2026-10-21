@@ -13,6 +13,7 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { promoteVerifiedAdmins } from "./admin-bootstrap.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
@@ -110,22 +111,16 @@ try {
     await client.query(readFileSync(seedFile, "utf8"));
     await client.query("commit");
   }
-  // ADMIN_EMAILS (comma-separated): accounts the owner wants as admins. Already signed-up
-  // users with these emails get role 'admin' and, if still unconfirmed, a confirmed email.
+  // ADMIN_EMAILS (comma-separated): accounts the owner wants as admins. Only signed-up accounts whose
+  // email is CONFIRMED in Supabase Auth are promoted (matched on auth.users, joined by user id) — see
+  // scripts/admin-bootstrap.mjs. Unconfirmed accounts must click the confirmation email first.
   const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
   if (adminEmails.length) {
-    const hasAuth = (await client.query("select to_regclass('auth.users') is not null as ok")).rows[0].ok;
-    if (hasAuth) {
-      const c = await client.query(
-        "update auth.users set email_confirmed_at = coalesce(email_confirmed_at, now()) where lower(email) = any($1::text[]) returning email",
-        [adminEmails],
-      );
-      const r = await client.query(
-        "update public.profiles set role = 'admin' where lower(email) = any($1::text[]) and role <> 'admin' returning email",
-        [adminEmails],
-      );
-      console.log(`[migrate] ADMIN_EMAILS: ${c.rowCount} account(s) found, ${r.rowCount} promoted to admin`);
-    }
+    const { promoted, waitingForConfirmation } = await promoteVerifiedAdmins(client, adminEmails);
+    console.log(
+      `[migrate] ADMIN_EMAILS: ${promoted.length} promoted to admin` +
+        (waitingForConfirmation.length ? `, ${waitingForConfirmation.length} waiting for email confirmation (not promoted)` : ""),
+    );
   }
 
   console.log(`[migrate] done (${applied} new migration${applied === 1 ? "" : "s"})`);

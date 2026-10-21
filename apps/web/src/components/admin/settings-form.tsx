@@ -11,6 +11,7 @@ import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { errorMessage, serverFieldErrors, uploadImage, useAdminData } from "./use-admin-data";
 import { AdminOnly } from "./admin-context";
+import { useUnsavedGuard } from "./unsaved-guard";
 import { inputToPaise, paiseToInput } from "./money";
 import { Card, CardHeader, LoadError, LoadingRows, MoneyInput, PageHeader, Toggle } from "./ui";
 
@@ -21,6 +22,8 @@ interface Services {
   razorpayKeyIdSet: boolean;
   webhookSecretSet: boolean;
   cronSecretSet: boolean;
+  whatsappCloud?: boolean;
+  whatsappTemplates?: string[];
 }
 
 export function SettingsForm() {
@@ -65,6 +68,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
     defaultMinOrder: paiseToInput(initial.defaultMinOrder),
     slotDaysAhead: String(initial.slotDaysAhead),
     announcement: initial.announcement ?? "",
+    upiId: initial.upiId ?? "",
+    upiPayeeName: initial.upiPayeeName ?? "",
+    upiQrUrl: initial.upiQrUrl,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -72,6 +78,11 @@ function Editor({ initial }: { initial: StoreSettings }) {
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const qrRef = useRef<HTMLInputElement>(null);
+  // Unsaved-changes protection: compare with what was loaded / last saved.
+  const [baseline, setBaseline] = useState(() => JSON.stringify(f));
+  const dirty = JSON.stringify(f) !== baseline;
+  const guard = useUnsavedGuard({ dirty, saving, save: () => submit() });
   const set = (p: Partial<typeof f>) => {
     setF((x) => ({ ...x, ...p }));
     setSaved(false);
@@ -91,8 +102,23 @@ function Editor({ initial }: { initial: StoreSettings }) {
     }
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onQr(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setFormError(null);
+    try {
+      set({ upiQrUrl: await uploadImage(file) });
+    } catch (e) {
+      setFormError(errorMessage(e, "Upload failed."));
+    } finally {
+      setUploading(false);
+      if (qrRef.current) qrRef.current.value = "";
+    }
+  }
+
+  async function submit(e?: React.FormEvent): Promise<boolean> {
+    e?.preventDefault();
+    if (saving) return false; // no double submit
     setFormError(null);
     const errs: Record<string, string> = {};
     const minOrder = inputToPaise(f.defaultMinOrder);
@@ -107,6 +133,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
       address: f.address.trim() || null,
       supportHours: f.supportHours.trim() || null,
       announcement: f.announcement.trim() || null,
+      upiId: f.upiId.trim(),
+      upiPayeeName: f.upiPayeeName.trim() || null,
+      upiQrUrl: f.upiQrUrl || null,
       defaultMinOrder: minOrder === null || Number.isNaN(minOrder) ? 0 : minOrder,
       slotDaysAhead: days,
     });
@@ -119,16 +148,19 @@ function Editor({ initial }: { initial: StoreSettings }) {
     setErrors(errs);
     if (!r.success || Object.keys(errs).length) {
       setFormError("Please fix the highlighted fields.");
-      return;
+      return false;
     }
     setSaving(true);
     try {
       await api("/api/admin/settings", { method: "PUT", json: r.data });
       toast("Settings saved");
       setSaved(true);
+      setBaseline(JSON.stringify(f));
+      return true;
     } catch (err) {
       setErrors(serverFieldErrors(err));
       setFormError(errorMessage(err));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -150,7 +182,8 @@ function Editor({ initial }: { initial: StoreSettings }) {
   );
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-6">
+    <form onSubmit={(e) => void submit(e)} noValidate className="space-y-6">
+      {guard.dialog}
       {formError ? <Notice tone="error">{formError}</Notice> : null}
 
       <Card aria-labelledby="brand-h">
@@ -184,7 +217,18 @@ function Editor({ initial }: { initial: StoreSettings }) {
       </Card>
 
       <Card aria-labelledby="support-h">
-        <CardHeader id="support-h" title="Customer support" description="Shown in the footer and on the contact page." />
+        <CardHeader id="support-h" title="Customer support" description="Shown in the footer, on the contact page and on each order page (Call / WhatsApp / Email). Empty fields are simply hidden." />
+        {(() => {
+          const missing = [
+            !f.supportPhone.trim() && "Phone",
+            !f.whatsapp.trim() && "WhatsApp number",
+            !f.supportEmail.trim() && "Email",
+            !f.supportHours.trim() && "Support hours",
+          ].filter(Boolean) as string[];
+          return missing.length ? (
+            <Notice tone="info" className="mx-5 mt-5 sm:mx-6">Customers can&apos;t see these yet because they&apos;re empty: {missing.join(", ")}.</Notice>
+          ) : null;
+        })()}
         <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
           {text("supportPhone", "Phone", { type: "tel", inputMode: "tel", max: 20, placeholder: "+91 98765 43210" })}
           {text("whatsapp", "WhatsApp number", { type: "tel", inputMode: "tel", max: 20, placeholder: "919876543210", hint: "With country code, digits only" })}
@@ -211,12 +255,45 @@ function Editor({ initial }: { initial: StoreSettings }) {
         <div className="space-y-5 p-5 sm:p-6">
           <Toggle checked={f.codEnabled} onChange={(v) => set({ codEnabled: v })} label="Cash on delivery" description="Let customers pay in cash when the order arrives." />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Default minimum order" htmlFor="st-min" error={errors.defaultMinOrder} hint="Used where a delivery area has no minimum of its own">
+            <Field label="Default minimum order" htmlFor="st-min" error={errors.defaultMinOrder} hint="Store-wide minimum for every delivery area. If an area sets a higher minimum, the higher one applies. 0 = no store-wide minimum.">
               <MoneyInput id="st-min" value={f.defaultMinOrder} invalid={!!errors.defaultMinOrder} onChange={(e) => set({ defaultMinOrder: e.target.value })} />
             </Field>
             <Field label="Days of slots to show" htmlFor="st-days" error={errors.slotDaysAhead} hint="How far ahead customers can book (1–14)">
               <Input id="st-days" inputMode="numeric" value={f.slotDaysAhead} invalid={!!errors.slotDaysAhead} onChange={(e) => set({ slotDaysAhead: e.target.value.replace(/[^\d]/g, "") })} />
             </Field>
+          </div>
+        </div>
+      </Card>
+
+      <Card aria-labelledby="upi-h">
+        <CardHeader
+          id="upi-h"
+          title="UPI payments"
+          description="Customers can pay to this UPI ID at checkout and on WhatsApp orders. Each UPI order stays “payment pending” until you confirm the money arrived (Orders → order → Verify UPI payment). Leave the UPI ID empty to turn UPI off."
+        />
+        <div className="space-y-4 p-5 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="UPI ID" htmlFor="st-upi" error={errors.upiId} hint="e.g. yourname@okaxis — the account that receives the money">
+              <Input id="st-upi" value={f.upiId} invalid={!!errors.upiId} autoComplete="off" onChange={(e) => set({ upiId: e.target.value })} maxLength={120} />
+            </Field>
+            <Field label="Payee name (optional)" htmlFor="st-upi-name" hint="Shown in the customer's UPI app">
+              <Input id="st-upi-name" value={f.upiPayeeName} onChange={(e) => set({ upiPayeeName: e.target.value })} maxLength={60} />
+            </Field>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-ink-soft">Your UPI QR image (optional)</p>
+            <p className="text-xs text-muted">We also show a QR made from the UPI ID with the exact order amount. Upload your bank/UPI app QR if you want customers to see it too.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {f.upiQrUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded image
+                <img src={f.upiQrUrl} alt="UPI QR preview" className="h-28 w-28 rounded-lg border border-line bg-white object-contain p-1" />
+              ) : null}
+              <input ref={qrRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="st-upi-qr" onChange={(e) => onQr(e.target.files?.[0])} />
+              <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => qrRef.current?.click()}>
+                {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {f.upiQrUrl ? "Replace QR" : "Upload QR"}
+              </Button>
+              {f.upiQrUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => set({ upiQrUrl: null })}><X className="size-4" aria-hidden /> Remove</Button> : null}
+            </div>
           </div>
         </div>
       </Card>
@@ -265,6 +342,9 @@ function ServicesPanel({ s }: { s: Services }) {
             <li>Key ID: {s.razorpayKeyIdSet ? "set" : "not set"}</li>
             <li>Webhook secret: {s.webhookSecretSet ? "set" : "not set"}</li>
           </ul>
+        </ServiceRow>
+        <ServiceRow ok={Boolean(s.whatsappCloud && s.whatsappTemplates?.length)} title="WhatsApp order updates" status={s.whatsappCloud ? `WhatsApp Cloud API connected · ${s.whatsappTemplates?.length ?? 0} of 4 templates set` : "Off — no automatic WhatsApp messages"}>
+          Set <Env>WHATSAPP_CLOUD_ACCESS_TOKEN</Env>, <Env>WHATSAPP_CLOUD_PHONE_NUMBER_ID</Env> and the approved template names (<Env>WHATSAPP_TEMPLATE_ORDER_CONFIRMED</Env> etc.). Only customers who opt in get messages.
         </ServiceRow>
         <ServiceRow ok={s.cronSecretSet} title="Scheduled clean-up" status={s.cronSecretSet ? "Cron secret set" : "Cron secret not set"}>
           Unpaid online orders release their stock after the payment window. Set <Env>CRON_SECRET</Env> so your scheduler can call the clean-up job; it also runs whenever staff open the dashboard or orders.

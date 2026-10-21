@@ -6,8 +6,9 @@ import { createHash } from "node:crypto";
 
 /**
  * Razorpay webhook (configure in Dashboard → Webhooks with events payment.captured,
- * order.paid, payment.failed). Signature is verified on the raw body; each event is
- * stored once, so Razorpay's retries are harmless.
+ * order.paid, payment.failed and payment_link.paid). The X-Razorpay-Signature is verified on the
+ * raw body (invalid → 400); each event is stored once, so Razorpay's retries are harmless; a paid
+ * amount that differs from the order total is never marked paid.
  */
 export async function POST(req: Request) {
   if (env.payments.online !== "razorpay") return NextResponse.json({ error: "not configured" }, { status: 404 });

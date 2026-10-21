@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
+import { api } from "@/lib/client/api";
 import { Button, ButtonLink } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
 
-export function ResetPasswordForm({ signedIn, next = "/account" }: { signedIn: boolean; next?: string }) {
+export function ResetPasswordForm({
+  mode, email, next = "/account",
+}: { mode: "recovery" | "change" | "expired"; email: string | null; next?: string }) {
+  const signedIn = mode !== "expired";
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -32,6 +36,7 @@ export function ResetPasswordForm({ signedIn, next = "/account" }: { signedIn: b
       return;
     }
     setDone(true);
+    void api("/api/auth/recovery-done", { method: "POST" }).catch(() => undefined);
     setTimeout(() => {
       router.replace(next);
       router.refresh();
@@ -44,7 +49,9 @@ export function ResetPasswordForm({ signedIn, next = "/account" }: { signedIn: b
         <span className="grid size-12 place-items-center rounded-full bg-lime-100 text-forest-800"><KeyRound className="size-6" aria-hidden /></span>
         <div>
           <h1 className="text-[1.75rem] font-semibold leading-tight text-forest-900">Set a new password</h1>
-          <p className="text-sm text-muted">Choose a new password for your account.</p>
+          <p className="text-sm text-muted">
+            {email ? <>For <b className="text-ink" data-testid="password-account">{email}</b></> : "Choose a new password for your account."}
+          </p>
         </div>
       </div>
 
@@ -59,6 +66,12 @@ export function ResetPasswordForm({ signedIn, next = "/account" }: { signedIn: b
         <Notice tone="success" className="mt-6">Password updated. Taking you to your account…</Notice>
       ) : (
         <form onSubmit={submit} className="mt-6 space-y-4">
+          {mode === "change" ? (
+            <Notice tone="warning" title={`You're signed in as ${email ?? "this account"}`}>
+              This changes the password of <b>{email ?? "the signed-in account"}</b>. If you opened a password-reset email for a
+              different account, that link didn&apos;t work — sign out and ask for a new link for that account.
+            </Notice>
+          ) : null}
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Field label="New password" htmlFor="new-password" hint="At least 8 characters">
             <Input id="new-password" type="password" required minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />

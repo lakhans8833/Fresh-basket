@@ -1,7 +1,9 @@
 import "server-only";
 import type { Address, AddressInput } from "@freshbasket/shared";
-import { asUser } from "./db";
-import { notFound } from "./http";
+import { asUser, tx } from "./db";
+import { conflict, forbidden, HttpError, notFound } from "./http";
+import { createClient } from "@supabase/supabase-js";
+import { env } from "./env";
 
 type Row = {
   id: string; label: string; full_name: string; phone: string; line1: string; line2: string | null; landmark: string | null;
@@ -53,4 +55,49 @@ export async function updateProfile(userId: string, d: { fullName: string; phone
   return asUser(userId, async (c) => {
     await c.query("update profiles set full_name = $1, phone = $2 where id = auth.uid()", [d.fullName, d.phone ?? null]);
   });
+}
+
+/** Orders that are still being handled: the account can't be deleted until they're finished. */
+const OPEN_ORDER_SQL = `user_id = $1 and (status in ('pending_payment','pending_confirmation','placed','packed','out_for_delivery') or payment_status = 'refund_pending')`;
+
+/**
+ * Self-service account deletion (Google Play requires it for apps with accounts).
+ * Deletes the login (auth.users) and, through it, the profile, saved addresses, reviews and coupon
+ * history. Past orders are kept for the store's accounts but no longer linked to anyone; support
+ * messages lose their link too. Refused while an order is still open, and for staff/admin accounts
+ * (so the store can't lose its last admin by accident).
+ */
+export async function deleteAccount(userId: string): Promise<{ ordersKept: number }> {
+  const r = await tx(async (c) => {
+    const p = await c.query<{ role: string }>("select role from public.profiles where id = $1 for update", [userId]);
+    if (p.rows[0] && p.rows[0].role !== "customer") throw forbidden("Staff and admin accounts can't be deleted here. Ask the store owner to remove your access first.");
+    const open = await c.query<{ order_number: string }>(`select order_number from public.orders where ${OPEN_ORDER_SQL} order by created_at`, [userId]);
+    if (open.rows.length) {
+      throw conflict(`You have an order in progress (${open.rows.map((r) => r.order_number).join(", ")}). You can delete your account once it's delivered or cancelled.`, undefined, "OPEN_ORDERS");
+    }
+    const detached = await c.query<{ id: string }>("update public.orders set user_id = null where user_id = $1 returning id", [userId]);
+    const orderIds = detached.rows.map((o) => o.id);
+    // Deleting the login cascades to the profile, addresses, reviews and coupon history.
+    await c.query("savepoint del_user");
+    try {
+      await c.query("delete from auth.users where id = $1", [userId]);
+      return { orderIds, viaAdminApi: false };
+    } catch (e) {
+      // A database role without rights on auth.users (some Supabase setups): the Auth admin API does it
+      // after this transaction (it can't wait on rows this transaction has locked).
+      if ((e as { code?: string }).code !== "42501" || env.auth.mode !== "supabase" || !env.storage.serviceRoleKey) throw e;
+      await c.query("rollback to savepoint del_user");
+      return { orderIds, viaAdminApi: true };
+    }
+  });
+  if (r.viaAdminApi) {
+    const sb = createClient(env.auth.supabaseUrl!, env.storage.serviceRoleKey!, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error } = await sb.auth.admin.deleteUser(userId);
+    if (error) {
+      // Nothing was deleted: give the orders back to the account.
+      await tx((c) => c.query("update public.orders set user_id = $1 where id = any($2::uuid[]) and user_id is null", [userId, r.orderIds]));
+      throw new HttpError(502, "Your account couldn't be deleted right now. Please try again in a minute.");
+    }
+  }
+  return { ordersKept: r.orderIds.length };
 }

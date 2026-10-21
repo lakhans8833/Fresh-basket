@@ -23,7 +23,7 @@ const bodySchema = z.object({
 /** Create/update a review (server checks for a delivered order; it then waits for Admin approval). */
 export const POST = route(async (req) => {
   const s = await requireUser();
-  rateLimit(`review:${s.userId}`, 10, 60_000);
+  await rateLimit(`review:${s.userId}`, 10, 60_000);
   const b = await parseBody(req, bodySchema);
   return json(await submitReview(s.userId, b.productId, b.rating, b.comment ?? null));
 });

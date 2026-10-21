@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useId } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
-import { formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
+import { addablePacks, formatINR, formatWeight, MAX_QTY_PER_LINE, sharesWeightStock, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
@@ -11,18 +12,26 @@ import { QuantityStepper } from "./quantity-stepper";
 import { cn } from "../ui/cn";
 import { defaultVariant } from "./default-variant";
 import { DiscountBadge, percentOff } from "../ui/price";
+import { WhatsAppIcon } from "../ui/whatsapp-icon";
 
-export function ProductPurchase({ product }: { product: ProductDetail }) {
+export function ProductPurchase({ product, whatsappEnabled = false }: { product: ProductDetail; whatsappEnabled?: boolean }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
+  const router = useRouter();
   const first = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(first?.id);
   const [qty, setQty] = useState(1);
-  const { add, quantityOf, hydrated } = useCart();
+  const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const variant = product.variants.find((v) => v.id === variantId) ?? first;
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
   const out = variant.stock <= 0;
   const inCart = hydrated ? quantityOf(variant.id) : 0;
-  const maxAddable = Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart);
+  // Weight products: all pack sizes share one total, so sizes already in the cart count too.
+  const maxAddable = addablePacks(product, variant.id, (id) => (hydrated ? quantityOf(id) : 0), MAX_QTY_PER_LINE);
+  const shared = sharesWeightStock(product.stockGrams, product.variants);
+  const otherSizesInCart = shared && hydrated ? product.variants.some((v) => v.id !== variant.id && quantityOf(v.id) > 0) : false;
 
   return (
     <div className="mt-6">
@@ -39,7 +48,8 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
 
       <fieldset className="mt-6">
         <legend className="text-sm font-semibold text-ink-soft">Choose weight</legend>
-        <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {/* 4 sizes sit in one row (2×2 on phones) instead of 3 + a lonely 4th. */}
+        <div className={cn("mt-2.5 grid grid-cols-2 gap-2.5", product.variants.length === 4 ? "sm:grid-cols-4" : product.variants.length === 2 ? "" : "sm:grid-cols-3")}>
           {product.variants.map((v) => {
             const on = v.id === variant.id;
             return (
@@ -53,7 +63,7 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
               >
                 <input
                   type="radio"
-                  name="variant"
+                  name={`${rg}-variant`}
                   value={v.id}
                   checked={on}
                   onChange={() => { setVariantId(v.id); setQty(1); }}
@@ -87,6 +97,9 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           <span className="font-medium text-leaf-600">In stock</span>
         )}
         {inCart > 0 ? <span className="text-muted"> · {inCart} already in your cart</span> : null}
+        {!out && maxAddable === 0 && otherSizesInCart ? (
+          <span className="block text-muted">Other sizes in your cart already use the {formatWeight(product.stockGrams ?? 0)} available.</span>
+        ) : null}
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -112,6 +125,26 @@ export function ProductPurchase({ product }: { product: ProductDetail }) {
           </ButtonLink>
         ) : null}
       </div>
+      {whatsappEnabled && !out ? (
+        <button
+          type="button"
+          onClick={() => {
+            // Makes the cart hold the chosen quantity of this pack (never less than already there), then
+            // opens the WhatsApp order form. Before the cart has loaded, just open the form.
+            if (!hydrated) return router.push("/order");
+            if (inCart > 0) {
+              if (qty > inCart) setQuantity(variant.id, Math.min(qty, inCart + maxAddable));
+              return router.push("/order");
+            }
+            const n = Math.min(qty, maxAddable);
+            if (n > 0) add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+            router.push("/order");
+          }}
+          className="mt-3 inline-flex h-12 w-full min-w-56 items-center justify-center gap-2 rounded-full bg-whatsapp-dark px-6 font-semibold text-white transition-colors hover:bg-forest-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime-200 sm:w-auto"
+        >
+          <WhatsAppIcon className="size-5" /> Order on WhatsApp
+        </button>
+      ) : null}
       <p className="mt-4 text-xs text-muted">
         Fresh produce varies in size; you&apos;re charged the listed price for the selected weight. See our{" "}
         <Link href="/returns" className="underline underline-offset-2">returns policy</Link>.

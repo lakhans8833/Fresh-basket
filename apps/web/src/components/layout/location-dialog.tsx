@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Home, LocateFixed, MapPin, X } from "lucide-react";
-import { isValidPincode, formatINR, type Address, type DeliveryArea } from "@freshbasket/shared";
+import { addDays, formatINR, formatSlotTime, istDateString, isValidPincode, type Address, type DeliveryArea, type SlotOption } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useSession } from "../account/session-context";
 import { checkPincode, pincodeFromDevice, savedAddresses } from "./delivery-location";
@@ -10,11 +10,19 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
 
+/** "Today" / "Tomorrow" / "Mon 20 Oct" for an IST calendar date. */
+function slotDay(date: string) {
+  const today = istDateString(new Date());
+  if (date === today) return "Today";
+  if (date === addDays(today, 1)) return "Tomorrow";
+  return new Date(`${date}T00:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+}
+
 export function LocationDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const { location, setLocation } = useCart();
   const [pin, setPin] = useState(location?.pincode ?? "");
-  const [state, setState] = useState<{ status: "idle" | "loading" | "locating" | "ok" | "no" | "error"; area?: DeliveryArea | null; message?: string }>({ status: "idle" });
+  const [state, setState] = useState<{ status: "idle" | "loading" | "locating" | "ok" | "no" | "error"; area?: DeliveryArea | null; message?: string; nextSlots?: SlotOption[] }>({ status: "idle" });
   const { profile } = useSession();
   const [addresses, setAddresses] = useState<Address[]>([]);
 
@@ -58,7 +66,7 @@ export function LocationDialog({ open, onClose }: { open: boolean; onClose: () =
       const r = await checkPincode(pincode);
       if (r.serviceable) {
         setLocation({ pincode: r.area.pincode, areaName: r.area.areaName, city: r.area.city });
-        setState({ status: "ok", area: r.area });
+        setState({ status: "ok", area: r.area, nextSlots: r.nextSlots });
       } else {
         setState({ status: "no" });
       }
@@ -154,9 +162,18 @@ export function LocationDialog({ open, onClose }: { open: boolean; onClose: () =
         <div className="mt-4 min-h-6">
           {state.status === "ok" && state.area ? (
             <Notice tone="success" title={`We deliver to ${state.area.areaName}, ${state.area.city}`}>
-              Delivery fee {state.area.fee ? formatINR(state.area.fee) : "free"}
-              {state.area.freeAbove !== null ? ` · free above ${formatINR(state.area.freeAbove)}` : ""}
-              {state.area.minOrder ? ` · minimum order ${formatINR(state.area.minOrder)}` : ""}
+              <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                <dt className="text-ink-soft">Delivery fee</dt>
+                <dd className="font-medium">{state.area.fee ? formatINR(state.area.fee) : "Free"}{state.area.freeAbove !== null ? ` · free above ${formatINR(state.area.freeAbove)}` : ""}</dd>
+                <dt className="text-ink-soft">Minimum order</dt>
+                <dd className="font-medium">{state.area.minOrder ? formatINR(state.area.minOrder) : "None"}</dd>
+                <dt className="text-ink-soft">Next slots</dt>
+                <dd className="font-medium">
+                  {state.nextSlots?.length
+                    ? state.nextSlots.map((o) => `${slotDay(o.date)} ${formatSlotTime(o.startTime)}–${formatSlotTime(o.endTime)}`).join(" · ")
+                    : "No free slot in the next few days — you can still order on WhatsApp or check back later."}
+                </dd>
+              </dl>
             </Notice>
           ) : state.status === "no" ? (
             <Notice tone="warning" title="We don't deliver to this PIN code yet">

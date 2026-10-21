@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { MAX_LINES, MAX_QTY_PER_LINE } from "./pricing";
 import { isValidIndianMobile, normalizePhone, pincodeStateMessage, PINCODE_REGEX, stateMatchesPincode } from "./pincode";
-import { ORDER_STATUSES } from "./orderStatus";
+import { ORDER_STATUSES, UNAVAILABLE_ITEM_PREFERENCES } from "./orderStatus";
+import { UPI_ID_REGEX } from "./upi";
+import { whatsappCustomerSchema } from "./whatsapp";
 
 const uuid = z.uuid();
 const trimmed = (max: number) => z.string().trim().max(max);
@@ -53,8 +55,12 @@ export const placeOrderSchema = z.object({
   saveAddress: z.boolean().optional().default(false),
   slotId: uuid,
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  paymentMethod: z.enum(["cod", "razorpay", "mock"]),
+  paymentMethod: z.enum(["cod", "razorpay", "mock", "upi"]),
   customerNote: trimmed(300).optional().nullable(),
+  /** If an item can't be supplied: call first (default) or remove + refund. Never auto-substitute. */
+  unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
+  /** Customer ticked "Send me order updates on WhatsApp". */
+  whatsappUpdates: z.boolean().optional().default(false),
   /** Client-generated key so a double-click or retry never creates two orders. */
   idempotencyKey: z.string().min(8).max(80),
 }).refine((v) => v.addressId || v.address, { message: "Choose or enter a delivery address", path: ["address"] });
@@ -125,10 +131,15 @@ export type AdminBannerInput = z.infer<typeof adminBannerSchema>;
 
 export const adminVariantSchema = z.object({
   id: uuid.optional(),
-  label: trimmed(30).min(1),
+  // Any run of spaces (incl. non-breaking spaces pasted from websites) becomes one plain space, so the
+  // site and the database read "500 g" the same way.
+  label: trimmed(30).min(1).transform((s) => s.replace(/\s+/g, " ")),
   price: z.number().int().min(0).max(10_000_000),
   mrp: z.number().int().min(0).max(10_000_000).optional().nullable(),
   stock: z.number().int().min(0).max(1_000_000),
+  /** Stock shown when the form was opened. The server applies only the change (stock - stockLoaded),
+   *  so orders placed while the form was open aren't undone. Leave out to set stock as given. */
+  stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
   sortOrder: z.number().int().min(0).max(99).default(0),
   active: z.boolean().default(true),
 });
@@ -238,4 +249,34 @@ export const adminSettingsSchema = z.object({
   defaultMinOrder: z.number().int().min(0),
   slotDaysAhead: z.number().int().min(1).max(14),
   announcement: trimmed(160).optional().nullable(),
+  /** UPI ID customers pay to (e.g. ramavatar@okaxis). Leave empty to turn UPI off. */
+  upiId: z
+    .union([z.string().trim().regex(UPI_ID_REGEX, "Enter a UPI ID like name@bank"), z.literal("")])
+    .optional()
+    .nullable(),
+  upiPayeeName: trimmed(60).optional().nullable(),
+  upiQrUrl: z.string().max(500).optional().nullable(),
 });
+
+/** UPI reference / UTR typed by the customer after paying (a claim to check, not proof). */
+export const upiReferenceSchema = z.object({
+  reference: z
+    .string()
+    .transform((s) => s.replace(/\s+/g, "").toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{6,35}$/, "Enter the UPI reference / UTR number from your payment app (6–35 letters or digits)")),
+});
+
+/** "Order on WhatsApp": the order is saved on the server first, then WhatsApp opens with its details. */
+export const whatsappOrderSchema = z.object({
+  items: z.array(cartLineSchema).min(1).max(MAX_LINES),
+  customer: whatsappCustomerSchema,
+  paymentMethod: z.enum(["cod", "upi", "razorpay_link"]),
+  couponCode: trimmed(32).toUpperCase().optional().nullable(),
+  whatsappUpdates: z.boolean().optional().default(false),
+  unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
+  idempotencyKey: z.string().min(8).max(80),
+  /** Delivery date + slot chosen on the WhatsApp order page (both or neither). */
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  slotId: uuid.optional().nullable(),
+}).refine((v) => Boolean(v.deliveryDate) === Boolean(v.slotId), { message: "Choose a delivery date and time slot.", path: ["slotId"] });
+export type WhatsAppOrderInput = z.infer<typeof whatsappOrderSchema>;

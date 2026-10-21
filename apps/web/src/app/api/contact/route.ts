@@ -4,7 +4,7 @@ import { query } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export const POST = route(async (req) => {
-  rateLimit(`contact:${clientIp(req)}`, 5, 10 * 60_000);
+  await rateLimit(`contact:${clientIp(req)}`, 5, 10 * 60_000);
   const d = await parseBody(req, contactSchema);
   const s = await getSession();
   await query(

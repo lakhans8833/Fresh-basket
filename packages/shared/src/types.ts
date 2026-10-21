@@ -1,5 +1,5 @@
 import type { Paise } from "./money";
-import type { OrderStatus, PaymentMethod, PaymentStatus } from "./orderStatus";
+import type { OrderStatus, PaymentMethod, PaymentStatus, UnavailableItemPreference } from "./orderStatus";
 import type { Quote } from "./pricing";
 
 /** Shapes returned by the HTTP API (apps/web/src/app/api). Shared by web and mobile. */
@@ -20,6 +20,13 @@ export interface StoreSettings {
   defaultMinOrder: Paise;
   slotDaysAhead: number;
   announcement: string | null;
+  /** Store UPI ID for UPI payments (verified by staff); null = UPI not offered. */
+  upiId: string | null;
+  upiPayeeName: string | null;
+  /** Optional QR image uploaded in Admin → Settings. */
+  upiQrUrl: string | null;
+  /** Razorpay Payment Links can be created (Razorpay keys configured on the server). */
+  paymentLinks: boolean;
 }
 
 export interface Category {
@@ -54,6 +61,11 @@ export interface ProductSummary {
   /** min variant price, for sorting/display */
   fromPrice: Paise;
   inStock: boolean;
+  /**
+   * Weight products: the ONE shared total in grams that every pack size draws from (null for
+   * per-pack products like "1 bunch"). Use addablePacks() — never add up the packs' stock.
+   */
+  stockGrams: number | null;
 }
 
 export interface ProductDetail extends ProductSummary {
@@ -104,7 +116,14 @@ export interface DeliveryArea {
   city: string;
   fee: Paise;
   freeAbove: Paise | null;
+  /**
+   * The minimum order customers must reach here. In everything the shop shows (PIN check, cart,
+   * checkout, delivery policy) this is the EFFECTIVE minimum: the higher of the area's own minimum and
+   * the store-wide minimum (Admin → Settings) — the same rule checkout enforces (effectiveMinOrder).
+   */
   minOrder: Paise;
+  /** The area's own minimum as set in Admin → Delivery (before the store-wide minimum is applied). */
+  areaMinOrder?: Paise;
   active: boolean;
 }
 
@@ -161,6 +180,16 @@ export interface Order {
   createdAt: string;
   reservationExpiresAt: string | null;
   customerNote: string | null;
+  /** What to do if an item can't be supplied (null on orders placed before this was asked). */
+  unavailableItems: UnavailableItemPreference | null;
+  /** "web" checkout or "whatsapp" order. */
+  channel: "web" | "whatsapp";
+  /** UTR the customer reported for a UPI payment (not proof of payment). */
+  upiReference: string | null;
+  /** Razorpay Payment Link for this order (while payment is pending). */
+  paymentLinkUrl: string | null;
+  /** Customer agreed to WhatsApp order updates. */
+  whatsappUpdates: boolean;
 }
 
 export interface QuoteResponse {
@@ -169,6 +198,8 @@ export interface QuoteResponse {
   area: DeliveryArea | null;
   /** Free-delivery amount shared by every active delivery area (shown before a PIN code is chosen); null if they differ or none is set. */
   commonFreeAbove?: number | null;
+  /** Effective minimum order: the area's (see DeliveryArea.minOrder) once a PIN is known, else the store-wide one. */
+  minOrder?: number;
 }
 
 export interface PlaceOrderResponse {

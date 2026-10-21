@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatINR } from "@shared/money";
-import { canCustomerCancel, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS } from "@shared/orderStatus";
+import { canCustomerCancel, ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL, TRACKING_STEPS, type PaymentMethod } from "@shared/orderStatus";
 import type { Order } from "@shared/types";
 import { AddressSummary } from "@/components/AddressSummary";
 import { Button } from "@/components/Button";
@@ -24,7 +24,9 @@ import { openPayPage } from "@/lib/payment";
 import { colors, fonts, radius, type } from "@/theme";
 
 const POLL_MS = 4000;
-const METHOD_LABEL = { cod: "Cash on delivery", razorpay: "Online payment", mock: "Test payment (development)" } as const;
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  cod: "Cash on delivery", razorpay: "Online payment", mock: "Test payment (development)", upi: "UPI", razorpay_link: "Payment link",
+};
 
 export default function OrderDetail() {
   const { id, placed } = useLocalSearchParams<{ id: string; placed?: string }>();

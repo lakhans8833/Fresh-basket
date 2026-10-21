@@ -109,11 +109,12 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
         subtitle={<span className="font-medium">{storeConfig.serviceArea}</span>}
         image="/images/site/banner-market.webp"
         script={storeConfig.secondaryTagline}
+        as="h2" // the listing title below ("All products" / category name) is the page's one h1
       />
 
       <div className="container-page pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-ink-soft">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 [&_a]:-my-2.5 [&_a]:py-2.5 text-sm text-ink-soft">
             <Link href="/" className="inline-flex items-center gap-1.5 hover:text-forest-800"><Home className="size-4 text-forest-800" aria-hidden /> Home</Link>
             <ChevronRight className="size-3.5" aria-hidden />
             {f.category ? (
@@ -232,8 +233,8 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
             {whatsapp ? (
               <div className="overflow-hidden rounded-[var(--radius-card)] bg-forest-800 p-5 text-white">
                 <p className="font-script text-[2rem] font-bold leading-[0.95]">Eat Fresh,<br />Stay Healthy</p>
-                <p className="mt-2 text-sm text-white/80">Add items to your cart and send the order on WhatsApp in one tap.</p>
-                <Link href="/cart" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-forest-800 hover:bg-lime-100">
+                <p className="mt-2 text-sm text-white/80">Add items to your cart, choose a delivery slot and order on WhatsApp.</p>
+                <Link href="/order" className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-forest-800 hover:bg-lime-100">
                   <WhatsAppIcon className="size-4 text-whatsapp-dark" /> Order on WhatsApp
                 </Link>
               </div>

@@ -38,6 +38,7 @@ export async function adminListProducts(q?: string | null) {
   }
   return query(
     `select p.id, p.slug, p.name, p.active, p.featured, p.seasonal, c.name as "categoryName",
+            p.stock_grams::float8 as "stockGrams",
             (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as "imageUrl",
             (select coalesce(json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'stock', v.stock, 'active', v.active) order by v.sort_order), '[]')
                from product_variants v where v.product_id = p.id) as variants
@@ -102,8 +103,12 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
     for (const [i, v] of d.variants.entries()) {
       if (v.id) {
         const r = await c.query(
-          "update product_variants set label=$1, price=$2, mrp=$3, stock=$4, sort_order=$5, active=$6 where id=$7 and product_id=$8",
-          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId],
+          // Stock: apply only what the admin changed, on top of today's stock (sales meanwhile stay counted).
+          `update product_variants set label=$1, price=$2, mrp=$3,
+                  stock = case when $9::int is null then $4 else greatest(0, stock + ($4 - $9::int)) end,
+                  sort_order=$5, active=$6
+            where id=$7 and product_id=$8`,
+          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, v.stockLoaded ?? null],
         );
         if (r.rowCount === 1) {
           keep.push(v.id);
@@ -124,7 +129,8 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
     );
     await c.query("update product_variants set active = false where product_id = $1 and not (id = any($2::uuid[]))", [productId, keep]);
     if (d.stockGrams !== undefined) {
-      if (d.stockGrams !== null && d.variants.some((v) => packGrams(v.label) === null)) {
+      // Only sizes on sale matter: a hidden size without a weight is kept for old orders, not sold.
+      if (d.stockGrams !== null && d.variants.some((v) => v.active !== false && packGrams(v.label) === null)) {
         throw badRequest("Total stock in kg only works when every option is a weight like “500 g” or “1 kg”.");
       }
       // Setting a total re-derives every weight pack's stock (database trigger).

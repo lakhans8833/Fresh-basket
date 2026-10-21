@@ -9,6 +9,7 @@ import {
   type Order, type PlaceOrderResponse,
 } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
+import { buyAgain } from "./buy-again";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
@@ -40,21 +41,12 @@ export function OrderHistory({ orders }: { orders: Order[] }) {
     setBusy(`reorder:${order.id}`);
     setError(null);
     try {
-      const r = await api<{ items: { variantId: string; quantity: number; productSlug: string }[]; skipped: string[] }>(`/api/orders/${order.id}/reorder`, { method: "POST" });
-      if (!r.items.length) {
+      const added = await buyAgain(order, { lines, add });
+      if (!added) {
         toast("None of these items are available right now", "error");
         setBusy(null);
         return;
       }
-      for (const it of r.items) {
-        const src = order.items.find((i) => i.variantId === it.variantId);
-        if (!src) continue;
-        const existing = lines.find((l) => l.variantId === it.variantId)?.quantity ?? 0;
-        if (it.quantity > existing) {
-          add({ variantId: it.variantId, productName: src.productName, productSlug: it.productSlug, variantLabel: src.variantLabel, imageUrl: src.imageUrl, priceHint: src.unitPrice }, it.quantity - existing);
-        }
-      }
-      toast(r.skipped.length ? `Added ${r.items.length} item${r.items.length === 1 ? "" : "s"}. Not available: ${r.skipped.join(", ")}` : "Items added to your cart");
       router.push("/cart");
     } catch (e) {
       setError((e as Error).message);
@@ -130,8 +122,8 @@ export function OrderHistory({ orders }: { orders: Order[] }) {
                         <CreditCard className="size-4" aria-hidden /> Complete payment
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="lime" loading={busy === `reorder:${o.id}`} disabled={!!busy} onClick={() => reorder(o)} aria-label={`Reorder items from order ${o.orderNumber}`}>
-                      <RotateCcw className="size-4" aria-hidden /> Reorder
+                    <Button size="sm" variant="lime" loading={busy === `reorder:${o.id}`} disabled={!!busy} onClick={() => reorder(o)} aria-label={`Buy again: add the items from order ${o.orderNumber} to your cart`}>
+                      <RotateCcw className="size-4" aria-hidden /> Buy again
                     </Button>
                     <ButtonLink href={`/orders/${o.id}`} size="sm" variant="outline" aria-label={`View or track order ${o.orderNumber}`}>
                       View / track <ArrowRight className="size-4" aria-hidden />
