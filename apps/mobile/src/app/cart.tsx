@@ -245,6 +245,7 @@ const styles = StyleSheet.create({
   couponRow: { flexDirection: "row", gap: 10, alignItems: "center" },
   couponInput: {
     flex: 1,
+    minWidth: 0, // let the field shrink on narrow phones so "Apply" stays on screen
     minHeight: HIT,
     borderRadius: radius.pill,
     borderWidth: 1,

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fresh Basket",
+    "name": "Ram Avatar Fresh Basket",
     "slug": "fresh-basket",
     "version": "1.0.0",
     "scheme": "freshbasket",
@@ -10,17 +10,21 @@
     "backgroundColor": "#fbf9f3",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.freshbasket.app",
-      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+      "bundleIdentifier": "com.ramavatar.freshbasket",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "buildNumber": "1"
     },
     "android": {
-      "package": "com.freshbasket.app",
+      "package": "com.ramavatar.freshbasket",
       "adaptiveIcon": {
         "backgroundColor": "#14301f",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -43,6 +47,8 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

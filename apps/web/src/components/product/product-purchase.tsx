@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useId } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
 import { addablePacks, formatINR, formatWeight, MAX_QTY_PER_LINE, sharesWeightStock, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
@@ -15,6 +15,9 @@ import { DiscountBadge, percentOff } from "../ui/price";
 import { WhatsAppIcon } from "../ui/whatsapp-icon";
 
 export function ProductPurchase({ product, whatsappEnabled = false }: { product: ProductDetail; whatsappEnabled?: boolean }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const router = useRouter();
   const first = defaultVariant(product.variants);
   const [variantId, setVariantId] = useState(first?.id);
@@ -60,7 +63,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
               >
                 <input
                   type="radio"
-                  name="variant"
+                  name={`${rg}-variant`}
                   value={v.id}
                   checked={on}
                   onChange={() => { setVariantId(v.id); setQty(1); }}

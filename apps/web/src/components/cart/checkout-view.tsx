@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useId } from "react";
 import { ArrowRight, Banknote, CreditCard, FlaskConical, Lock, MapPin, Plus, ShoppingBasket, CalendarClock, QrCode } from "lucide-react";
 import { formatINR, formatSlotTime, pincodeStateMessage, stateMatchesPincode, type Address, type PlaceOrderResponse, type SlotOption, type UnavailableItemPreference } from "@freshbasket/shared";
 import { UnavailableItemsChoice } from "./unavailable-items-choice";
@@ -36,6 +36,9 @@ function dayLabel(date: string, today: string) {
 }
 
 export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const router = useRouter();
   const cart = useCart();
   const { lines, hydrated, couponCode } = cart;
@@ -208,7 +211,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                 <div role="radiogroup" aria-label="Saved addresses" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {addresses.map((a) => (
                     <label key={a.id} className={cn("cursor-pointer rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === a.id ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
-                      <input type="radio" name="address" className="sr-only" checked={addressId === a.id} onChange={() => setAddressId(a.id)} />
+                      <input type="radio" name={`${rg}-address`} className="sr-only" checked={addressId === a.id} onChange={() => setAddressId(a.id)} />
                       <span className="flex items-center gap-2 font-semibold text-ink">
                         {a.label}
                         {a.isDefault ? <span className="rounded-full bg-sage-100 px-2 py-0.5 text-[0.6875rem] font-medium text-muted">Default</span> : null}
@@ -223,7 +226,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                     </label>
                   ))}
                   <label className={cn("flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 text-sm font-semibold transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === "new" ? "border-leaf-500 bg-lime-50 text-forest-900" : "border-line text-forest-800 hover:border-forest-700/30")}>
-                    <input type="radio" name="address" className="sr-only" checked={addressId === "new"} onChange={() => setAddressId("new")} />
+                    <input type="radio" name={`${rg}-address`} className="sr-only" checked={addressId === "new"} onChange={() => setAddressId("new")} />
                     <Plus className="size-4" aria-hidden /> New address
                   </label>
                 </div>
@@ -266,7 +269,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                 <div role="radiogroup" aria-label="Time slot" className="grid gap-2.5 sm:grid-cols-3">
                   {slots.filter((s) => s.date === date).map((s) => (
                     <label key={s.slotId} className={cn("rounded-2xl border-2 p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", !s.available ? "cursor-not-allowed border-line bg-sage-50 text-muted" : slotId === s.slotId ? "cursor-pointer border-leaf-500 bg-lime-50" : "cursor-pointer border-line hover:border-forest-700/30")}>
-                      <input type="radio" name="slot" className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => setSlotId(s.slotId)} />
+                      <input type="radio" name={`${rg}-slot`} className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => setSlotId(s.slotId)} />
                       <span className="block font-semibold text-ink">{s.label}</span>
                       <span className="block tabular-nums text-ink-soft">{formatSlotTime(s.startTime)} – {formatSlotTime(s.endTime)}</span>
                       {!s.available ? <span className="text-xs">Closed or full</span> : null}
@@ -289,7 +292,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                     const Icon = info.icon;
                     return (
                       <label key={m} className={cn("flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", method === m ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
-                        <input type="radio" name="method" className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
+                        <input type="radio" name={`${rg}-method`} className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
                         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-forest-800 ring-1 ring-line"><Icon className="size-5" aria-hidden /></span>
                         <span>
                           <span className="block font-semibold text-ink">{info.title}</span>

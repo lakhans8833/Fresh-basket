@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { formatSlotTime, type SlotOption } from "@freshbasket/shared";
 import { cn } from "../ui/cn";
 
@@ -14,6 +15,9 @@ export function dayLabel(date: string, today: string) {
 export function SlotPicker({
   slots, date, slotId, onChange,
 }: { slots: SlotOption[]; date: string | null; slotId: string | null; onChange: (date: string, slotId: string | null) => void }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const dates = [...new Set(slots.map((s) => s.date))];
   const today = dates[0] ?? "";
   return (
@@ -40,7 +44,7 @@ export function SlotPicker({
       <div role="radiogroup" aria-label="Time slot" className="grid gap-2.5 sm:grid-cols-3">
         {slots.filter((s) => s.date === date).map((s) => (
           <label key={s.slotId} className={cn("rounded-2xl border-2 p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", !s.available ? "cursor-not-allowed border-line bg-sage-50 text-muted" : slotId === s.slotId ? "cursor-pointer border-leaf-500 bg-lime-50" : "cursor-pointer border-line hover:border-forest-700/30")}>
-            <input type="radio" name="slot" className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => onChange(s.date, s.slotId)} />
+            <input type="radio" name={`${rg}-slot`} className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => onChange(s.date, s.slotId)} />
             <span className="block font-semibold text-ink">{s.label}</span>
             <span className="block tabular-nums text-ink-soft">{formatSlotTime(s.startTime)} – {formatSlotTime(s.endTime)}</span>
             {!s.available ? <span className="text-xs">Closed or full</span> : null}

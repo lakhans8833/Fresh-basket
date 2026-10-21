@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useId } from "react";
 import { GalleryHorizontalEnd, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { adminBannerSchema, BANNER_THEMES, type PromoBanner } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
@@ -139,6 +139,9 @@ function Inner() {
 }
 
 function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner | null; nextSort: number; onCancel: () => void; onSaved: (created: boolean) => Promise<void> }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [subtitle, setSubtitle] = useState(initial?.subtitle ?? "");
   const [linkUrl, setLinkUrl] = useState(initial?.linkUrl ?? "/deals");
@@ -217,7 +220,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
         <div className="flex flex-wrap gap-2">
           {([["strip", "Offer strip (cards under the slider)"], ["hero", "Home hero slider (big slide)"]] as const).map(([v, label]) => (
             <label key={v} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", placement === v ? "border-forest-800 bg-lime-50" : "border-line")}>
-              <input type="radio" name="placement" value={v} checked={placement === v} onChange={() => setPlacement(v)} className="sr-only" />
+              <input type="radio" name={`${rg}-placement`} value={v} checked={placement === v} onChange={() => setPlacement(v)} className="sr-only" />
               {label}
             </label>
           ))}
@@ -258,7 +261,7 @@ function BannerForm({ initial, nextSort, onCancel, onSaved }: { initial: Banner 
         <div className="mt-1.5 flex flex-wrap gap-2">
           {BANNER_THEMES.map((t) => (
             <label key={t} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", theme === t ? "border-forest-800" : "border-line")}>
-              <input type="radio" name="theme" value={t} checked={theme === t} onChange={() => setTheme(t)} className="sr-only" />
+              <input type="radio" name={`${rg}-theme`} value={t} checked={theme === t} onChange={() => setTheme(t)} className="sr-only" />
               <span className={cn("size-4 rounded-full border border-line", THEME_SWATCH[t])} aria-hidden /> {THEME_LABEL[t]}
             </label>
           ))}

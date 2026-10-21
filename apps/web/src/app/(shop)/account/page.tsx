@@ -4,6 +4,7 @@ import { listAddresses } from "@/lib/account";
 import { requireAccountSession } from "./require-session";
 import { ProfileForm } from "@/components/account/profile-form";
 import { AccountOverview } from "@/components/account/account-overview";
+import { DeleteAccount } from "@/components/account/delete-account";
 
 export const metadata: Metadata = { title: "Your profile" };
 
@@ -22,6 +23,7 @@ export default async function AccountPage() {
       </section>
 
       <AccountOverview recent={recent ?? null} defaultAddress={defaultAddress ?? null} />
+      {profile.role === "customer" ? <DeleteAccount /> : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useId } from "react";
 import { Pencil, Plus, TicketPercent, Trash2 } from "lucide-react";
 import { adminCouponSchema, formatINR } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
@@ -171,6 +171,9 @@ function Inner() {
 }
 
 function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; onCancel: () => void; onSaved: (created: boolean) => Promise<void> }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const [f, setF] = useState({
     code: initial?.code ?? "",
     description: initial?.description ?? "",
@@ -261,7 +264,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
         <div className="mt-1.5 inline-flex rounded-full border border-line bg-white p-1">
           {(["percent", "flat"] as const).map((k) => (
             <label key={k} className={cn("cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-leaf-500", f.kind === k ? "bg-forest-800 text-white" : "text-ink-soft hover:bg-sage-100")}>
-              <input type="radio" name="cp-kind" value={k} checked={f.kind === k} onChange={() => set({ kind: k, value: "" })} className="sr-only" />
+              <input type="radio" name={`${rg}-cp-kind`} value={k} checked={f.kind === k} onChange={() => set({ kind: k, value: "" })} className="sr-only" />
               {k === "percent" ? "Percentage" : "Flat amount"}
             </label>
           ))}

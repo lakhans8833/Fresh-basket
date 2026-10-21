@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, useId } from "react";
 import { Banknote, Building2, CalendarClock, CheckCircle2, CreditCard, ExternalLink, Home, MapPin, NotebookPen, Pencil, Phone, QrCode, ShieldCheck, ShoppingBasket, Truck, UserRound } from "lucide-react";
 import {
   buildWhatsAppUrl, formatINR, formatSlotTime, isValidPincode, PAYMENT_METHOD_LABEL, whatsappCustomerSchema,
@@ -71,6 +71,9 @@ function IconInput({
 export function WhatsAppOrderView({
   whatsappNumber, storeName, defaultCity, paymentMethods,
 }: { whatsappNumber: string | null; storeName: string; defaultCity: string; paymentMethods: WaMethod[] }) {
+  // Unique radio-group names: a second copy of this form (e.g. a page kept in the background) must
+  // never share them, or React refuses the click ("Mixing React and non-React radio inputs").
+  const rg = useId();
   const router = useRouter();
   const toast = useToast();
   const cart = useCart();
@@ -499,7 +502,7 @@ export function WhatsAppOrderView({
                   const Icon = info.icon;
                   return (
                     <label key={m} className={cn("flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", method === m ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
-                      <input type="radio" name="wa-method" className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
+                      <input type="radio" name={`${rg}-wa-method`} className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
                       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-forest-800 ring-1 ring-line"><Icon className="size-5" aria-hidden /></span>
                       <span>
                         <span className="block font-semibold text-ink">{info.title}</span>
