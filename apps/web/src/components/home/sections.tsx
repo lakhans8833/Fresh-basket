@@ -173,7 +173,7 @@ export function DeliveryInfo({
             <span className="grid size-12 place-items-center rounded-full bg-lime-100 text-forest-800">{c.icon}</span>
             <h3 className="mt-3 font-sans text-base font-semibold text-ink">{c.title}</h3>
             <p className="mt-1 flex-1 text-sm leading-relaxed text-muted">{c.text}</p>
-            <Link href={c.href} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline">{c.link} <ArrowRight className="size-3.5" aria-hidden /></Link>
+            <Link href={c.href} className="mt-1 inline-flex items-center gap-1 py-2 text-sm font-semibold text-forest-800 hover:underline">{c.link} <ArrowRight className="size-3.5" aria-hidden /></Link>
           </li>
         ))}
       </ul>

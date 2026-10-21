@@ -215,7 +215,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
           <button type="button" onClick={() => go(index + 1, 1)} aria-label="Next slide" className="absolute right-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
             <ChevronRight className="size-5" />
           </button>
-          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/75 py-1.5 pl-2.5 pr-1.5 backdrop-blur">
+          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white/75 pl-1.5 pr-1 backdrop-blur">
             {slides.map((s, i) => {
               const active = i === index;
               return (
@@ -225,8 +225,10 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   onClick={() => go(i)}
                   aria-label={`Go to slide ${i + 1}`}
                   aria-current={active ? "true" : undefined}
-                  className={cn("relative h-2.5 overflow-hidden rounded-full transition-all", active ? "w-9 bg-forest-800/25" : "w-2.5 bg-forest-800/30 hover:bg-forest-800/50")}
+                  // The dot is small; the button around it is a full 32 px tall so it's easy to tap.
+                  className="group flex h-8 items-center px-2"
                 >
+                  <span className={cn("relative h-2.5 overflow-hidden rounded-full transition-all", active ? "w-9 bg-forest-800/25" : "w-2.5 bg-forest-800/30 group-hover:bg-forest-800/50")}>
                   {active ? (
                     // Fills up over 5 s: how long until the next slide. Frozen while paused.
                     <span
@@ -240,6 +242,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                       }
                     />
                   ) : null}
+                  </span>
                 </button>
               );
             })}
@@ -248,7 +251,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                 type="button"
                 onClick={() => setStopped((v) => !v)}
                 aria-label={stopped ? "Play slideshow" : "Pause slideshow"}
-                className="ml-0.5 grid size-6 place-items-center rounded-full text-forest-800 hover:bg-white"
+                className="grid size-8 place-items-center rounded-full text-forest-800 hover:bg-white"
               >
                 {stopped ? <Play className="size-3.5" aria-hidden /> : <Pause className="size-3.5" aria-hidden />}
               </button>

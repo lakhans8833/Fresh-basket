@@ -77,7 +77,8 @@ export function PackSizeSelect({
         onKeyDown={(e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); openList(); } }}
         className={cn(
           compact
-            ? "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors"
+            ? // 28 px chip, but the tap area reaches 44 px (invisible ::before above and below).
+              "relative inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']"
             : "flex h-9 w-full items-center justify-between gap-2 rounded-lg border px-3 text-left text-sm font-medium transition-colors",
           open ? "border-forest-900 bg-forest-900 text-white" : compact ? "border-line bg-white text-ink-soft hover:border-forest-800" : "border-forest-800/30 bg-lime-50 text-ink hover:border-forest-800",
         )}

@@ -75,7 +75,7 @@ export default async function ProductPage({ params }: { params: Params }) {
     <>
       <div className="container-page pt-6 md:pt-10">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-ink-soft">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center [&_a]:-my-2.5 [&_a]:py-2.5 gap-1.5 text-sm text-ink-soft">
           <Link href="/" className="inline-flex items-center gap-1.5 hover:text-forest-800"><Home className="size-4 text-forest-800" aria-hidden /> Home</Link>
           <ChevronRight className="size-3.5" aria-hidden />
           <Link href={`/category/${product.categorySlug}`} className="hover:text-forest-800">{product.categoryName}</Link>

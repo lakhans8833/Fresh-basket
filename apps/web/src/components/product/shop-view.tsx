@@ -114,7 +114,7 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
 
       <div className="container-page pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-ink-soft">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 [&_a]:-my-2.5 [&_a]:py-2.5 text-sm text-ink-soft">
             <Link href="/" className="inline-flex items-center gap-1.5 hover:text-forest-800"><Home className="size-4 text-forest-800" aria-hidden /> Home</Link>
             <ChevronRight className="size-3.5" aria-hidden />
             {f.category ? (
