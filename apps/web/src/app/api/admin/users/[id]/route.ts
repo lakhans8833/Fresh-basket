@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { badRequest, json, parseBody, route } from "@/lib/http";
 import { requireAdmin } from "@/lib/auth";
-import { adminConfirmEmail, adminResendConfirmation, adminSetRole, adminUpdateUser } from "@/lib/admin/users";
+import { adminConfirmEmail, adminCreateResetLink, adminResendConfirmation, adminSetPassword, adminSetRole, adminUpdateUser } from "@/lib/admin/users";
 import { phoneSchema } from "@freshbasket/shared";
 
 const roleSchema = z.object({ role: z.enum(["customer", "staff", "admin"]) });
@@ -22,13 +22,23 @@ export const PATCH = route<{ params: Promise<{ id: string }> }>(async (req, { pa
   return json({ user: await adminUpdateUser(id, body) });
 });
 
-const actionSchema = z.object({ action: z.enum(["confirm-email", "resend-confirmation"]) });
+const actionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("confirm-email") }),
+  z.object({ action: z.literal("resend-confirmation") }),
+  z.object({ action: z.literal("reset-link") }),
+  z.object({ action: z.literal("set-password"), password: z.string().min(8, "Use at least 8 characters").max(72, "Use at most 72 characters") }),
+]);
 
-/** Email actions for users who never confirmed their sign-up email. */
+/** Email and password actions: confirm / resend sign-up email, password reset link, set a new password. */
 export const POST = route<{ params: Promise<{ id: string }> }>(async (req, { params }) => {
-  await requireAdmin();
+  const me = await requireAdmin();
   const id = (await params).id;
   if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid user id.");
-  const { action } = await parseBody(req, actionSchema);
-  return json(action === "confirm-email" ? await adminConfirmEmail(id) : await adminResendConfirmation(id));
+  const body = await parseBody(req, actionSchema);
+  switch (body.action) {
+    case "confirm-email": return json(await adminConfirmEmail(id));
+    case "resend-confirmation": return json(await adminResendConfirmation(id));
+    case "reset-link": return json(await adminCreateResetLink(me.userId, id, new URL(req.url).origin));
+    case "set-password": return json(await adminSetPassword(me.userId, id, body.password));
+  }
 });

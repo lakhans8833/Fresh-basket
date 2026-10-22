@@ -141,3 +141,50 @@ export async function adminUpdateUser(
   if (!row) throw notFound("User not found.");
   return { id: userId, email: row.email, fullName: row.full_name, phone: row.phone, emailConfirmedAt: row.confirmed ? new Date(row.confirmed).toISOString() : null };
 }
+
+function adminAuthClient(what: string) {
+  if (env.auth.mode !== "supabase") throw new HttpError(503, `Passwords are managed by Supabase Auth, which isn't configured here — ${what} isn't available.`);
+  if (!env.storage.serviceRoleKey) throw new HttpError(503, `Set SUPABASE_SERVICE_ROLE_KEY on the server to ${what} from Admin.`);
+  return createClient(env.auth.supabaseUrl!, env.storage.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+/** Ends every session of a user (other devices are signed out). Best effort: the password change already happened. */
+async function endAllSessions(userId: string) {
+  await query("delete from auth.sessions where user_id = $1", [userId]).catch(() => undefined);
+}
+
+/**
+ * A one-time password-reset link for a user who can't sign in (Admin → Users → Edit → Password).
+ * It works on any phone or browser (it carries a token_hash that /auth/callback verifies on the server)
+ * and doesn't depend on the email service: the admin sends it over WhatsApp or copies it.
+ * Supabase's normal recovery-link expiry applies (1 hour by default).
+ */
+export async function adminCreateResetLink(actorId: string, userId: string, origin: string): Promise<{ id: string; email: string; link: string }> {
+  if (actorId === userId) throw badRequest("Change your own password from Your account → Profile → Change password.");
+  const u = await authUser(userId);
+  if (!u.email) throw badRequest("This user has no email address.");
+  const sb = adminAuthClient("create a reset link");
+  const { data, error } = await sb.auth.admin.generateLink({ type: "recovery", email: u.email });
+  const hashed = data?.properties?.hashed_token;
+  if (error || !hashed) throw new HttpError(502, `Supabase couldn't create the link: ${error?.message ?? "no token returned"}`);
+  const link = `${origin}/auth/callback?token_hash=${encodeURIComponent(hashed)}&type=recovery&next=${encodeURIComponent("/reset-password")}`;
+  return { id: userId, email: u.email, link };
+}
+
+/**
+ * Set a new password for a user (Admin → Users → Edit → Password). The admin tells the person the
+ * password; all their sessions end, so the old password and any signed-in device stop working.
+ */
+export async function adminSetPassword(actorId: string, userId: string, password: string): Promise<{ id: string }> {
+  if (actorId === userId) throw badRequest("Change your own password from Your account → Profile → Change password.");
+  await authUser(userId);
+  if (password.length < 8 || password.length > 72) throw badRequest("Use 8 to 72 characters.");
+  const sb = adminAuthClient("set passwords");
+  const { error } = await sb.auth.admin.updateUserById(userId, { password });
+  if (error) {
+    if (/weak|short|pwned|characters/i.test(error.message)) throw badRequest(`That password isn't allowed: ${error.message}`);
+    throw new HttpError(502, `Supabase couldn't set the password: ${error.message}`);
+  }
+  await endAllSessions(userId);
+  return { id: userId };
+}

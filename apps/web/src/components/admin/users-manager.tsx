@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, CircleAlert, MailCheck, Pencil, Search, Send, Users } from "lucide-react";
+import { CheckCircle2, CircleAlert, Copy, KeyRound, Link2, MailCheck, Pencil, Search, Send, Users } from "lucide-react";
 import type { Profile } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { useSession } from "../account/session-context";
@@ -288,6 +288,7 @@ function EditUserForm({ user, self, onCancel, onSaved }: {
 
   const change = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => { set(e.target.value); markDirty(); };
   return (
+    <div className="space-y-6">
     <form onSubmit={save} className="space-y-4">
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Field label="Name" htmlFor="eu-name"><Input id="eu-name" value={fullName} onChange={change(setFullName)} required minLength={2} maxLength={80} /></Field>
@@ -304,5 +305,97 @@ function EditUserForm({ user, self, onCancel, onSaved }: {
         <Button type="submit" variant="dark" loading={saving}>Save</Button>
       </div>
     </form>
+    <PasswordTools user={user} self={self} />
+    </div>
+  );
+}
+
+/**
+ * Password help for someone who can't sign in: a one-time reset link (works on any phone; send it on
+ * WhatsApp or copy it) or setting a new password directly. Never shown for your own account.
+ */
+function PasswordTools({ user, self }: { user: AdminUser; self: boolean }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<"link" | "set" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [setting, setSetting] = useState(false);
+  const [pw, setPw] = useState("");
+  const [done, setDone] = useState(false);
+
+  if (self) {
+    return (
+      <section className="border-t border-line pt-4 text-sm text-muted">
+        <h3 className="flex items-center gap-2 font-semibold text-ink"><KeyRound className="size-4" aria-hidden /> Password</h3>
+        <p className="mt-1">To change your own password, go to Your account → Profile → Change password.</p>
+      </section>
+    );
+  }
+
+  async function makeLink() {
+    setBusy("link"); setError(null);
+    try {
+      const r = await api<{ link: string }>(`/api/admin/users/${user.id}`, { method: "POST", json: { action: "reset-link" } });
+      setLink(r.link);
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(null); }
+  }
+  async function savePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("set"); setError(null);
+    try {
+      await api(`/api/admin/users/${user.id}`, { method: "POST", json: { action: "set-password", password: pw } });
+      setDone(true); setSetting(false); setPw("");
+      toast(`New password set for ${user.fullName || user.email}`);
+    } catch (err) { setError(errorMessage(err)); } finally { setBusy(null); }
+  }
+  const digits = (user.phone ?? "").replace(/\D/g, "").slice(-10);
+  const waHref = link && digits.length === 10
+    ? `https://wa.me/91${digits}?text=${encodeURIComponent(`Hi ${user.fullName ?? ""}, use this link to set a new password for your account (works once, for about 1 hour): ${link}`)}`
+    : null;
+
+  return (
+    // Typing a password here isn't an unsaved edit of the details form above (no "Discard changes?" on close).
+    <section className="space-y-3 border-t border-line pt-4" aria-labelledby={`pw-${user.id}`} onInput={(e) => e.stopPropagation()} onChange={(e) => e.stopPropagation()}>
+      <h3 id={`pw-${user.id}`} className="flex items-center gap-2 text-sm font-semibold text-ink"><KeyRound className="size-4" aria-hidden /> Password</h3>
+      <p className="text-sm text-muted">For someone who forgot their password. A reset link is safest — they choose the new password themselves.</p>
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {done ? <Notice tone="success">Password changed. Tell {user.fullName || "them"} the new password — they were signed out on all devices.</Notice> : null}
+      {link ? (
+        <div className="space-y-2">
+          <label htmlFor={`link-${user.id}`} className="text-xs font-medium text-ink-soft">Reset link (works once, for about 1 hour)</label>
+          <Input id={`link-${user.id}`} readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard?.writeText(link).then(() => toast("Link copied"), () => toast("Copy failed — select the link and copy it"))}>
+              <Copy className="size-3.5" aria-hidden /> Copy link
+            </Button>
+            {waHref ? (
+              <a href={waHref} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-full bg-whatsapp px-3 text-sm font-semibold text-white hover:opacity-90">
+                Send on WhatsApp
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {setting ? (
+        <form onSubmit={savePassword} className="space-y-2">
+          <Field label="New password" htmlFor={`newpw-${user.id}`} hint="At least 8 characters. Tell the person in person or on a call — not in a group chat.">
+            <Input id={`newpw-${user.id}`} type="text" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} minLength={8} maxLength={72} required />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" variant="dark" loading={busy === "set"} disabled={pw.length < 8}>Set password</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => { setSetting(false); setPw(""); }} disabled={busy !== null}>Cancel</Button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" loading={busy === "link"} disabled={busy !== null} onClick={() => void makeLink()}>
+            <Link2 className="size-3.5" aria-hidden /> {link ? "New reset link" : "Create reset link"}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setSetting(true); setDone(false); }}>
+            <KeyRound className="size-3.5" aria-hidden /> Set new password
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }

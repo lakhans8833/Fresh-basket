@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { env } from "@/lib/env";
 import { listMyOrders } from "@/lib/orders";
 import { listAddresses } from "@/lib/account";
 import { requireAccountSession } from "./require-session";
@@ -20,6 +22,11 @@ export default async function AccountPage() {
         <h1 id="profile-heading" className="text-2xl font-semibold text-forest-900">Profile</h1>
         <p className="mt-1 text-sm text-muted">Your name and mobile number are used for delivery updates.</p>
         <ProfileForm profile={profile} />
+        {env.auth.mode === "supabase" ? (
+          <p className="mt-4 text-sm">
+            <Link href="/reset-password" className="font-semibold text-leaf-600 underline underline-offset-4 hover:text-forest-800">Change password</Link>
+          </p>
+        ) : null}
       </section>
 
       <AccountOverview recent={recent ?? null} defaultAddress={defaultAddress ?? null} />
