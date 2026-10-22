@@ -728,7 +728,10 @@ describe("Razorpay payment links", () => {
     expect(await processPaymentEvent(normaliseRazorpayEvent(ev, "evt_link_1"))).toBe("paid");
     expect(await getOrderById(o.id)).toMatchObject({ status: "placed", paymentStatus: "paid" });
     expect(await processPaymentEvent(normaliseRazorpayEvent(ev, "evt_link_1"))).toBe("duplicate");
-    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_ok1", o.total), "evt_link_2"))).toBe("already_processed");
+    // The same payment in another event (e.g. payment.captured after payment_link.paid): already processed.
+    expect(await processPaymentEvent(normaliseRazorpayEvent(ev, "evt_link_1b"))).toBe("already_processed");
+    // A second, different payment for the paid link: flagged for refund, order unchanged.
+    expect(await processPaymentEvent(normaliseRazorpayEvent(event("plink_ok1", o.total), "evt_link_2"))).toBe("duplicate_payment");
   });
 
   it("rejects wrong amounts, unpaid/uncaptured payments and unknown links", async () => {

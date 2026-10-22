@@ -156,16 +156,17 @@ describe("2. a late payment revives an order only if it can still be delivered",
     const order = await expiredPrepaidOrder({ slotId: own });
     await breakIt(order);
     const before = await stockOf(variant);
-    expect(await pay(order.id, order.total)).toBe("paid_late");
+    const payId = randomUUID().slice(0, 12);
+    expect(await pay(order.id, order.total, payId)).toBe("paid_late");
     const o = (await getOrderById(order.id))!;
     expect(o).toMatchObject({ status: "placed", paymentStatus: "paid" });
     expect((await queryOne<{ slot_id: string | null }>("select slot_id from orders where id = $1", [order.id]))!.slot_id).toBeNull();
     expect(o.events.at(-1)!.note).toMatch(note);
     expect(await stockOf(variant)).toBe(before - 4);
-    // Webhook retries stay idempotent.
+    // Webhook retries (same payment) stay idempotent.
+    expect(await pay(order.id, order.total, payId)).toBe("duplicate");
     const [{ n: payments }] = await query<{ n: number }>("select count(*)::int as n from payments where order_id = $1", [order.id]);
     expect(payments).toBe(1);
-    expect(await pay(order.id, order.total)).toBe("already_processed");
   });
 
   it("a late payment and a checkout racing for the last place in a slot never overfill it", async () => {

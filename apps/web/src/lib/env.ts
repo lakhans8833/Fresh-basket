@@ -32,7 +32,9 @@ const razorpayKeyId = read("RAZORPAY_KEY_ID");
 const razorpayKeySecret = read("RAZORPAY_KEY_SECRET");
 const razorpayWebhookSecret = read("RAZORPAY_WEBHOOK_SECRET");
 
-const devFeaturesAllowed = !isProd || read("ALLOW_DEV_MODE") === "true";
+// Dev login, local uploads and the built-in dev secret: never on a Vercel production deployment, even
+// if ALLOW_DEV_MODE=true is set there by mistake (it would let anyone sign in as admin).
+const devFeaturesAllowed = (!isProd || read("ALLOW_DEV_MODE") === "true") && read("VERCEL_ENV") !== "production";
 
 const DEV_APP_SECRET = "dev-only-insecure-secret-change-me-0123456789";
 

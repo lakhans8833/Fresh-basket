@@ -41,8 +41,9 @@ export default function Orders() {
     setReordering(o.id);
     setReorderMsg(null);
     try {
-      const res = await reorder(o.id);
+      const res = await reorder(o.id, cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })));
       for (const it of res.items) {
+        if (it.quantity <= 0) continue; // already in the basket in full
         const src = o.items.find((x) => x.variantId === it.variantId);
         cart.add(
           {
@@ -51,7 +52,7 @@ export default function Orders() {
             productSlug: it.productSlug,
             variantLabel: src?.variantLabel ?? "",
             imageUrl: src?.imageUrl ?? null,
-            priceHint: src?.unitPrice ?? 0,
+            priceHint: it.price, // today's price, not the old order's
           },
           it.quantity,
         );

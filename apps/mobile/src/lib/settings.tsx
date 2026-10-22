@@ -12,6 +12,9 @@ interface SettingsState {
 
 const SettingsContext = createContext<SettingsState | null>(null);
 
+/** Payment methods the app checkout can complete end to end. */
+export const APP_PAYMENT_METHODS: PaymentMethod[] = ["cod", "razorpay", "mock"];
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -21,7 +24,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api<{ settings: StoreSettings; paymentMethods: PaymentMethod[] }>("/api/settings", { auth: false });
       setSettings(res.settings);
-      setPaymentMethods(res.paymentMethods);
+      // The app can only complete cash on delivery and Razorpay checkout. UPI (pay to the store's UPI ID,
+      // then send the reference) has no screen in the app, so a UPI order would sit unpaid until it expired.
+      setPaymentMethods(res.paymentMethods.filter((m) => APP_PAYMENT_METHODS.includes(m)));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load store settings.");
