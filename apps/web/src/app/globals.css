@@ -13,7 +13,7 @@
   --color-forest-800: #0b6623;
   --color-forest-700: #0d7a2b;
   --color-forest-600: #118a33;
-  --color-leaf-600: #16a34a;
+  --color-leaf-600: #15803d;
   --color-leaf-500: #22b455;
   --color-leaf-400: #4cc36e;
   --color-lime-300: #a7d769;
@@ -32,11 +32,11 @@
   --color-tomato: #e4452e;
   /* Offer/discount tags: white text on this passes WCAG AA (5.2:1). */
   --color-offer: #c2410c;
-  --color-amber: #b26b00;
+  --color-amber: #9a5b00;
   --color-danger: #b42318;
   --color-danger-bg: #fdf0ee;
   --color-whatsapp: #25d366;
-  --color-whatsapp-dark: #128c4b;
+  --color-whatsapp-dark: #0f7f43;
 
   --radius-card: 1rem;
   --shadow-card: 0 1px 2px rgb(20 48 31 / 0.04), 0 8px 24px -12px rgb(20 48 31 / 0.12);

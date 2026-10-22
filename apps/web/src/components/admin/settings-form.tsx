@@ -40,7 +40,7 @@ function Loader() {
     <>
       <PageHeader title="Settings" description="Store details shown to customers, ordering rules, and the status of connected services." />
       {error && !data ? <LoadError message={error} onRetry={reload} /> : !data ? <LoadingRows rows={6} /> : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_24rem] xl:items-start">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start">
           <Editor initial={data.settings} />
           <ServicesPanel s={data.services} />
         </div>
@@ -182,7 +182,7 @@ function Editor({ initial }: { initial: StoreSettings }) {
   );
 
   return (
-    <form onSubmit={(e) => void submit(e)} noValidate className="space-y-6">
+    <form onSubmit={(e) => void submit(e)} noValidate className="min-w-0 space-y-6">
       {guard.dialog}
       {formError ? <Notice tone="error">{formError}</Notice> : null}
 
@@ -202,7 +202,7 @@ function Editor({ initial }: { initial: StoreSettings }) {
                   <span className="text-xs text-muted">Using store name</span>
                 )}
               </div>
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" id="st-logo" onChange={(e) => onLogo(e.target.files?.[0])} />
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" tabIndex={-1} aria-label="Upload logo image" id="st-logo" onChange={(e) => onLogo(e.target.files?.[0])} />
               <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => fileRef.current?.click()}>
                 {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {f.logoUrl ? "Replace logo" : "Upload logo"}
               </Button>
@@ -288,7 +288,7 @@ function Editor({ initial }: { initial: StoreSettings }) {
                 // eslint-disable-next-line @next/next/no-img-element -- admin-uploaded image
                 <img src={f.upiQrUrl} alt="UPI QR preview" className="h-28 w-28 rounded-lg border border-line bg-white object-contain p-1" />
               ) : null}
-              <input ref={qrRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="st-upi-qr" onChange={(e) => onQr(e.target.files?.[0])} />
+              <input ref={qrRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" tabIndex={-1} aria-label="Upload UPI QR image" id="st-upi-qr" onChange={(e) => onQr(e.target.files?.[0])} />
               <Button type="button" size="sm" variant="outline" loading={uploading} onClick={() => qrRef.current?.click()}>
                 {!uploading ? <ImagePlus className="size-4" aria-hidden /> : null} {f.upiQrUrl ? "Replace QR" : "Upload QR"}
               </Button>
@@ -323,7 +323,7 @@ function ServiceRow({ ok, test, title, status, children }: { ok: boolean; test?:
   );
 }
 
-const Env = ({ children }: { children: string }) => <code className="rounded bg-sage-100 px-1 py-0.5 text-[0.75rem] text-ink-soft">{children}</code>;
+const Env = ({ children }: { children: string }) => <code className="break-all rounded bg-sage-100 px-1 py-0.5 text-[0.75rem] text-ink-soft">{children}</code>;
 
 function ServicesPanel({ s }: { s: Services }) {
   return (

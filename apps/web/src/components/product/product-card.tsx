@@ -107,7 +107,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
 
   if (layout === "compact") {
     return (
-      <article className="group relative flex gap-3 rounded-[var(--radius-card)] border border-line bg-white p-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]">
+      <article className="group relative flex gap-3 rounded-[var(--radius-card)] border border-line bg-white p-3 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-forest-700 has-[a:focus-visible]:ring-offset-2">
         <div className="relative shrink-0">
           <ProductImage src={product.imageUrl} alt={product.name} sizes="96px" className={cn("size-20 rounded-xl bg-white sm:size-24", soldOut && "grayscale")} />
           {out ? <span className="absolute inset-0 grid place-items-center rounded-xl bg-white/70 text-[0.6875rem] font-semibold text-danger">Sold out</span> : null}
@@ -130,7 +130,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   return (
     <article
       className={cn(
-        "group relative flex flex-col rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)]",
+        "group relative flex flex-col rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-forest-700 has-[a:focus-visible]:ring-offset-2",
         soldOut ? "bg-sage-50" : "bg-white",
       )}
     >

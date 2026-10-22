@@ -215,6 +215,8 @@ export async function ShopView({ filters: f, categories, settings, whatsapp }: {
               </EmptyState>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-4">
+                {/* sr-only, so it takes no grid cell; keeps headings in order (h1 → h2 → product h3). */}
+                <h2 className="sr-only">Products</h2>
                 {products.map((p, i) => <ProductCard key={p.id} product={p} priority={i < 4} />)}
               </div>
             )}

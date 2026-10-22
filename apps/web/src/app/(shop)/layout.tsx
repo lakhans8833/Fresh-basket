@@ -32,7 +32,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <TopBar announcement={settings.announcement} serviceArea={storeConfig.serviceArea} />
       <SiteHeader settings={settings} />
       <InstallBanner storeName={settings.storeName} />
-      <main id="main" className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}
       </main>
       <SiteFooter
