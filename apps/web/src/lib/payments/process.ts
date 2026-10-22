@@ -37,7 +37,11 @@ export type ProcessResult =
   | "already_processed"
   | "paid_late"
   | "refund_required"
-  | "amount_mismatch";
+  | "amount_mismatch"
+  /** The payment id was already recorded for a different order: not applied (needs review). */
+  | "payment_reused"
+  /** A second, different payment for an order that was already paid: flagged for refund. */
+  | "duplicate_payment";
 
 /**
  * Single entry point for webhook-style payment events. Stores the event once

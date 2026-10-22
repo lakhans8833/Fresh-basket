@@ -73,7 +73,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
 
   // Compute the PATCH payload: only rows that actually differ from the server.
   const { updates, invalid } = useMemo(() => {
-    const updates: { variantId: string; price?: number; stock?: number; active?: boolean }[] = [];
+    const updates: { variantId: string; price?: number; stock?: number; stockLoaded?: number; active?: boolean }[] = [];
     const invalid = new Set<string>();
     for (const r of rows) {
       const e = edits[r.variantId];
@@ -86,7 +86,10 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       }
       if (e.stock !== undefined) {
         if (!/^\d+$/.test(e.stock)) invalid.add(`${r.variantId}:stock`);
-        else if (Number(e.stock) !== r.stock) u.stock = Number(e.stock);
+        else if (Number(e.stock) !== r.stock) {
+          u.stock = Number(e.stock);
+          u.stockLoaded = r.stock; // the server adds only the change, so sales since loading stay counted
+        }
       }
       if (e.active !== undefined && e.active !== r.active) u.active = e.active;
       if (Object.keys(u).length > 1) updates.push(u);
@@ -94,7 +97,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     return { updates, invalid };
   }, [rows, edits]);
   const { productUpdates, invalidTotals } = useMemo(() => {
-    const productUpdates: { productId: string; stockGrams: number }[] = [];
+    const productUpdates: { productId: string; stockGrams: number; stockGramsLoaded?: number }[] = [];
     const invalidTotals = new Set<string>();
     const seen = new Set<string>();
     for (const r of rows) {
@@ -102,7 +105,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       seen.add(r.productId);
       const g = totalGrams(r);
       if (g === null) invalidTotals.add(r.productId);
-      else if (g !== r.productStockGrams) productUpdates.push({ productId: r.productId, stockGrams: g });
+      else if (g !== r.productStockGrams) productUpdates.push({ productId: r.productId, stockGrams: g, stockGramsLoaded: r.productStockGrams === null ? undefined : Math.round(r.productStockGrams) });
     }
     return { productUpdates, invalidTotals };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- derived from rows + totals only

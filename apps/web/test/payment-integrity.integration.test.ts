@@ -302,8 +302,12 @@ describe("duplicate webhook deliveries", () => {
     expect(await stockOf(tomato)).toBe(before - 4);
     expect(await queryOne("select used_count from coupons where id = $1", [couponId])).toEqual({ used_count: 1 });
     expect((await queryOne<{ n: number }>("select count(*)::int as n from payments where order_id = $1", [order.id]))!.n).toBe(1);
-    // A second, different payment for the same order later: already processed, nothing changes.
-    expect(await pay(order.id, order.total)).toBe("already_processed");
+    // A redelivery of the same event: duplicate. A second, DIFFERENT payment later is flagged
+    // for refund (duplicate_payment); stock, coupon and order stay as they are.
+    expect(await pay(order.id, order.total, id)).toBe("duplicate");
+    expect(await pay(order.id, order.total)).toBe("duplicate_payment");
+    expect(await stockOf(tomato)).toBe(before - 4);
+    expect(await queryOne("select used_count from coupons where id = $1", [couponId])).toEqual({ used_count: 1 });
     expect(await stockOf(tomato)).toBe(before - 4);
   });
 });

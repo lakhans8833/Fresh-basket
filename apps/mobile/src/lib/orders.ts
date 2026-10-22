@@ -8,10 +8,15 @@ export const resumePayment = (id: string) =>
 
 export const cancelOrder = (id: string) => api<{ order: Order }>(`/api/orders/${encodeURIComponent(id)}/cancel`, { method: "POST" });
 
-export const reorder = (id: string) =>
-  api<{ items: { variantId: string; quantity: number; productSlug: string }[]; skipped: string[] }>(`/api/orders/${encodeURIComponent(id)}/reorder`, {
-    method: "POST",
-  });
+/**
+ * "Buy again". Sends the current basket so the server returns how many to ADD on top of it (within
+ * today's stock); without it the server assumes an empty basket and quantities would double.
+ */
+export const reorder = (id: string, cart: { variantId: string; quantity: number }[]) =>
+  api<{
+    items: { variantId: string; quantity: number; productSlug: string; price: number }[];
+    skipped: { productName: string; variantLabel: string; reason: "unavailable" | "out_of_stock" }[];
+  }>(`/api/orders/${encodeURIComponent(id)}/reorder`, { method: "POST", body: { cart } });
 
 /** Turn 409 ORDER_REJECTED details.messages into readable lines. */
 export function rejectionMessages(details: unknown, nameOf: (variantId: string) => string | undefined): string[] {

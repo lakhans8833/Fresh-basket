@@ -160,8 +160,8 @@ export async function adminInventory() {
   );
 }
 export async function adminPatchInventory(
-  updates: { variantId: string; price?: number; stock?: number; active?: boolean }[],
-  products: { productId: string; stockGrams: number }[] = [],
+  updates: { variantId: string; price?: number; stock?: number; stockLoaded?: number; active?: boolean }[],
+  products: { productId: string; stockGrams: number; stockGramsLoaded?: number }[] = [],
 ) {
   return tx(async (c) => {
     // Same lock order as checkout: every affected product row (by id) first, then packs by id —
@@ -173,14 +173,22 @@ export async function adminPatchInventory(
       [updates.map((u) => u.variantId), products.map((p) => p.productId)],
     );
     for (const pr of [...products].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0))) {
-      await c.query("update products set stock_grams = $2 where id = $1 and stock_grams is not null", [pr.productId, pr.stockGrams]);
+      // With the loaded total, apply only the change (orders placed while the table was open stay counted).
+      await c.query(
+        `update products set stock_grams = case when $3::bigint is null then $2::bigint else greatest(0, stock_grams + ($2::bigint - $3::bigint)) end
+          where id = $1 and stock_grams is not null`,
+        [pr.productId, pr.stockGrams, pr.stockGramsLoaded ?? null],
+      );
     }
     for (const u of [...updates].sort((a, b) => (a.variantId < b.variantId ? -1 : a.variantId > b.variantId ? 1 : 0))) {
       // For stock-by-weight packs the database derives `stock` from the product total, so a
       // stock value sent here is ignored for them (price / active still apply).
       await c.query(
-        `update product_variants set price = coalesce($2, price), stock = coalesce($3, stock), active = coalesce($4, active) where id = $1`,
-        [u.variantId, u.price ?? null, u.stock ?? null, u.active ?? null],
+        `update product_variants set price = coalesce($2, price),
+                stock = case when $3::int is null then stock when $5::int is null then $3 else greatest(0, stock + ($3 - $5::int)) end,
+                active = coalesce($4, active)
+          where id = $1`,
+        [u.variantId, u.price ?? null, u.stock ?? null, u.active ?? null, u.stockLoaded ?? null],
       );
     }
     return { updated: updates.length + products.length };

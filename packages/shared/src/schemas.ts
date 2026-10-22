@@ -134,7 +134,7 @@ export const adminVariantSchema = z.object({
   // Any run of spaces (incl. non-breaking spaces pasted from websites) becomes one plain space, so the
   // site and the database read "500 g" the same way.
   label: trimmed(30).min(1).transform((s) => s.replace(/\s+/g, " ")),
-  price: z.number().int().min(0).max(10_000_000),
+  price: z.number().int().min(1, "Price must be more than ₹0").max(10_000_000),
   mrp: z.number().int().min(0).max(10_000_000).optional().nullable(),
   stock: z.number().int().min(0).max(1_000_000),
   /** Stock shown when the form was opened. The server applies only the change (stock - stockLoaded),
@@ -142,7 +142,7 @@ export const adminVariantSchema = z.object({
   stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
   sortOrder: z.number().int().min(0).max(99).default(0),
   active: z.boolean().default(true),
-});
+}).refine((v) => v.mrp == null || v.mrp === 0 || v.mrp >= v.price, { message: "MRP can't be lower than the price", path: ["mrp"] });
 
 export const adminProductSchema = z.object({
   name: trimmed(80).min(2),
@@ -171,11 +171,23 @@ export type AdminProductInput = z.infer<typeof adminProductSchema>;
 export const adminInventoryPatchSchema = z
   .object({
     updates: z
-      .array(z.object({ variantId: uuid, price: z.number().int().min(0).max(10_000_000).optional(), stock: z.number().int().min(0).max(1_000_000).optional(), active: z.boolean().optional() }))
+      .array(z.object({
+        variantId: uuid,
+        price: z.number().int().min(1, "Price must be more than ₹0").max(10_000_000).optional(),
+        stock: z.number().int().min(0).max(1_000_000).optional(),
+        /** Stock shown when the table was loaded: the server applies only the change, so sales meanwhile stay counted. */
+        stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
+        active: z.boolean().optional(),
+      }))
       .max(200)
       .default([]),
     /** Stock-by-weight products: new total in grams (each weight pack's stock is derived from it). */
-    products: z.array(z.object({ productId: uuid, stockGrams: z.number().int().min(0).max(1_000_000_000) })).max(200).default([]),
+    products: z.array(z.object({
+      productId: uuid,
+      stockGrams: z.number().int().min(0).max(1_000_000_000),
+      /** Total shown when the table was loaded (same rule as stockLoaded). */
+      stockGramsLoaded: z.number().int().min(0).max(1_000_000_000).optional(),
+    })).max(200).default([]),
   })
   .refine((b) => b.updates.length + b.products.length > 0, { message: "Nothing to update" });
 
@@ -189,7 +201,7 @@ export const adminDeliveryAreaSchema = z.object({
   areaName: trimmed(80).min(2),
   city: trimmed(60).min(2),
   fee: z.number().int().min(0).max(100_000),
-  freeAbove: z.number().int().min(0).optional().nullable(),
+  freeAbove: z.number().int().min(0).max(10_000_000).optional().nullable(),
   minOrder: z.number().int().min(0).max(10_000_000),
   active: z.boolean().default(true),
 });
