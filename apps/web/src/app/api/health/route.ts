@@ -31,7 +31,7 @@ export async function GET() {
   }
   // Where things run (no secrets): the function region and the database host's region, so you can
   // check they are close together: functions must run next to the database (vercel.json "regions":
-  // icn1 Seoul ↔ Supabase ap-northeast-2 today; bom1 Mumbai ↔ ap-south-1 after moving the database).
+  // iad1 (Washington, D.C.) ↔ Supabase us-east-1 today — the database host is in us-east-1, so functions run next to it; bom1 Mumbai ↔ ap-south-1 if the database moves to India).
   let dbHost = "";
   try {
     dbHost = new URL(env.databaseUrl).hostname;
