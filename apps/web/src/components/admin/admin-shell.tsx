@@ -123,7 +123,7 @@ export function AdminShell({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ivory">{userName || userEmail}</p>
-          <p className="truncate text-xs text-ivory/60"><span className="capitalize">{role}</span>{userEmail && userName ? ` · ${userEmail}` : ""}</p>
+          <p className="truncate text-xs text-ivory/80"><span className="capitalize">{role}</span>{userEmail && userName ? ` · ${userEmail}` : ""}</p>
         </div>
         <button
           type="button"
@@ -194,7 +194,7 @@ export function AdminShell({
               Development mode: {devNotes.join(" · ")}
             </div>
           ) : null}
-          <main id="main" className="mx-auto w-full max-w-[84rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+          <main id="main" tabIndex={-1} className="focus:outline-none mx-auto w-full max-w-[84rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
             {children}
           </main>
         </div>

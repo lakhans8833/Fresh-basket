@@ -93,7 +93,7 @@ export function SiteFooter({
           </div>
 
           <nav aria-labelledby="f-shop">
-            <h3 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Shop</h3>
+            <h2 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Shop</h2>
             <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
               <li><Link className={linkCls} href="/shop">All products</Link></li>
               {categories.slice(0, 5).map((c) => (
@@ -104,7 +104,7 @@ export function SiteFooter({
           </nav>
 
           <nav aria-labelledby="f-help">
-            <h3 id="f-help" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Help</h3>
+            <h2 id="f-help" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Help</h2>
             <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
               <li><Link className={linkCls} href="/about">About us</Link></li>
               <li><Link className={linkCls} href="/contact">Contact</Link></li>
@@ -118,7 +118,7 @@ export function SiteFooter({
 
           <div className="space-y-6">
             <div>
-              <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Get in touch</h3>
+              <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Get in touch</h2>
               {hasContact ? (
                 <ul className="mt-4 space-y-3 text-[0.9375rem] text-white/85">
                   {settings.supportPhone ? (
@@ -144,7 +144,7 @@ export function SiteFooter({
               )}
             </div>
             <div>
-              <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-300">Fresh picks in your inbox</h3>
+              <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Fresh picks in your inbox</h2>
               <div className="mt-3"><NewsletterForm /></div>
             </div>
           </div>
@@ -154,7 +154,7 @@ export function SiteFooter({
           <div className="container-page flex flex-col gap-5 py-6 lg:flex-row lg:items-center lg:justify-between">
             {paymentMethods.length ? (
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
-                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/60">We accept</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/80">We accept</span>
                 <ul className="flex flex-wrap gap-2" aria-label="Accepted payment methods">
                   {paymentMethods.includes("razorpay") ? (
                     <>
@@ -168,7 +168,7 @@ export function SiteFooter({
                 </ul>
               </div>
             ) : <span />}
-            <div className="flex flex-col gap-2 text-[0.8125rem] text-white/65 sm:flex-row sm:items-center sm:gap-5">
+            <div className="flex flex-col gap-2 text-[0.8125rem] text-white/80 sm:flex-row sm:items-center sm:gap-5">
               <nav aria-label="Legal" className="flex gap-4">
                 <Link href="/privacy" className="hover:text-white">Privacy</Link>
                 <Link href="/terms" className="hover:text-white">Terms</Link>

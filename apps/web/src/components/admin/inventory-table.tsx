@@ -215,7 +215,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                 onClick={() => setFilter(f.v)}
                 className={cn("whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium", filter === f.v ? "bg-forest-800 text-white" : "text-ink-soft hover:bg-sage-100")}
               >
-                {f.label} <span className={cn("tabular-nums", filter === f.v ? "text-white/70" : "text-muted")}>{f.n}</span>
+                {f.label} <span className={cn("tabular-nums", filter === f.v ? "text-white/85" : "text-muted")}>{f.n}</span>
               </button>
             ))}
           </div>

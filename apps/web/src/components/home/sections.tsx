@@ -91,7 +91,7 @@ export function PriceTiles({ buckets }: { buckets: { key: string; label: string;
                 ["border-lime-300 bg-lime-50", "border-line bg-white", "border-[#f0d9a6] bg-[#fdf6e7]", "border-forest-800 bg-forest-800 text-white"][i % 4],
               )}
             >
-              <span className={cn("text-xs font-semibold uppercase tracking-wider", i % 4 === 3 ? "text-lime-300" : "text-leaf-600")}>Price range</span>
+              <span className={cn("text-xs font-semibold uppercase tracking-wider", i % 4 === 3 ? "text-lime-200" : "text-leaf-600")}>Price range</span>
               <span className="text-[1.375rem] font-bold leading-tight sm:text-2xl">{b.label}</span>
               <span className={cn("inline-flex items-center gap-1 text-sm font-medium", i % 4 === 3 ? "text-white/85" : "text-muted")}>
                 {b.count} {b.count === 1 ? "item" : "items"} <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />

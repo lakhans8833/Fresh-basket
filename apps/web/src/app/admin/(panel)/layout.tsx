@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { profile } = session;
   if (profile.role !== "admin" && profile.role !== "staff") {
     return (
-      <main id="main" className="grid min-h-dvh place-items-center bg-ivory px-4 py-12">
+      <main id="main" tabIndex={-1} className="grid min-h-dvh place-items-center bg-ivory px-4 py-12 focus:outline-none">
         <div className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-white p-8 text-center shadow-[var(--shadow-card)]">
           <span className="mx-auto grid size-14 place-items-center rounded-full bg-lime-100 text-forest-700">
             <ShieldAlert className="size-7" aria-hidden />

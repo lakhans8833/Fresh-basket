@@ -6,7 +6,7 @@ import { LeafMark } from "../layout/logo";
 /** Full-screen frame for the staff sign-in and admin 404 pages (no store header/footer). */
 export function AdminAuthFrame({ storeName, children }: { storeName: string; children: ReactNode }) {
   return (
-    <main id="main" className="relative grid min-h-dvh place-items-center overflow-hidden bg-forest-900 px-4 py-10">
+    <main id="main" tabIndex={-1} className="focus:outline-none relative grid min-h-dvh place-items-center overflow-hidden bg-forest-900 px-4 py-10">
       <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 size-[28rem] rounded-full bg-forest-800/70" />
       <div aria-hidden className="pointer-events-none absolute -bottom-32 -left-20 size-[22rem] rounded-full bg-lime-300/10" />
       <div className="relative w-full max-w-[26rem]">
