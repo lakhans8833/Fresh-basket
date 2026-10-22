@@ -103,7 +103,7 @@ function Inner() {
     <>
       <PageHeader
         title="Users"
-        description="Everyone who has signed up. Give store staff the Staff role (orders and inventory) or Admin (everything)."
+        description="Everyone who has signed up. Use Edit details to change a name, mobile or sign-in email. Give store staff the Staff role (orders and inventory) or Admin (everything)."
       />
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <div className="relative w-full max-w-md">
@@ -138,8 +138,8 @@ function Inner() {
                         <p className="truncate font-semibold text-ink">{u.fullName || "—"}{self ? <span className="ml-1.5 text-xs font-medium text-muted">(you)</span> : null}</p>
                         <p className="truncate text-sm text-muted">{u.email ?? "no email"}{u.phone ? ` · ${u.phone}` : ""}</p>
                       </div>
-                      <Button type="button" size="sm" variant="ghost" className="h-9 shrink-0 px-2.5 text-xs" aria-label={`Edit ${u.fullName || u.email || "user"}`} onClick={() => setEditing(u)}>
-                        <Pencil className="size-3.5" aria-hidden /> Edit
+                      <Button type="button" size="sm" variant="outline" className="h-9 shrink-0 px-3 text-xs font-semibold" aria-label={`Edit ${u.fullName || u.email || "user"}`} title="Edit name, mobile or email" onClick={() => setEditing(u)}>
+                        <Pencil className="size-3.5" aria-hidden /> Edit details
                       </Button>
                     </div>
                   </div>
