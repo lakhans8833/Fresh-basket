@@ -1,7 +1,10 @@
 {
   "name": "fresh-basket",
   "private": true,
-  "workspaces": ["apps/web", "packages/shared"],
+  "workspaces": [
+    "apps/web",
+    "packages/shared"
+  ],
   "scripts": {
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
@@ -9,5 +12,10 @@
     "test": "npm run test -w packages/shared && npm run test -w apps/web",
     "db:local": "bash scripts/local-db.sh",
     "db:reset": "bash scripts/local-db.sh --reset"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "^4.6.7"
+    }
   }
 }
