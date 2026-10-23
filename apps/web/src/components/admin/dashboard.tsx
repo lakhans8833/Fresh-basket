@@ -175,7 +175,9 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                         </div>
                         <div className="col-start-2 row-start-1 w-24 text-right sm:col-start-3">
                           <p className="font-semibold tabular-nums text-ink">{formatINR(o.total)}</p>
-                          <p className="text-xs text-muted">{timeAgo(o.createdAt)}</p>
+                          {/* "x min ago" differs between the server render and the browser when a minute passes in between;
+                              the dashboard re-renders right after loading, so the browser's value wins. */}
+                          <p className="text-xs text-muted" suppressHydrationWarning>{timeAgo(o.createdAt)}</p>
                         </div>
                       </Link>
                     </li>
