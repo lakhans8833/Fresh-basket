@@ -133,7 +133,7 @@ export function SearchBox() {
         onFocus={() => setOpen(true)}
         onKeyDown={onKey}
         placeholder={examples ? `Search "${examples}"` : "Search fruits & vegetables…"}
-        className="h-11 w-full rounded-full border border-line bg-sage-50/60 pl-5 pr-20 text-[0.9375rem] text-ink placeholder:text-muted/80 focus:border-leaf-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-lime-200/70 md:h-12"
+        className="h-11 w-full rounded-xl border border-line bg-sage-50 pl-5 pr-20 text-[0.9375rem] text-ink placeholder:text-muted/80 focus:border-leaf-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-lime-200/70 md:h-12"
         enterKeyHint="search"
         autoComplete="off"
         maxLength={60}

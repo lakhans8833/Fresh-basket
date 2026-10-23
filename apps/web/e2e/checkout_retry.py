@@ -20,7 +20,7 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/product/potato")
     page.get_by_text("2 kg").first.click()
     page.get_by_role("button", name="Add to Cart").click()
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 1 item"))).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 1 item"]:visible').first).to_be_visible()
 
     page.goto(f"{BASE}/checkout")
     expect(page.get_by_role("heading", name="Checkout")).to_be_visible()
@@ -60,12 +60,12 @@ with sync_playwright() as p:
     place.click()
     expect(page.get_by_text("this order was cancelled", exact=False)).to_be_visible(timeout=10000)
     expect(page).to_have_url(re.compile(r"/checkout"))
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 1 item"))).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 1 item"]:visible').first).to_be_visible()
 
     # 2) Next deliberate attempt uses a NEW key; this one gets an ambiguous 504.
     place.click()
     expect(page.get_by_text("Gateway timeout")).to_be_visible(timeout=10000)
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 1 item"))).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 1 item"]:visible').first).to_be_visible()
 
     # 3) Retry after the ambiguous error keeps the SAME key; it goes through for real.
     place.click()

@@ -35,7 +35,7 @@ with sync_playwright() as p:
     for _ in range(3):
         page.get_by_role("button", name="Increase Tomato").click()
     page.get_by_role("button", name="Add to Cart").click()
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 4 items"))).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 4 items"]:visible').first).to_be_visible()
     shot(page, "1_product")
 
     # Basket

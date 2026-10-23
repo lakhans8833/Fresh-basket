@@ -4,26 +4,27 @@ import { ArrowRight, Banknote, CalendarClock, Leaf, MapPin, ShoppingBasket, Truc
 import { formatINR, formatSlotTime, type Category, type DeliveryArea, type ProductSummary, type SlotRule } from "@freshbasket/shared";
 import { ProductCard } from "../product/product-card";
 import { WhatsAppIcon } from "../ui/whatsapp-icon";
+import { RailScroller } from "./rail-scroller";
 import { cn } from "../ui/cn";
 
-function SectionHeader({ id, title, href, eyebrow, linkLabel = "View all" }: { id: string; title: string; href?: string; eyebrow?: string; linkLabel?: string }) {
+function SectionHeader({ id, title, href, eyebrow, linkLabel = "see all" }: { id: string; title: string; href?: string; eyebrow?: string; linkLabel?: string }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-4">
-      <div>
-        <h2 id={id} className="text-[1.5rem] font-bold leading-tight text-ink sm:text-[1.75rem]">{title}</h2>
+    <div className="mb-3 flex items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h2 id={id} className="text-lg font-bold leading-tight text-ink sm:text-[1.375rem]">{title}</h2>
         {/* A short line that says something about the section (e.g. "From your past orders"), not a label. */}
-        {eyebrow ? <p className="mt-1 text-sm text-muted">{eyebrow}</p> : null}
-        <span aria-hidden className="mt-2 block h-1 w-10 rounded-full bg-forest-800" />
+        {eyebrow ? <p className="mt-0.5 text-[0.8125rem] text-muted">{eyebrow}</p> : null}
       </div>
       {href ? (
-        <Link href={href} className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-sm font-semibold text-forest-800 hover:bg-lime-100">
-          {linkLabel} <ArrowRight className="size-4" aria-hidden />
+        <Link href={href} className="-my-2 shrink-0 rounded-lg px-2 py-2 text-[0.9375rem] font-semibold text-leaf-600 hover:bg-lime-50 sm:text-base">
+          {linkLabel}<span className="sr-only"> — {title}</span>
         </Link>
       ) : null}
     </div>
   );
 }
 
+/** Quick-commerce category grid: small square tiles on a soft green tint, the name under each. */
 export function CategoryGrid({ categories, seasonalCount }: { categories: Category[]; seasonalCount: number }) {
   const tiles = [
     ...categories.map((c) => ({ key: c.slug, href: `/category/${c.slug}`, name: c.name, count: c.productCount ?? 0, image: c.imageUrl })),
@@ -31,22 +32,21 @@ export function CategoryGrid({ categories, seasonalCount }: { categories: Catego
   ];
   if (tiles.length === 0) return null;
   return (
-    <section aria-labelledby="cat-heading" className="container-page mt-10 md:mt-14">
-      <SectionHeader id="cat-heading" title="Popular Categories" href="/categories" />
-      {/* Never more columns than tiles, so a short list fills the row instead of leaving a gap. */}
-      <ul className={cn("no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0", tiles.length >= 6 ? "lg:grid-cols-5 xl:grid-cols-6" : tiles.length === 5 ? "lg:grid-cols-5" : tiles.length === 4 ? "lg:grid-cols-4" : "")}>
+    <section aria-labelledby="cat-heading" className="container-page mt-6 md:mt-8">
+      <SectionHeader id="cat-heading" title="Shop by category" href="/categories" />
+      <ul className="grid grid-cols-4 gap-x-2.5 gap-y-4 sm:grid-cols-[repeat(auto-fill,minmax(6.75rem,1fr))] sm:gap-x-4 lg:grid-cols-[repeat(auto-fill,minmax(7.75rem,1fr))]">
         {tiles.map((t) => (
-          <li key={t.key} className="w-[40%] shrink-0 snap-start sm:w-auto">
-            <Link href={t.href} className="group flex h-full flex-col items-center rounded-[var(--radius-card)] border border-line bg-white p-3 text-center shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:border-forest-700/30 hover:shadow-[var(--shadow-lift)]">
-              <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-xl bg-white">
+          <li key={t.key}>
+            <Link href={t.href} className="group flex flex-col items-center text-center">
+              <span className="relative block aspect-square w-full overflow-hidden rounded-xl bg-lime-50 ring-1 ring-lime-100 transition group-hover:ring-forest-700/30">
                 {t.image ? (
-                  <Image src={t.image} alt="" fill sizes="(min-width: 1024px) 15vw, 40vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+                  <Image src={t.image} alt="" fill sizes="(min-width: 1024px) 9rem, 25vw" className="object-cover transition-transform duration-300 group-hover:scale-105" />
                 ) : (
-                  <span className="grid h-full place-items-center bg-lime-50 text-forest-700"><Leaf className="size-10" aria-hidden /></span>
+                  <span className="grid h-full place-items-center text-forest-700"><Leaf className="size-8" aria-hidden /></span>
                 )}
               </span>
-              <span className="mt-2 text-[0.9375rem] font-semibold text-ink">{t.name}</span>
-              <span className="text-xs text-muted">({t.count} {t.count === 1 ? "item" : "items"})</span>
+              <span className="mt-1.5 line-clamp-2 text-xs font-semibold leading-tight text-ink sm:text-[0.8125rem]">{t.name}</span>
+              <span className="sr-only">({t.count} {t.count === 1 ? "item" : "items"})</span>
             </Link>
           </li>
         ))}
@@ -55,24 +55,28 @@ export function CategoryGrid({ categories, seasonalCount }: { categories: Catego
   );
 }
 
+/** A row of product cards: swipe sideways on phones, arrow buttons on larger screens. */
 export function ProductRail({
-  id, title, eyebrow, href, products, layout = "grid", className,
-}: { id: string; title: string; eyebrow?: string; href: string; products: ProductSummary[]; layout?: "grid" | "compact"; className?: string }) {
+  id, title, eyebrow, href, products, className, preferVariant,
+}: { id: string; title: string; eyebrow?: string; href?: string; products: ProductSummary[]; layout?: "grid" | "compact"; className?: string; preferVariant?: Record<string, string> }) {
   if (products.length === 0) return null;
   return (
-    <section aria-labelledby={id} className={cn("container-page mt-12 md:mt-16", className)}>
+    <section aria-labelledby={id} className={cn("container-page mt-7 md:mt-9", className)}>
       <SectionHeader id={id} title={title} eyebrow={eyebrow} href={href} />
-      {layout === "compact" ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {products.map((p) => <ProductCard key={p.id} product={p} variant="compact" />)}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {products.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
-        </div>
-      )}
+      <RailScroller label={title}>
+        {products.map((p, i) => (
+          <li key={p.id} className="w-[9.5rem] shrink-0 snap-start sm:w-44 lg:w-[11.25rem]">
+            <ProductCard product={p} index={i} preferVariantId={preferVariant?.[p.id]} />
+          </li>
+        ))}
+      </RailScroller>
     </section>
   );
+}
+
+/** Signed-in customers: products from their past orders, opening on the pack they bought last. */
+export function BuyAgainRail({ products, lastVariant, href = "/account/buy-again" }: { products: ProductSummary[]; lastVariant: Record<string, string>; href?: string }) {
+  return <ProductRail id="buy-again" title="Buy Again" eyebrow="From your past orders" href={href} products={products} preferVariant={lastVariant} className="mt-6 md:mt-8" />;
 }
 
 /** "Shop by price" tiles; only ranges that have products. Counts come from the live catalogue. */
@@ -100,19 +104,6 @@ export function PriceTiles({ buckets }: { buckets: { key: string; label: string;
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-/** Signed-in customers: products from their past orders, opening on the pack they bought last. */
-export function BuyAgainRail({ products, lastVariant, href = "/account/buy-again" }: { products: ProductSummary[]; lastVariant: Record<string, string>; href?: string }) {
-  if (products.length === 0) return null;
-  return (
-    <section aria-labelledby="buy-again" className="container-page mt-10 md:mt-12">
-      <SectionHeader id="buy-again" title="Buy Again" eyebrow="From your past orders" href={href} linkLabel="See all" />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {products.slice(0, 4).map((p) => <ProductCard key={p.id} product={p} variant="compact" preferVariantId={lastVariant[p.id]} />)}
-      </div>
     </section>
   );
 }

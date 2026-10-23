@@ -42,10 +42,10 @@ export function OrderSummary({
   const pending = <span className="skeleton inline-block h-4 w-16 align-middle" aria-hidden />;
 
   return (
-    <section aria-labelledby="summary" className="rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)] sm:p-6" aria-busy={loading}>
+    <section aria-labelledby="summary" className="rounded-xl border border-line bg-white p-4 sm:p-5" aria-busy={loading}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="summary" className="flex items-center gap-2.5 text-xl font-bold text-forest-800">
-          <ReceiptText className="size-6" aria-hidden /> Order Summary
+        <h2 id="summary" className="flex items-center gap-2 font-sans text-lg font-bold text-ink">
+          <ReceiptText className="size-5 text-forest-800" aria-hidden /> Order Summary
         </h2>
         {headerAction}
       </div>
@@ -62,9 +62,9 @@ export function OrderSummary({
               : delivery === "confirm" ? <span className="text-sm font-normal text-amber">Confirmed on WhatsApp</span>
               : <span className="text-sm font-normal text-muted">Add PIN code</span>,
           )}
-          <div className="!mt-4 flex items-center justify-between gap-4 rounded-xl bg-lime-100 px-4 py-3">
+          <div className="!mt-4 flex items-center justify-between gap-4 rounded-lg bg-lime-50 px-3.5 py-2.5">
             <dt className="text-base font-bold text-ink">Total amount</dt>
-            <dd className="text-2xl font-bold tabular-nums text-forest-800">
+            <dd className="text-xl font-bold tabular-nums text-forest-800">
               {formatINR(delivery === "known" ? quote.total : afterDiscount)}
               {delivery !== "known" ? <span className="block text-right text-xs font-medium text-muted">+ delivery</span> : null}
             </dd>

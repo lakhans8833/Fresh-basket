@@ -2,9 +2,10 @@
 
 Usage: python3 e2e/shopper_features.py http://localhost:3200 <screenshot-dir>
 - Admin adds an approx note to a pack ("approx 8–10 pcs") → shown on the product page and cards.
-- Top bar shows the next bookable delivery slot.
-- Header cart shows "N items · ₹total" (desktop); phones get a "View cart" bar above the tab bar
-  that hides on the product, cart and checkout pages.
+- The header shows the next bookable delivery slot (laptops) / the top bar does (phones).
+- Header cart shows "N items" and the total (desktop) and opens the cart drawer (items, bill, proceed);
+  phones get a "View cart" bar above the tab bar that hides on the product, cart and checkout pages.
+- Category pages have the category rail; home has a row per category.
 - The search box cycles through real product names.
 """
 import json, re, sys
@@ -42,15 +43,37 @@ with sync_playwright() as p:
     c = b.new_context(viewport={"width": 1366, "height": 900}); pg = c.new_page()
     pg.goto(BASE + "/product/carrot", wait_until="networkidle")
     check("product page shows the pack note", pg.get_by_text("approx 8–10 pcs").first.is_visible())
-    check("top bar shows the next delivery slot", pg.get_by_text(re.compile(r"Next delivery:")).first.is_visible())
+    check("header shows the next delivery slot", pg.get_by_role("button", name=re.compile(r"^Delivery (Today|Tomorrow|\w{3},)")).first.is_visible())
     pg.get_by_role("button", name="Add to Cart").first.click(); pg.wait_for_timeout(600)
-    cart_text = pg.get_by_role("link", name=re.compile(r"^Cart,")).first.inner_text()
-    check("header cart shows items and total", re.search(r"1 item · ₹\d", cart_text), cart_text)
+    cart_btn = pg.get_by_role("button", name=re.compile(r"^Cart, 1 item"))
+    cart_text = cart_btn.first.inner_text()
+    check("header cart shows items and total", re.search(r"1 item\s*₹\d", cart_text), cart_text)
+    cart_btn.first.click()
+    drawer = pg.get_by_role("dialog", name="My Cart")
+    drawer.wait_for()
+    box = drawer.bounding_box()
+    check("drawer covers the full screen height (not trapped in the header)", box and box["y"] <= 1 and box["height"] >= 899, box)
+    check("cart drawer lists the item and the bill", drawer.get_by_text("Carrot").first.is_visible() and drawer.get_by_text("Bill details").is_visible())
+    proceed = drawer.get_by_role("button", name=re.compile("Proceed to checkout"))
+    pg.wait_for_timeout(900)
+    check("drawer has the total and a proceed button", proceed.is_visible() and "₹" in proceed.inner_text(), proceed.inner_text())
+    drawer.get_by_role("button", name=re.compile(r"Increase Carrot")).click(); pg.wait_for_timeout(500)
+    check("drawer stepper changes the cart", re.search(r"2 items", pg.get_by_role("button", name=re.compile(r"^Cart, 2 items")).first.inner_text() or ""))
+    drawer.get_by_role("button", name=re.compile(r"Decrease Carrot")).click(); pg.wait_for_timeout(300)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("Escape closes the drawer", pg.get_by_role("dialog", name="My Cart").count() == 0)
     ph = [pg.get_by_role("combobox").first.get_attribute("placeholder")]
     pg.wait_for_timeout(2800); ph.append(pg.get_by_role("combobox").first.get_attribute("placeholder"))
     check("search placeholder cycles through product names", ph[0] != ph[1] and all(x.startswith("Search \"") for x in ph), ph)
     pg.goto(BASE + "/shop", wait_until="networkidle")
     check("cards show the pack note", pg.get_by_text(re.compile("approx 8–10 pcs")).count() >= 1)
+    rail = pg.get_by_role("complementary", name="Categories")
+    check("shop page has the category rail", rail.get_by_role("link").count() >= 3)
+    rail.get_by_role("link").nth(1).click(); pg.wait_for_url(re.compile(r"/category/")); pg.wait_for_load_state("networkidle")
+    expect(pg.locator("aside[aria-label='Categories'] a[aria-current]")).to_have_count(1)
+    check("rail opens a category and marks it", pg.get_by_role("complementary", name="Categories").locator("a[aria-current]").count() == 1)
+    pg.goto(BASE + "/", wait_until="networkidle")
+    check("home has category tiles and a row per category", pg.get_by_role("heading", name="Shop by category").is_visible() and pg.locator("section[aria-labelledby^='rail-']").count() >= 1)
     pg.screenshot(path=f"{SHOTS}/desktop-header.png", clip={"x": 0, "y": 0, "width": 1366, "height": 160})
     c.close()
 

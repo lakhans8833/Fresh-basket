@@ -99,7 +99,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Highlights"
-      className="relative"
+      className="container-page relative mt-3 sm:mt-4"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}
@@ -133,7 +133,7 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       }}
     >
       {/* All slides stacked in one grid cell (height = tallest slide); only the active one is visible. */}
-      <div className="grid overflow-hidden" aria-live={running ? "off" : "polite"}>
+      <div className="grid overflow-hidden rounded-2xl" aria-live={running ? "off" : "polite"}>
         {slides.map((s, i) => {
           const active = i === index;
           // Where each slide sits (in % of the width) and whether it animates there.
@@ -176,29 +176,29 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
                   className="object-cover object-center opacity-30 md:opacity-100 md:[mask-image:linear-gradient(to_right,transparent,black_22%)]"
                 />
               </div>
-              <div className="container-page relative flex min-h-[22rem] items-center pb-16 pt-10 md:min-h-[26rem] md:py-12 lg:min-h-[28rem]">
-                <div className="max-w-xl">
-                  <p className="inline-flex items-center gap-2 rounded-full bg-forest-800 px-3.5 py-1.5 text-[0.8125rem] font-semibold text-white">
-                    <MapPin className="size-4 text-lime-300" aria-hidden /> {s.badge}
+              <div className="relative flex min-h-[12.5rem] items-center px-5 pb-12 pt-6 sm:min-h-[14rem] sm:px-8 md:min-h-[15.5rem] md:px-16 md:py-8 lg:px-20">
+                <div className="max-w-md">
+                  <p className="inline-flex items-center gap-1.5 rounded-full bg-forest-800 px-3 py-1 text-xs font-semibold text-white">
+                    <MapPin className="size-3.5 text-lime-300" aria-hidden /> {s.badge}
                   </p>
-                  <h2 className="mt-4 text-[2.35rem] font-bold leading-[1.05] text-forest-800 sm:text-5xl lg:text-[3.5rem]">
+                  <h2 className="mt-2.5 text-[1.6rem] font-bold leading-[1.1] text-forest-800 sm:text-[2rem] lg:text-[2.4rem]">
                     {s.title[0]}
                     {s.title[1] ? <span className="block text-forest-900">{s.title[1]}</span> : null}
                   </h2>
-                  <p className="mt-3 text-lg font-medium text-ink-soft sm:text-xl">{s.subtitle}</p>
-                  <div className="mt-6 flex flex-wrap items-center gap-3">
-                    <Link href={s.cta.href} className="inline-flex h-13 items-center gap-2 rounded-full bg-forest-800 px-7 text-lg font-semibold text-white shadow-[0_10px_24px_-12px_rgb(11_102_35/0.8)] hover:bg-forest-900">
-                      {s.cta.label} <ChevronRight className="size-5" aria-hidden />
+                  <p className="mt-1.5 line-clamp-2 text-sm font-medium text-ink-soft sm:text-base">{s.subtitle}</p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Link href={s.cta.href} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-forest-800 px-4 text-sm font-semibold text-white hover:bg-forest-900">
+                      {s.cta.label} <ChevronRight className="size-4" aria-hidden />
                     </Link>
                     {s.secondary ? (
-                      <Link href={s.secondary.href} className="inline-flex h-13 items-center gap-2 rounded-full bg-white/80 px-6 text-base font-semibold text-forest-800 ring-1 ring-forest-800/15 hover:bg-white">
+                      <Link href={s.secondary.href} className="hidden h-10 items-center gap-1.5 rounded-lg bg-white/85 px-4 text-sm font-semibold text-forest-800 ring-1 ring-forest-800/15 hover:bg-white sm:inline-flex">
                         {s.secondary.label} <ArrowRight className="size-4" aria-hidden />
                       </Link>
                     ) : null}
                   </div>
                 </div>
                 {s.script ? (
-                  <p aria-hidden className="absolute bottom-10 right-8 hidden max-w-64 -rotate-6 rounded-2xl bg-white/85 px-5 py-3 text-center font-script text-[2.3rem] font-bold leading-[0.9] text-forest-800 shadow-lg backdrop-blur-sm xl:block">
+                  <p aria-hidden className="absolute bottom-8 right-8 hidden max-w-52 -rotate-6 rounded-2xl bg-white/85 px-4 py-2.5 text-center font-script text-[1.8rem] font-bold leading-[0.9] text-forest-800 shadow-lg backdrop-blur-sm xl:block">
                     {s.script}
                   </p>
                 ) : null}
@@ -209,13 +209,13 @@ export function HeroCarousel({ slides }: { slides: HeroSlide[] }) {
       </div>
       {count > 1 ? (
         <>
-          <button type="button" onClick={() => go(index - 1, -1)} aria-label="Previous slide" className="absolute left-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
+          <button type="button" onClick={() => go(index - 1, -1)} aria-label="Previous slide" className="absolute left-6 top-1/2 z-20 hidden size-10 sm:left-8 lg:left-10 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
             <ChevronLeft className="size-5" />
           </button>
-          <button type="button" onClick={() => go(index + 1, 1)} aria-label="Next slide" className="absolute right-3 top-1/2 z-20 hidden size-11 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
+          <button type="button" onClick={() => go(index + 1, 1)} aria-label="Next slide" className="absolute right-6 top-1/2 z-20 hidden size-10 sm:right-8 lg:right-10 -translate-y-1/2 place-items-center rounded-full bg-white text-forest-800 shadow-md hover:bg-lime-50 md:grid">
             <ChevronRight className="size-5" />
           </button>
-          <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white/75 pl-1.5 pr-1 backdrop-blur">
+          <div className="absolute bottom-2 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-white/75 pl-1.5 pr-1 backdrop-blur">
             {slides.map((s, i) => {
               const active = i === index;
               return (

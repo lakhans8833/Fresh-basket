@@ -47,7 +47,7 @@ export function PromoCard({ banner, priority, asPreview }: { banner: Omit<PromoB
 export function PromoStrip({ banners }: { banners: PromoBanner[] }) {
   if (!banners.length) return null;
   return (
-    <section aria-label="Offers" className="container-page mt-6 md:mt-8">
+    <section aria-label="Offers" className="container-page mt-4 md:mt-5">
       {/* phone: swipe through all; tablet: 2×2; laptop: 3; wide screens: 4 */}
       {/* Columns follow the number of banners, so two banners fill the width instead of half of it. */}
       <ul className={cn("no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0", banners.length >= 4 ? "lg:grid-cols-3 xl:grid-cols-4" : banners.length === 3 ? "lg:grid-cols-3" : "")}>

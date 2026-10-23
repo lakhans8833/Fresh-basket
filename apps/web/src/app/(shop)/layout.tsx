@@ -30,7 +30,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         </div>
       ) : null}
       <TopBar announcement={settings.announcement} serviceArea={storeConfig.serviceArea} />
-      <SiteHeader settings={settings} />
+      <SiteHeader settings={settings} serviceArea={storeConfig.serviceArea} whatsappEnabled={Boolean(whatsapp)} />
       <InstallBanner storeName={settings.storeName} />
       <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}

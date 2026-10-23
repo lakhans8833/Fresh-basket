@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { Check } from "lucide-react";
 import { addablePacks, formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
@@ -75,12 +75,12 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   const action = (stack: boolean) => inCartMode ? (
     <QuantityStepper
       size="sm"
-      tone="lime"
+      tone="solid"
       value={s.inCart}
       onChange={s.setCartQty}
       max={s.cartCap}
       label={`${product.name} ${v.label} in cart`}
-      className={cn("relative z-10 shrink-0 rounded-lg font-semibold", stack ? "w-full @[12.5rem]:w-[6.75rem]" : "w-[5.75rem] sm:w-[6.75rem]")}
+      className={cn("relative z-10 h-8 shrink-0 font-semibold [&>button]:size-8", stack ? "w-full @[8.25rem]:w-[4.75rem]" : "w-[4.75rem]")}
     />
   ) : (
     <button
@@ -88,22 +88,22 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
       disabled={out || full}
       onClick={s.addToCart}
       className={cn(
-        "relative z-10 inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-3 text-sm font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
-        stack && "w-full @[12.5rem]:w-auto",
-        out || full ? "bg-sage-100 text-xs font-semibold tracking-normal text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "border border-forest-800 bg-lime-50 text-forest-800 hover:bg-forest-800 hover:text-white",
+        "relative z-10 inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-3 text-[0.8125rem] font-bold tracking-wide transition-colors disabled:cursor-not-allowed",
+        stack ? "w-full @[8.25rem]:w-[4.75rem]" : "w-[4.75rem]",
+        out || full ? "bg-sage-100 text-[0.6875rem] font-semibold tracking-normal text-muted" : s.justAdded ? "bg-leaf-600 text-white" : "border border-leaf-600 bg-lime-50 text-leaf-600 hover:bg-leaf-600 hover:text-white",
       )}
       aria-label={out ? `${product.name} ${v.label} is out of stock` : full ? `${product.name}: maximum quantity already in cart` : `Add ${product.name} ${v.label} to cart`}
     >
-      {out ? "Sold out" : full ? "Max" : s.justAdded ? <Check className="size-4" aria-hidden /> : <>ADD <Plus className="size-3.5" strokeWidth={3} aria-hidden /></>}
+      {out ? "Sold out" : full ? "Max" : s.justAdded ? <Check className="size-4" aria-hidden /> : "ADD"}
     </button>
   );
   const price = (
-    <p className="leading-tight">
-      <span className="whitespace-nowrap text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
-      {/* Always one line tall, so the price and ADD sit at the same height on every card. */}
-      <span className="block h-4 truncate text-[0.6875rem] tabular-nums text-muted" title={v.note ?? undefined}>{[perKg, v.note].filter(Boolean).join(" · ")}</span>
+    <p className="min-w-0 leading-tight">
+      <span className="block whitespace-nowrap text-[0.875rem] font-bold tabular-nums text-ink sm:text-[0.9375rem]">{formatINR(v.price)}</span>
+      {v.mrp && v.mrp > v.price ? <s className="block whitespace-nowrap text-[0.6875rem] tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
     </p>
   );
+  const sub = [perKg, v.note].filter(Boolean).join(" · ");
 
   if (layout === "compact") {
     return (
@@ -117,7 +117,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
             <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
           </h3>
           {product.variants.length > 1 ? <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="mt-1 self-start" /> : <p className="text-xs text-muted">{v.label}</p>}
-          {v.mrp && v.mrp > v.price ? <s className="mt-1 text-[0.6875rem] text-muted">MRP {formatINR(v.mrp)}</s> : null}
+          {sub ? <p className="mt-0.5 truncate text-[0.6875rem] tabular-nums text-muted">{sub}</p> : null}
           <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5 pt-1.5">
             {price}
             {action(false)}
@@ -130,45 +130,40 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
   return (
     <article
       className={cn(
-        "group relative flex flex-col rounded-[var(--radius-card)] border border-line shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-lift)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-forest-700 has-[a:focus-visible]:ring-offset-2",
+        "group relative flex h-full flex-col rounded-xl border border-line p-2 shadow-[0_1px_3px_rgb(20_48_31/0.05)] transition-shadow hover:shadow-[var(--shadow-card)] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-forest-700 has-[a:focus-visible]:ring-offset-2 sm:p-2.5",
         soldOut ? "bg-sage-50" : "bg-white",
       )}
     >
-      <div className="relative overflow-hidden rounded-t-[var(--radius-card)]">
+      <div className="relative">
         <ProductImage
           src={product.imageUrl}
           alt={product.name}
-          className={cn("aspect-[4/3] w-full bg-white transition-transform duration-500 group-hover:scale-[1.03]", soldOut ? "opacity-50 grayscale" : out && "opacity-60 grayscale-[40%]")}
-          sizes="(min-width: 1280px) 18vw, (min-width: 768px) 30vw, 50vw"
+          className={cn("aspect-square w-full rounded-lg bg-white", soldOut ? "opacity-50 grayscale" : out && "opacity-60 grayscale-[40%]")}
+          sizes="(min-width: 1280px) 15vw, (min-width: 768px) 22vw, 45vw"
           priority={priority}
         />
         {soldOut ? (
-          <span className="absolute inset-x-0 bottom-3 mx-auto w-fit rounded-full bg-ink/80 px-3 py-1 text-xs font-semibold text-white">Out of stock</span>
+          <span className="absolute inset-x-0 bottom-2 mx-auto w-fit rounded-full bg-ink/80 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white">Out of stock</span>
         ) : null}
-        <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
-          <DiscountBadge price={v.price} mrp={v.mrp} />
-          {product.seasonal ? (
-            <span className="rounded-md bg-forest-800 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">In season</span>
-          ) : null}
-        </div>
-        <FavouriteButton productId={product.id} name={product.name} className="absolute right-2.5 top-2.5 z-10 size-8 bg-white shadow" />
+        <DiscountBadge price={v.price} mrp={v.mrp} className="absolute -left-1 top-1.5 rounded-l-none rounded-r-md px-1.5 text-[0.625rem]" />
+        {product.seasonal && !soldOut ? (
+          <span className="absolute bottom-1 left-1 rounded bg-forest-800/90 px-1.5 py-px text-[0.625rem] font-bold uppercase tracking-wide text-white">In season</span>
+        ) : null}
+        <FavouriteButton productId={product.id} name={product.name} className="absolute right-1 top-1 z-10 size-8 bg-white/90 shadow-sm" />
       </div>
-      <div className="@container flex flex-1 flex-col gap-1 p-3">
-        <h3 className="line-clamp-2 font-sans text-sm font-semibold leading-snug text-ink sm:text-[0.9375rem]">
+      <div className="@container flex flex-1 flex-col pt-1.5">
+        <h3 className="line-clamp-2 min-h-[2.5em] font-sans text-[0.8125rem] font-semibold leading-[1.25] text-ink sm:text-sm">
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{product.name}</Link>
         </h3>
         {/* Same height whether or not there is a size picker ("1 pc", combos), so rows line up. */}
-        <div className="flex h-7 min-w-0 items-center gap-2">
-          <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="shrink-0" />
-          {!out && v.stock <= 5 ? <span className="truncate text-[0.6875rem] font-medium text-amber">Only {v.stock} left</span> : null}
+        <div className="mt-0.5 flex h-7 min-w-0 items-center gap-2">
+          <PackSizeSelect compact product={product} value={v.id} onChange={s.setVariantId} className="min-w-0 shrink" />
         </div>
-        <div className="mt-auto flex flex-col gap-2 pt-2 @[12.5rem]:flex-row @[12.5rem]:items-end @[12.5rem]:justify-between">
-          <div className="min-w-0">
-            <s className={cn("block h-4 truncate whitespace-nowrap text-[0.6875rem] tabular-nums text-muted", !(v.mrp && v.mrp > v.price) && "invisible")}>
-              {v.mrp && v.mrp > v.price ? `MRP ${formatINR(v.mrp)}` : "MRP"}
-            </s>
-            {price}
-          </div>
+        <p className="h-4 truncate text-[0.6875rem] tabular-nums text-muted" title={sub || undefined}>
+          {!out && v.stock <= 5 ? <span className="font-medium text-amber">Only {v.stock} left{sub ? " · " : ""}</span> : null}{sub}
+        </p>
+        <div className="mt-auto flex flex-col gap-1.5 pt-2 @[8.25rem]:flex-row @[8.25rem]:items-end @[8.25rem]:justify-between">
+          {price}
           {action(true)}
         </div>
       </div>
@@ -179,7 +174,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
 export function ProductCardSkeleton() {
   return (
     <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-white">
-      <div className="skeleton aspect-[4/3] rounded-none" />
+      <div className="skeleton aspect-square rounded-none" />
       <div className="space-y-2 p-4">
         <div className="skeleton h-4 w-2/3" />
         <div className="skeleton h-3 w-1/4" />
