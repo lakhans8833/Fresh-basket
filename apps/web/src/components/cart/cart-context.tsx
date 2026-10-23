@@ -23,6 +23,8 @@ interface DeliveryLocation {
 interface CartState {
   lines: CartLine[];
   count: number;
+  /** Items value from the prices seen when added (shown in the header / cart bar; checkout uses the server's price). */
+  itemsTotal: number;
   hydrated: boolean;
   couponCode: string | null;
   location: DeliveryLocation | null;
@@ -109,6 +111,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       lines,
       count: lines.reduce((s, l) => s + l.quantity, 0),
+      itemsTotal: lines.reduce((s, l) => s + l.quantity * (l.priceHint || 0), 0),
       hydrated,
       couponCode,
       location,

@@ -197,7 +197,7 @@ export default function ProductScreen() {
           {variant ? (
             <Text style={styles.priceLine}>
               <Text style={styles.price}>{formatINR(variant.price)}</Text>
-              <Text style={styles.per}> / {variant.label}</Text>
+              <Text style={styles.per}> / {variant.label}{variant.note ? ` (${variant.note})` : ""}</Text>
               {variant.mrp && variant.mrp > variant.price ? <Text style={styles.mrp}>  {formatINR(variant.mrp)}</Text> : null}
             </Text>
           ) : (
@@ -229,6 +229,11 @@ export default function ProductScreen() {
                       <Text style={[styles.tilePrice, selected && { color: colors.lime200 }]}>
                         {out ? "Sold out" : formatINR(v.price)}
                       </Text>
+                      {v.note ? (
+                        <Text style={[styles.tilePrice, { fontSize: 11, opacity: 0.85 }, selected && { color: colors.lime200 }]} numberOfLines={1}>
+                          {v.note}
+                        </Text>
+                      ) : null}
                     </Pressable>
                   );
                 })}

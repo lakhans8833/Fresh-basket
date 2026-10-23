@@ -46,6 +46,8 @@ export interface Variant {
   mrp: Paise | null;
   stock: number;
   active: boolean;
+  /** Optional shopper hint for the pack, e.g. "approx 6–8 pcs". */
+  note?: string | null;
 }
 
 export interface ProductSummary {

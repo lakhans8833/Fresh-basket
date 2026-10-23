@@ -57,7 +57,7 @@ export async function adminGetProduct(id: string) {
   if (!p) throw notFound();
   const images = await query(`select url, alt from product_images where product_id = $1 order by sort_order`, [id]);
   const variants = await query(
-    `select id, label, price, mrp, stock, sort_order as "sortOrder", active,
+    `select id, label, price, mrp, stock, sort_order as "sortOrder", active, note,
             exists(select 1 from order_items oi where oi.variant_id = v.id) as "hasOrders"
        from product_variants v where product_id = $1 order by sort_order, price`,
     [id],
@@ -106,9 +106,9 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
           // Stock: apply only what the admin changed, on top of today's stock (sales meanwhile stay counted).
           `update product_variants set label=$1, price=$2, mrp=$3,
                   stock = case when $9::int is null then $4 else greatest(0, stock + ($4 - $9::int)) end,
-                  sort_order=$5, active=$6
+                  sort_order=$5, active=$6, note=$10
             where id=$7 and product_id=$8`,
-          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, v.stockLoaded ?? null],
+          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, v.stockLoaded ?? null, v.note ?? null],
         );
         if (r.rowCount === 1) {
           keep.push(v.id);
@@ -116,8 +116,8 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
         }
       }
       const r = await c.query<{ id: string }>(
-        "insert into product_variants (product_id, label, price, mrp, stock, sort_order, active) values ($1,$2,$3,$4,$5,$6,$7) returning id",
-        [productId, v.label, v.price, v.mrp ?? null, v.stock, i, v.active],
+        "insert into product_variants (product_id, label, price, mrp, stock, sort_order, active, note) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id",
+        [productId, v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.note ?? null],
       );
       keep.push(r.rows[0]!.id);
     }

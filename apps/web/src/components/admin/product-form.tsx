@@ -33,13 +33,13 @@ interface LoadedProduct {
   featured: boolean;
   active: boolean;
   images: { url: string; alt: string | null }[];
-  variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean; hasOrders: boolean }[];
+  variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean; hasOrders: boolean; note?: string | null }[];
   /** Total stock in grams for products sold by weight (null = stock per pack). */
   stockGrams?: number | null;
 }
 interface CategoryOpt { id: string; name: string; active: boolean }
 
-type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean };
+type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean; note?: string };
 type ImageRow = { key: string; url: string; alt: string };
 
 let keySeq = 0;
@@ -93,7 +93,7 @@ function withStandardSizes(rows: VariantRow[]): VariantRow[] {
   return [...kept, ...added].sort((a, b) => (labelGrams(a.label) ?? Infinity) - (labelGrams(b.label) ?? Infinity));
 }
 
-const emptyVariant = (): VariantRow => ({ key: k(), label: "", price: "", mrp: "", stock: "0", active: true, hasOrders: false });
+const emptyVariant = (): VariantRow => ({ key: k(), label: "", price: "", mrp: "", stock: "0", active: true, hasOrders: false, note: "" });
 
 export function ProductForm({ id }: { id: string | null }) {
   return (
@@ -150,7 +150,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [images, setImages] = useState<ImageRow[]>(() => (initial?.images ?? []).map((i) => ({ key: k(), url: i.url, alt: i.alt ?? "" })));
   const [variants, setVariants] = useState<VariantRow[]>(() =>
     initial?.variants.length
-      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders }))
+      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders, note: v.note ?? "" }))
       : [emptyVariant()],
   );
   // Stock by weight: one total in kg shared by every weight pack (used when all options are weights).
@@ -266,7 +266,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       if (mrp !== null && Number.isNaN(mrp)) errs[`variants.${i}.mrp`] = "Use a rupee amount";
       else if (mrp !== null && price !== null && !Number.isNaN(price) && mrp < price) errs[`variants.${i}.mrp`] = "MRP should be at least the price";
       if (!byWeight && (stock === null || Number.isNaN(stock))) errs[`variants.${i}.stock`] = "Whole number";
-      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active };
+      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active, note: v.note?.trim() || null };
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,
@@ -568,6 +568,9 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
                           <Trash2 className="size-4" aria-hidden />
                         </IconBtn>
                       </div>
+                      <VCell label="Approx. size or count (optional)" id={`v-note-${v.key}`} error={e("note")} className="col-span-2 md:col-span-6 md:-mt-1">
+                        <Input id={`v-note-${v.key}`} value={v.note ?? ""} onChange={(ev) => setVariant(v.key, { note: ev.target.value })} maxLength={40} placeholder="e.g. approx 6–8 pcs, or approx 400–600 g" />
+                      </VCell>
                       {v.hasOrders ? <p className="col-span-2 -mt-1 text-xs text-muted md:col-span-6">Has past orders — removing it will hide it instead of deleting it.</p> : null}
                     </li>
                   );
