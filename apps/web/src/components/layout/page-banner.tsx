@@ -2,7 +2,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 import { cn } from "../ui/cn";
 
-/** Green-tinted page header with vegetable photography on the right (mockup style). */
+/** Slim green-tinted page header (title + one line) with a photo fading in on the right. */
 export function PageBanner({
   title, subtitle, icon, image = "/images/site/banner-market.webp", script, children, className, as: Heading = "h1",
 }: {
@@ -21,17 +21,17 @@ export function PageBanner({
       <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[58%] md:block">
         <Image src={image} alt="" fill priority sizes="60vw" className="object-cover object-center [mask-image:linear-gradient(to_right,transparent,black_28%)]" />
       </div>
-      <div className="container-page relative flex min-h-[7.5rem] items-center py-6 md:min-h-[8.5rem]">
+      <div className="container-page relative flex min-h-[4.5rem] items-center py-3.5 md:min-h-[5.5rem]">
         <div className="relative z-10 flex min-w-0 items-center gap-4 md:max-w-[52%]">
-          {icon ? <span className="hidden shrink-0 text-forest-800 sm:block">{icon}</span> : null}
+          {icon ? <span className="hidden shrink-0 text-forest-800 sm:block [&_svg]:size-9">{icon}</span> : null}
           <div className="min-w-0">
-            <Heading className="text-[1.75rem] font-bold leading-tight text-forest-800 sm:text-[2.25rem] md:text-[2.5rem]">{title}</Heading>
-            {subtitle ? <div className="mt-1 text-[0.9375rem] text-ink-soft sm:text-lg">{subtitle}</div> : null}
+            <Heading className="text-xl font-bold leading-tight text-ink sm:text-2xl md:text-[1.75rem]">{title}</Heading>
+            {subtitle ? <div className="mt-0.5 text-sm text-ink-soft sm:text-[0.9375rem]">{subtitle}</div> : null}
             {children}
           </div>
         </div>
         {script ? (
-          <p aria-hidden className="absolute right-6 top-1/2 hidden max-w-52 -translate-y-1/2 -rotate-6 rounded-2xl bg-white/85 px-4 py-2 text-center font-script text-[1.6rem] font-bold leading-[0.95] text-forest-800 shadow-md backdrop-blur-sm xl:block">
+          <p aria-hidden className="absolute right-6 top-1/2 hidden max-w-52 -translate-y-1/2 -rotate-6 rounded-2xl bg-white/85 px-4 py-1.5 text-center font-script text-[1.35rem] font-bold leading-[0.95] text-forest-800 shadow-md backdrop-blur-sm xl:block">
             {script}
           </p>
         ) : null}

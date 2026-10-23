@@ -33,11 +33,19 @@ export default async function HomePage() {
   const bestSellers = bestIds.map((id) => byId.get(id)).filter((p): p is (typeof all)[number] => Boolean(p));
   const featured = all.filter((p) => p.featured).slice(0, 8);
   const seasonalAll = all.filter((p) => p.seasonal);
-  const seasonal = seasonalAll.slice(0, 14);
+  const seasonal = seasonalAll;
   const seasonalCount = seasonalAll.length;
   const deals = dealsFrom(all);
-  // One rail per category (in-stock first), like the quick-commerce apps.
-  const inCategory = (id: string) => all.filter((p) => p.categoryId === id).sort((a, b) => Number(b.inStock) - Number(a.inStock)).slice(0, 14);
+  // Rows open on products a shopper can buy and see: in stock first, then with a photo (stable order otherwise).
+  const browseFirst = <T extends { inStock: boolean; imageUrl: string | null }>(list: T[]) =>
+    [...list].sort((a, b) => Number(b.inStock) - Number(a.inStock) || Number(Boolean(b.imageUrl)) - Number(Boolean(a.imageUrl)));
+  // One rail per category, like the quick-commerce apps.
+  const inCategory = (id: string) => browseFirst(all.filter((p) => p.categoryId === id)).slice(0, 14);
+  // Few best sellers yet (new store): fill the first row with featured, then other photographed products.
+  const popular = bestSellers.length >= 6 ? null : [
+    ...bestSellers,
+    ...browseFirst([...featured, ...all.filter((p) => !p.featured)]).filter((p) => p.inStock && !bestSellers.some((b) => b.id === p.id)),
+  ].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i).slice(0, 12);
 
   const leafy = categories.find((c) => /leaf|green/.test(c.slug));
   // Extra rails appear only when the store actually has these categories with products in them.
@@ -129,16 +137,16 @@ export default async function HomePage() {
       <PromoStrip banners={banners.slice(0, 3)} />
       <BuyAgainRail products={buyAgain.products} lastVariant={buyAgain.lastVariant} />
       <CategoryGrid categories={categories} seasonalCount={seasonalCount} />
-      {bestSellers.length ? (
-        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} />
+      {popular ? (
+        <ProductRail id="popular" title="Popular picks" href="/shop" products={popular} />
       ) : (
-        <ProductRail id="favourites" title="Fresh Favourites" href="/shop" products={featured} />
+        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} />
       )}
-      {deals.length ? <ProductRail id="deals" title="Deals of the Day" href="/deals" products={deals.slice(0, 14)} /> : null}
+      {deals.length ? <ProductRail id="deals" title="Deals of the Day" href="/deals" products={browseFirst(deals).slice(0, 14)} /> : null}
       {categories.filter((c) => (c.productCount ?? 0) > 0).map((c) => (
         <ProductRail key={c.id} id={`rail-${c.slug}`} title={c.name} href={`/category/${c.slug}`} products={inCategory(c.id)} />
       ))}
-      <ProductRail id="seasonal" title="In Season Now" href="/shop?seasonal=1" products={seasonal} />
+      <ProductRail id="seasonal" title="In Season Now" href="/shop?seasonal=1" products={browseFirst(seasonal).slice(0, 14)} />
       <DeliveryInfo serviceArea={area} areas={areas} slots={slots} codEnabled={settings.codEnabled} whatsapp={Boolean(whatsapp)} />
       {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to place an order.`)} /> : null}
     </>
