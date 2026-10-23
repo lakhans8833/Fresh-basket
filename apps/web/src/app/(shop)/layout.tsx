@@ -1,3 +1,4 @@
+import { CartBar } from "@/components/layout/cart-bar";
 import { getSettings, supportedPaymentMethods } from "@/lib/settings";
 import { listCategories } from "@/lib/catalog";
 import { env } from "@/lib/env";
@@ -41,6 +42,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         serviceArea={storeConfig.serviceArea}
       />
       {whatsapp ? <WhatsAppFloat number={whatsapp} storeName={settings.storeName} /> : null}
+      <CartBar />
       <MobileTabBar />
     </div>
   );

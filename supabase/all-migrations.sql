@@ -2399,6 +2399,12 @@ begin
 end $$;
 revoke all on function public.cancel_order(uuid, text, text) from public, anon, authenticated;
 
+-- ===== supabase/migrations/20261024000001_variant_approx_note.sql =====
+-- Optional short note per pack size shown to shoppers, e.g. "approx 6–8 pcs" for 1 kg of bananas or
+-- "approx 400–600 g" for 1 cauliflower (what BigBasket shows next to a pack). Adds a nullable column only.
+alter table public.product_variants
+  add column if not exists note text check (note is null or char_length(note) <= 40);
+
 -- ===== record the migrations above as applied (for apps/web/scripts/migrate.mjs) =====
 create table if not exists public._fb_migrations (name text primary key, applied_at timestamptz not null default now());
 alter table public._fb_migrations enable row level security;
@@ -2432,5 +2438,6 @@ insert into public._fb_migrations (name) values
   ('20261017200002_pack_label_spaces.sql'),
   ('20261017200003_late_payment_keep_future_date.sql'),
   ('20261020000001_rate_limits.sql'),
-  ('20261023000001_payment_safety.sql')
+  ('20261023000001_payment_safety.sql'),
+  ('20261024000001_variant_approx_note.sql')
 on conflict (name) do nothing;

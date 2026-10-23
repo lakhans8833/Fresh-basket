@@ -24,6 +24,7 @@ export function SearchBox() {
   const [data, setData] = useState<Suggest | null>(null);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
+  const examples = useSearchExamples(!q);
   const rootRef = useRef<HTMLFormElement>(null);
   // The header renders two search boxes (desktop + phone); each needs its own ids.
   const inputId = useId();
@@ -131,7 +132,7 @@ export function SearchBox() {
         onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKey}
-        placeholder="Search fruits & vegetables…"
+        placeholder={examples ? `Search "${examples}"` : "Search fruits & vegetables…"}
         className="h-11 w-full rounded-full border border-line bg-sage-50/60 pl-5 pr-20 text-[0.9375rem] text-ink placeholder:text-muted/80 focus:border-leaf-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-lime-200/70 md:h-12"
         enterKeyHint="search"
         autoComplete="off"
@@ -212,4 +213,40 @@ function SuggestionRow({ id, product, active, onHover }: { id: string; product: 
       )}
     </li>
   );
+}
+
+let exampleNames: Promise<string[]> | null = null;
+/** Real product names from the catalogue, short form ("Spinach (Palak)" → "palak"). */
+function loadExamples() {
+  return (exampleNames ??= fetch("/api/products?limit=24")
+    .then((r) => (r.ok ? r.json() : { products: [] }))
+    .then((d: { products?: { name: string }[] }) => {
+      const names = (d.products ?? []).map((p) => {
+        const m = /\(([^)]+)\)/.exec(p.name);
+        return (m?.[1] ?? p.name).split(/[–-]/)[0]!.trim().toLowerCase();
+      });
+      return [...new Set(names)].filter((n) => n.length > 1 && n.length < 18).slice(0, 10);
+    })
+    .catch(() => { exampleNames = null; return []; }));
+}
+
+/**
+ * Cycles the search placeholder through products we actually sell ("Search \"palak\"") while the box is
+ * empty — a hint of what to type, like the big grocery apps. Static when the visitor prefers less motion.
+ */
+function useSearchExamples(enabled: boolean): string | null {
+  const [names, setNames] = useState<string[]>([]);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void loadExamples().then((n) => live && setNames(n));
+    return () => { live = false; };
+  }, []);
+  useEffect(() => {
+    if (!enabled || names.length < 2) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const t = setInterval(() => setI((n) => (n + 1) % names.length), 2500);
+    return () => clearInterval(t);
+  }, [enabled, names.length]);
+  return names.length ? names[i % names.length]! : null;
 }

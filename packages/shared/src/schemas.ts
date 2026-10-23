@@ -140,6 +140,8 @@ export const adminVariantSchema = z.object({
   /** Stock shown when the form was opened. The server applies only the change (stock - stockLoaded),
    *  so orders placed while the form was open aren't undone. Leave out to set stock as given. */
   stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
+  /** Optional hint shown with the pack, e.g. "approx 6–8 pcs". Empty → none. */
+  note: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), z.string().trim().max(40, "Keep the note under 40 characters").nullable().optional()),
   sortOrder: z.number().int().min(0).max(99).default(0),
   active: z.boolean().default(true),
 }).refine((v) => v.mrp == null || v.mrp === 0 || v.mrp >= v.price, { message: "MRP can't be lower than the price", path: ["mrp"] });

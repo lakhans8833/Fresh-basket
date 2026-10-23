@@ -29,7 +29,7 @@ const PRODUCT_SELECT = `
          p.description, p.highlights, p.seasonal, p.featured, p.storage_tips, p.shelf_life, p.origin, p.nutrition,
          p.stock_grams::float8 as stock_grams,
          (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image_url,
-         (select json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'mrp', v.mrp, 'stock', v.stock, 'active', v.active) order by v.sort_order, v.price)
+         (select json_agg(json_build_object('id', v.id, 'label', v.label, 'price', v.price, 'mrp', v.mrp, 'stock', v.stock, 'active', v.active, 'note', v.note) order by v.sort_order, v.price)
             from product_variants v where v.product_id = p.id and v.active) as variants
     from products p join categories c on c.id = p.category_id
 `;

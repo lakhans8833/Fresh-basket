@@ -101,7 +101,7 @@ export function ProductCard({ product, priority, variant: layout = "grid", prefe
     <p className="leading-tight">
       <span className="whitespace-nowrap text-base font-bold tabular-nums text-forest-800 sm:text-lg">{formatINR(v.price)}</span>
       {/* Always one line tall, so the price and ADD sit at the same height on every card. */}
-      <span className="block h-4 truncate text-[0.6875rem] tabular-nums text-muted">{perKg ?? ""}</span>
+      <span className="block h-4 truncate text-[0.6875rem] tabular-nums text-muted" title={v.note ?? undefined}>{[perKg, v.note].filter(Boolean).join(" · ")}</span>
     </p>
   );
 
