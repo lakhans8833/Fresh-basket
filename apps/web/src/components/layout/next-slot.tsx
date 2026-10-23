@@ -22,6 +22,20 @@ function range(start: string, end: string) {
   return am === bm ? `${a.slice(0, -3)}–${b}` : `${a}–${b}`;
 }
 
+/** "Today, 5–8 PM" for the first slot that can still be booked, or null while loading / none. */
+export function useNextSlotLabel() {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void loadSlots().then((s) => {
+      const x = s.find((y) => y.available);
+      if (live) setLabel(x ? `${dayWord(x.date)}, ${range(x.startTime, x.endTime)}` : null);
+    });
+    return () => { live = false; };
+  }, []);
+  return label;
+}
+
 /** "Next delivery: Today, 5–8 PM" — the first slot that can still be booked (like a quick-commerce ETA, but honest for slots). */
 export function NextSlot({ className }: { className?: string }) {
   const [slot, setSlot] = useState<SlotOption | null>(null);

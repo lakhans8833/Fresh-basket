@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import { buildWhatsAppUrl, formatINR, type PromoBanner } from "@freshbasket/shared";
-import { bestSavingPct, bestSellerIds, dealsFrom, listBuyAgain, listCategories, listProducts, priceBucketsFrom } from "@/lib/catalog";
+import { bestSavingPct, bestSellerIds, dealsFrom, listBuyAgain, listCategories, listProducts } from "@/lib/catalog";
 import { listActiveBanners } from "@/lib/banners";
 import { getSession } from "@/lib/auth";
 import { listActiveDeliveryAreas, listActiveSlots } from "@/lib/delivery";
 import { getSettings } from "@/lib/settings";
 import { resolveWhatsAppNumber, storeConfig } from "@/config/store";
 import { HeroCarousel, type HeroSlide } from "@/components/home/hero-carousel";
-import { BuyAgainRail, CategoryGrid, DeliveryInfo, HowItWorks, PriceTiles, ProductRail, WhatsAppBand } from "@/components/home/sections";
+import { BuyAgainRail, CategoryGrid, DeliveryInfo, ProductRail, WhatsAppBand } from "@/components/home/sections";
 import { PromoStrip } from "@/components/home/promo-strip";
-import { BenefitsStrip, storeBenefits } from "@/components/layout/benefits";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
@@ -34,19 +33,16 @@ export default async function HomePage() {
   const bestSellers = bestIds.map((id) => byId.get(id)).filter((p): p is (typeof all)[number] => Boolean(p));
   const featured = all.filter((p) => p.featured).slice(0, 8);
   const seasonalAll = all.filter((p) => p.seasonal);
-  const seasonal = seasonalAll.slice(0, 4);
+  const seasonal = seasonalAll.slice(0, 14);
   const seasonalCount = seasonalAll.length;
   const deals = dealsFrom(all);
-  const priceBuckets = priceBucketsFrom(all);
-  const inCategory = (id: string) => all.filter((p) => p.categoryId === id).slice(0, 4);
+  // One rail per category (in-stock first), like the quick-commerce apps.
+  const inCategory = (id: string) => all.filter((p) => p.categoryId === id).sort((a, b) => Number(b.inStock) - Number(a.inStock)).slice(0, 14);
 
   const leafy = categories.find((c) => /leaf|green/.test(c.slug));
   // Extra rails appear only when the store actually has these categories with products in them.
   const fruits = categories.find((c) => /fruit/.test(c.slug) && !/exotic/.test(c.slug) && (c.productCount ?? 0) > 0);
   const combos = categories.find((c) => /combo|value|pack/.test(c.slug) && (c.productCount ?? 0) > 0);
-  const leafyProducts = leafy ? inCategory(leafy.id) : [];
-  const fruitProducts = fruits ? inCategory(fruits.id) : [];
-  const comboProducts = combos ? inCategory(combos.id) : [];
   const whatsapp = resolveWhatsAppNumber(settings.whatsapp);
   const area = storeConfig.serviceArea;
 
@@ -130,26 +126,20 @@ export default async function HomePage() {
     <>
       <h1 className="sr-only">{settings.storeName} — fresh vegetables delivered in {area}</h1>
       <HeroCarousel slides={slides} />
-      <div className="border-b border-line bg-sage-50">
-        <div className="container-page py-5">
-          <BenefitsStrip benefits={storeBenefits(settings, { whatsapp: Boolean(whatsapp), serviceArea: area })} tone="plain" />
-        </div>
-      </div>
-      <PromoStrip banners={banners} />
+      <PromoStrip banners={banners.slice(0, 3)} />
       <BuyAgainRail products={buyAgain.products} lastVariant={buyAgain.lastVariant} />
       <CategoryGrid categories={categories} seasonalCount={seasonalCount} />
       {bestSellers.length ? (
-        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} layout="compact" />
+        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} />
       ) : (
-        <ProductRail id="favourites" title="Fresh Favourites" href="/shop" products={featured} layout="compact" />
+        <ProductRail id="favourites" title="Fresh Favourites" href="/shop" products={featured} />
       )}
-      {combos ? <ProductRail id="combos" title={combos.name} href={`/category/${combos.slug}`} products={comboProducts} /> : null}
-      {fruits ? <ProductRail id="fruits" title={fruits.name} href={`/category/${fruits.slug}`} products={fruitProducts} /> : null}
-      {leafy ? <ProductRail id="leafy" title={leafy.name} href={`/category/${leafy.slug}`} products={leafyProducts} /> : null}
-      <PriceTiles buckets={priceBuckets} />
+      {deals.length ? <ProductRail id="deals" title="Deals of the Day" href="/deals" products={deals.slice(0, 14)} /> : null}
+      {categories.filter((c) => (c.productCount ?? 0) > 0).map((c) => (
+        <ProductRail key={c.id} id={`rail-${c.slug}`} title={c.name} href={`/category/${c.slug}`} products={inCategory(c.id)} />
+      ))}
       <ProductRail id="seasonal" title="In Season Now" href="/shop?seasonal=1" products={seasonal} />
       <DeliveryInfo serviceArea={area} areas={areas} slots={slots} codEnabled={settings.codEnabled} whatsapp={Boolean(whatsapp)} />
-      <HowItWorks whatsapp={Boolean(whatsapp)} />
       {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to place an order.`)} /> : null}
     </>
   );

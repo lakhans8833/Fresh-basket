@@ -67,7 +67,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
   const canContinue = Boolean(quote) && blocking.length === 0 && !loading && !belowMinimum;
 
   return (
-    <div className="container-page pt-6 md:pt-8">
+    <div className="container-page pt-4 md:pt-6">
       {buyAgainNotice ? (
         <Notice tone={buyAgainNotice.skipped.length || buyAgainNotice.changed.length || buyAgainNotice.reduced.length ? "warning" : "success"} className="mb-5" title={`Added ${buyAgainNotice.added} item${buyAgainNotice.added === 1 ? "" : "s"} from order ${buyAgainNotice.orderNumber} at today's prices`}>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
@@ -86,10 +86,10 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
         </Notice>
       ) : null}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_27rem]">
-        <section aria-labelledby="cart-items" className="min-w-0 rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)]">
+        <section aria-labelledby="cart-items" className="min-w-0 rounded-xl border border-line bg-white">
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
-            <h2 id="cart-items" className="flex items-center gap-2.5 text-xl font-bold text-ink">
-              <ShoppingBasket className="size-6 text-forest-800" aria-hidden /> Cart Items ({count})
+            <h2 id="cart-items" className="flex items-center gap-2 font-sans text-lg font-bold text-ink">
+              <ShoppingBasket className="size-5 text-forest-800" aria-hidden /> Cart Items ({count})
             </h2>
             <button type="button" onClick={() => confirm("Remove all items from your cart?") && clear()} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-danger hover:bg-danger-bg">
               <Trash2 className="size-4" aria-hidden /> Clear Cart
@@ -114,7 +114,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
               const href = l.productSlug ? `/product/${l.productSlug}` : "/shop";
               const msgEl = msg ? <p className="mt-1 text-sm font-medium text-danger" role="alert">{msg}</p> : null;
               // The server quote says how many of this pack fit (weight products: after the other sizes in the cart).
-              const stepper = <QuantityStepper size="sm" tone="outline" value={l.quantity} max={p ? Math.max(0, p.maxQuantity) : undefined} onChange={(n) => setQuantity(l.variantId, p ? Math.min(n, Math.max(p.maxQuantity, Math.min(n, l.quantity))) : n)} label={`${l.productName} ${l.variantLabel}`} className="rounded-lg" />;
+              const stepper = <QuantityStepper size="sm" tone="solid" value={l.quantity} max={p ? Math.max(0, p.maxQuantity) : undefined} onChange={(n) => setQuantity(l.variantId, p ? Math.min(n, Math.max(p.maxQuantity, Math.min(n, l.quantity))) : n)} label={`${l.productName} ${l.variantLabel}`} className="w-[6.5rem]" />;
               const removeBtn = (
                 <button type="button" onClick={() => remove(l.variantId)} aria-label={`Remove ${l.productName}`} className="grid size-9 shrink-0 place-items-center rounded-full text-danger hover:bg-danger-bg">
                   <Trash2 className="size-[1.15rem]" />
@@ -218,7 +218,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
           </OrderSummary>
 
           {whatsappEnabled && saved?.name && saved.address ? (
-            <section aria-labelledby="saved-address" className="rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-[var(--shadow-card)]">
+            <section aria-labelledby="saved-address" className="rounded-xl border border-line bg-white p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <h2 id="saved-address" className="flex items-center gap-2 font-sans text-base font-semibold text-ink"><MapPin className="size-5 text-forest-800" aria-hidden /> Delivery Address</h2>
                 <Link href="/order" className="inline-flex items-center gap-1 text-sm font-semibold text-forest-800 hover:underline"><Pencil className="size-3.5" aria-hidden /> Edit</Link>

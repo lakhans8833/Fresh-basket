@@ -15,7 +15,7 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: st
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 print:hidden">
       <div className="min-w-0">
         {eyebrow ? <div className="mb-1 text-sm text-muted">{eyebrow}</div> : null}
-        <h1 className="text-[1.75rem] font-semibold leading-tight text-forest-900 md:text-[2.125rem]">{title}</h1>
+        <h1 className="text-2xl font-bold leading-tight text-ink md:text-[1.75rem]">{title}</h1>
         {description ? <p className="mt-1 max-w-2xl text-[0.9375rem] text-muted">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -25,7 +25,7 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: st
 
 export function Card({ className, children, ...rest }: ComponentProps<"section">) {
   return (
-    <section className={cn("rounded-[var(--radius-card)] border border-line bg-white shadow-[var(--shadow-card)]", className)} {...rest}>
+    <section className={cn("rounded-xl border border-line bg-white shadow-[0_1px_3px_rgb(20_48_31/0.05)]", className)} {...rest}>
       {children}
     </section>
   );
@@ -35,7 +35,7 @@ export function CardHeader({ title, description, actions, id }: { title: string;
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
       <div>
-        <h2 id={id} className="text-lg font-semibold text-forest-900">{title}</h2>
+        <h2 id={id} className="font-sans text-base font-bold text-ink">{title}</h2>
         {description ? <p className="mt-0.5 text-sm text-muted">{description}</p> : null}
       </div>
       {actions}

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound, Star } from "lucide-react";
 import { LEAVE_HELD_EVENT, requestLeave } from "./unsaved-guard";
 import { useSession } from "../account/session-context";
-import { LeafMark } from "../layout/logo";
+import { BasketMark } from "../layout/logo";
 import { DevBadge } from "../ui/feedback";
 import { cn } from "../ui/cn";
 import { AdminProvider, type AdminRole } from "./admin-context";
@@ -34,10 +34,10 @@ function isActive(pathname: string, href: string) {
 function Brand({ storeName, onDark }: { storeName: string; onDark?: boolean }) {
   return (
     <Link href="/admin" className="inline-flex items-center gap-2" aria-label={`${storeName} admin — dashboard`}>
-      <LeafMark className={cn("size-8 shrink-0", onDark ? "text-lime-300" : "text-leaf-500")} />
-      <span className="leading-tight">
-        <span className={cn("block font-display text-[1.15rem] font-semibold lowercase tracking-[-0.03em]", onDark ? "text-ivory" : "text-forest-900")}>{storeName}.</span>
-        <span className={cn("block text-[0.625rem] font-semibold uppercase tracking-[0.18em]", onDark ? "text-lime-200/80" : "text-muted")}>Admin</span>
+      <BasketMark className={cn("size-9 shrink-0", onDark && "opacity-95")} />
+      <span className="min-w-0 leading-tight">
+        <span className="block font-brand text-[1rem] font-bold leading-tight text-forest-800">{storeName}</span>
+        <span className="block text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-muted">Admin panel</span>
       </span>
     </Link>
   );
@@ -100,11 +100,11 @@ export function AdminShell({
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[0.9375rem] font-medium transition-colors",
-              active ? "bg-lime-200 text-forest-900" : "text-ivory/80 hover:bg-white/8 hover:text-ivory",
+              "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.9375rem] font-medium transition-colors",
+              active ? "bg-leaf-600 text-white shadow-sm" : "text-ink-soft hover:bg-sage-100 hover:text-forest-800",
             )}
           >
-            <Icon className={cn("size-[1.15rem] shrink-0", active ? "text-forest-800" : "text-lime-200/70 group-hover:text-lime-200")} aria-hidden />
+            <Icon className={cn("size-[1.15rem] shrink-0", active ? "text-white" : "text-forest-700/70 group-hover:text-forest-800")} aria-hidden />
             {label}
           </Link>
         );
@@ -113,23 +113,23 @@ export function AdminShell({
   );
 
   const footer = (
-    <div className="space-y-3 border-t border-white/10 pt-4">
-      <a href="/" target="_blank" rel="noopener" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-ivory/80 hover:bg-white/8 hover:text-ivory">
-        <ExternalLink className="size-4 text-lime-200/70" aria-hidden /> View store <span className="sr-only">(opens in a new tab)</span>
+    <div className="space-y-3 border-t border-line pt-4">
+      <a href="/" target="_blank" rel="noopener" className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft hover:bg-sage-100 hover:text-forest-800">
+        <ExternalLink className="size-4 text-forest-700/70" aria-hidden /> View store <span className="sr-only">(opens in a new tab)</span>
       </a>
-      <div className="flex items-center gap-3 rounded-xl bg-white/6 px-3 py-2.5">
-        <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-lime-300 font-semibold text-forest-900">
+      <div className="flex items-center gap-3 rounded-xl bg-sage-50 px-3 py-2.5">
+        <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-leaf-600 font-semibold text-white">
           {(userName || userEmail || "?").trim().charAt(0).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ivory">{userName || userEmail}</p>
-          <p className="truncate text-xs text-ivory/80"><span className="capitalize">{role}</span>{userEmail && userName ? ` · ${userEmail}` : ""}</p>
+          <p className="truncate text-sm font-semibold text-ink">{userName || userEmail}</p>
+          <p className="truncate text-xs text-muted"><span className="capitalize">{role}</span>{userEmail && userName ? ` · ${userEmail}` : ""}</p>
         </div>
         <button
           type="button"
           onClick={signOut}
           disabled={signingOut}
-          className="grid size-9 shrink-0 place-items-center rounded-full text-ivory/75 hover:bg-white/10 hover:text-ivory disabled:opacity-50"
+          className="grid size-9 shrink-0 place-items-center rounded-full text-ink-soft hover:bg-white hover:text-danger disabled:opacity-50"
           aria-label="Sign out"
           title="Sign out"
         >
@@ -141,9 +141,9 @@ export function AdminShell({
 
   return (
     <AdminProvider value={{ role, storeName, devMode: devNotes.length > 0 }}>
-      <div className="min-h-dvh bg-ivory lg:grid lg:grid-cols-[16.5rem_1fr]">
+      <div className="min-h-dvh bg-sage-50 lg:grid lg:grid-cols-[16.5rem_1fr]">
         {/* Desktop sidebar */}
-        <div className="hidden bg-forest-900 lg:block print:hidden">
+        <div className="hidden border-r border-line bg-white lg:block print:hidden">
         <aside className="sticky top-0 flex h-dvh flex-col gap-6 overflow-y-auto px-4 py-6">
           <div className="px-2">
             <Brand storeName={storeName} onDark />
@@ -155,7 +155,7 @@ export function AdminShell({
         </div>
 
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-line bg-ivory/95 px-4 backdrop-blur lg:hidden print:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-3 border-b border-line bg-white/95 px-4 backdrop-blur lg:hidden print:hidden">
           <Brand storeName={storeName} />
           <div className="flex items-center gap-2">
             {devNotes.length ? <DevBadge>Dev</DevBadge> : null}
@@ -175,10 +175,10 @@ export function AdminShell({
         {open ? (
           <div className="fixed inset-0 z-50 lg:hidden" id="admin-mobile-nav" role="dialog" aria-modal="true" aria-label="Admin menu">
             <button type="button" aria-label="Close menu" className="absolute inset-0 bg-forest-950/50" onClick={() => setOpen(false)} />
-            <div className="absolute inset-y-0 left-0 flex w-[min(19rem,85vw)] flex-col gap-6 overflow-y-auto bg-forest-900 px-4 py-5 shadow-[var(--shadow-lift)]">
+            <div className="absolute inset-y-0 left-0 flex w-[min(19rem,85vw)] flex-col gap-6 overflow-y-auto bg-white px-4 py-5 shadow-[var(--shadow-lift)]">
               <div className="flex items-center justify-between px-2">
                 <Brand storeName={storeName} onDark />
-                <button type="button" onClick={() => setOpen(false)} className="grid size-9 place-items-center rounded-full text-ivory hover:bg-white/10" aria-label="Close menu" autoFocus>
+                <button type="button" onClick={() => setOpen(false)} className="grid size-9 place-items-center rounded-full text-ink hover:bg-sage-100" aria-label="Close menu" autoFocus>
                   <X className="size-5" aria-hidden />
                 </button>
               </div>

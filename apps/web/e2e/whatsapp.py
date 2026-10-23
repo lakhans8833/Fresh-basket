@@ -23,7 +23,7 @@ with sync_playwright() as p:
     cards.nth(0).get_by_role("button", name=re.compile(r"^Add .+ to cart$")).click()
     cards.nth(0).get_by_role("button", name=re.compile("Increase")).click()
     cards.nth(1).get_by_role("button", name=re.compile(r"^Add .+ to cart$")).click()
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 3 items")).first).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 3 items"]:visible').first).to_be_visible()
 
     page.goto(f"{BASE}/cart")
     page.get_by_role("button", name="Order on WhatsApp").click()
@@ -80,7 +80,7 @@ with sync_playwright() as p:
     total = int(re.search(r"\*Total: ₹([\d,]+)\*", msg).group(1).replace(",", ""))
     assert sum(items) == sub, (items, sub)
     assert total == sub + (0 if fee.group(1) == "Free" else int(fee.group(2))), (total, sub, fee.group(0))
-    expect(page.get_by_role("link", name=re.compile(r"Cart, 0 items")).first).to_be_visible()
+    expect(page.locator('header [aria-label^="Cart, 0 items"]:visible').first).to_be_visible()
 
     # Secret tracking link works without signing in and masks the address
     page.get_by_role("link", name="Track this order").click()

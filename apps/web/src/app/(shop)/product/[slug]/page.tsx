@@ -14,6 +14,7 @@ import { ProductTabs } from "@/components/product/product-tabs";
 import { ReviewsPanel } from "@/components/product/reviews-panel";
 import { Stars } from "@/components/product/stars";
 import { getProductReviews } from "@/lib/reviews";
+import { DeliveryPill, WhyShop } from "@/components/product/product-extras";
 
 type Params = Promise<{ slug: string }>;
 
@@ -34,11 +35,11 @@ export default async function ProductPage({ params }: { params: Params }) {
   const product = await getProduct((await params).slug);
   if (!product) notFound();
   const [relatedAll, settings, reviews] = await Promise.all([
-    listProducts({ category: product.categorySlug, limit: 5 }),
+    listProducts({ category: product.categorySlug, limit: 15 }),
     getSettings(),
     getProductReviews(product.id),
   ]);
-  const related = relatedAll.filter((p) => p.id !== product.id).slice(0, 4);
+  const related = relatedAll.filter((p) => p.id !== product.id).slice(0, 14);
   const abs = (u: string) => (u.startsWith("http") ? u : `${storeConfig.siteUrl}${u}`);
   // Product structured data built only from real data: ratings only when approved customer reviews exist.
   const jsonLd = {
@@ -73,23 +74,27 @@ export default async function ProductPage({ params }: { params: Params }) {
   const notes = [...(byWeight ? ["Sold by weight"] : []), ...product.highlights.filter((h) => h.toLowerCase() !== "sold by weight")];
   return (
     <>
-      <div className="container-page pt-6 md:pt-10">
+      <div className="container-page pt-4 md:pt-6">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center [&_a]:-my-2.5 [&_a]:py-2.5 gap-1.5 text-sm text-ink-soft">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center [&_a]:-my-2.5 [&_a]:py-2.5 gap-1.5 text-[0.8125rem] text-ink-soft">
           <Link href="/" className="inline-flex items-center gap-1.5 hover:text-forest-800"><Home className="size-4 text-forest-800" aria-hidden /> Home</Link>
           <ChevronRight className="size-3.5" aria-hidden />
           <Link href={`/category/${product.categorySlug}`} className="hover:text-forest-800">{product.categoryName}</Link>
           <ChevronRight className="size-3.5" aria-hidden />
           <span className="text-ink" aria-current="page">{product.name}</span>
         </nav>
-        <div className="mt-5 grid grid-cols-1 gap-8 lg:grid-cols-[1.1fr_1fr] lg:gap-14">
-          <div className="relative">
+        <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-0 lg:rounded-2xl lg:border lg:border-line lg:bg-white">
+          <div className="relative lg:border-r lg:border-line lg:p-6">
             <ProductGallery images={product.images} name={product.name} />
             <FavouriteButton productId={product.id} name={product.name} className="absolute right-4 top-4 size-11" />
           </div>
-          <div className="lg:pt-4">
+          <div className="lg:p-8">
             {product.seasonal ? <p className="eyebrow text-leaf-600">In season now</p> : null}
-            <h1 className="mt-1 text-[2.25rem] font-bold leading-tight text-forest-800 md:text-[2.75rem]">{product.name}</h1>
+            <h1 className="mt-1 text-2xl font-bold leading-tight text-ink md:text-[1.75rem]">{product.name}</h1>
+            <DeliveryPill />
+            <Link href={`/category/${product.categorySlug}`} className="mt-2 inline-flex items-center gap-0.5 text-sm font-semibold text-leaf-600 hover:underline">
+              View all {product.categoryName} <ChevronRight className="size-4" aria-hidden />
+            </Link>
             {reviews.count > 0 && reviews.average !== null ? (
               <a href="#reviews" className="mt-1 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-forest-800">
                 <Stars value={reviews.average} />
@@ -106,6 +111,7 @@ export default async function ProductPage({ params }: { params: Params }) {
               </ul>
             ) : null}
             <ProductPurchase product={product} whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />
+            <WhyShop codEnabled={settings.codEnabled} />
           </div>
         </div>
         <div id="reviews">

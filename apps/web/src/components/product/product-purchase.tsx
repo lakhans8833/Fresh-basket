@@ -52,9 +52,9 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
   };
 
   return (
-    <div className="mt-6">
+    <div className="mt-5">
       <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-display text-4xl font-semibold tabular-nums text-forest-900">{formatINR(variant.price)}</span>
+        <span className="font-display text-[1.75rem] font-bold tabular-nums text-ink">{formatINR(variant.price)}</span>
         <span className="text-muted">/ {variant.label}{variant.note ? ` (${variant.note})` : ""}</span>
         {unitPriceLabel(variant.price, variant.label) ? <span className="text-sm font-medium tabular-nums text-ink-soft">· {unitPriceLabel(variant.price, variant.label)}</span> : null}
         {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">MRP {formatINR(variant.mrp)}</s> : null}
@@ -65,7 +65,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
       ) : null}
 
       <fieldset className="mt-6">
-        <legend className="text-sm font-semibold text-ink-soft">Choose weight</legend>
+        <legend className="text-base font-bold text-ink">Select unit</legend>
         {/* 4 sizes sit in one row (2×2 on phones) instead of 3 + a lonely 4th. */}
         <div className={cn("mt-2.5 grid grid-cols-2 gap-2.5", product.variants.length === 4 ? "sm:grid-cols-4" : product.variants.length === 2 ? "" : "sm:grid-cols-3")}>
           {product.variants.map((v) => {
@@ -74,8 +74,8 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
               <label
                 key={v.id}
                 className={cn(
-                  "relative flex cursor-pointer flex-col items-center rounded-2xl border-2 px-3 py-3 text-center transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200",
-                  on ? "border-leaf-500 bg-lime-100" : "border-line bg-white hover:border-forest-700/30",
+                  "relative flex cursor-pointer flex-col items-center overflow-hidden rounded-xl border px-3 pb-2.5 pt-3.5 text-center transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200",
+                  on ? "border-leaf-600 bg-lime-50 ring-1 ring-leaf-600" : "border-line bg-white hover:border-forest-700/30",
                   v.stock <= 0 && "opacity-60",
                 )}
               >
@@ -93,10 +93,10 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
                     v.stock <= 0 ? "out of stock" : null,
                   ].filter(Boolean).join(", ")}
                 />
-                <span className="font-semibold text-ink">{v.label}</span>
+                <span className="mt-1 text-sm font-semibold text-ink">{v.label}</span>
                 <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
                 {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
-                {percentOff(v.price, v.mrp) ? <span className="mt-1 rounded bg-lime-200/70 px-1.5 py-px text-[0.6875rem] font-semibold text-forest-800">{percentOff(v.price, v.mrp)}% OFF</span> : null}
+                {percentOff(v.price, v.mrp) ? <span className="absolute inset-x-0 top-0 bg-offer py-px text-[0.625rem] font-bold uppercase tracking-wide text-white">{percentOff(v.price, v.mrp)}% off</span> : null}
                 {unitPriceLabel(v.price, v.label) ? <span className="mt-0.5 text-[0.6875rem] tabular-nums text-muted">{unitPriceLabel(v.price, v.label)}</span> : null}
                 {v.note ? <span className="mt-0.5 text-[0.6875rem] leading-tight text-ink-soft">{v.note}</span> : null}
                 {v.stock <= 0 ? <span className="text-[0.6875rem] font-medium text-danger">Out of stock</span> : null}

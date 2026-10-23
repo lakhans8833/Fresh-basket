@@ -191,26 +191,26 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   }
 
   const step = (n: number, title: string, icon: React.ReactNode, children: React.ReactNode, id?: string) => (
-    <section id={id} aria-labelledby={`step-${n}`} className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-6">
-      <h2 id={`step-${n}`} className="flex items-center gap-3 text-xl font-semibold text-forest-900">
-        <span className="grid size-9 place-items-center rounded-full bg-lime-100 text-forest-800">{icon}</span>
+    <section id={id} aria-labelledby={`step-${n}`} className="rounded-xl border border-line bg-white p-4 sm:p-5">
+      <h2 id={`step-${n}`} className="flex items-center gap-2.5 font-sans text-base font-bold text-ink sm:text-lg">
+        <span className="grid size-8 place-items-center rounded-lg bg-lime-100 text-forest-800">{icon}</span>
         <span><span className="sr-only">Step {n}: </span>{title}</span>
       </h2>
-      <div className="mt-5">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 
   return (
-    <div className="container-page pt-6 md:pt-10">
-      <h1 className="text-[2.2rem] font-semibold text-forest-900 md:text-5xl">Checkout</h1>
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_24rem] lg:items-start lg:gap-8">
-        <div className="space-y-5">
+    <div className="container-page pt-4 md:pt-6">
+      <h1 className="text-2xl font-bold text-ink md:text-[1.75rem]">Checkout</h1>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_24rem] lg:items-start lg:gap-6">
+        <div className="space-y-3">
           {step(1, "Delivery address", <MapPin className="size-[1.1rem]" />, (
             <div className="space-y-4">
               {addresses && addresses.length > 0 ? (
                 <div role="radiogroup" aria-label="Saved addresses" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {addresses.map((a) => (
-                    <label key={a.id} className={cn("cursor-pointer rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === a.id ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
+                    <label key={a.id} className={cn("cursor-pointer rounded-xl border p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === a.id ? "border-leaf-600 bg-lime-50 ring-1 ring-leaf-600" : "border-line hover:border-forest-700/30")}>
                       <input type="radio" name={`${rg}-address`} className="sr-only" checked={addressId === a.id} onChange={() => setAddressId(a.id)} />
                       <span className="flex items-center gap-2 font-semibold text-ink">
                         {a.label}
@@ -225,7 +225,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                       ) : null}
                     </label>
                   ))}
-                  <label className={cn("flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 text-sm font-semibold transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === "new" ? "border-leaf-500 bg-lime-50 text-forest-900" : "border-line text-forest-800 hover:border-forest-700/30")}>
+                  <label className={cn("flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed p-3.5 text-sm font-semibold transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", addressId === "new" ? "border-leaf-600 bg-lime-50 text-forest-900 ring-1 ring-leaf-600" : "border-line text-forest-800 hover:border-forest-700/30")}>
                     <input type="radio" name={`${rg}-address`} className="sr-only" checked={addressId === "new"} onChange={() => setAddressId("new")} />
                     <Plus className="size-4" aria-hidden /> New address
                   </label>
@@ -258,7 +258,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                           setDate(d);
                           setSlotId(slots.find((s) => s.date === d && s.available)?.slotId ?? null);
                         }}
-                        className={cn("flex min-w-24 shrink-0 flex-col items-center rounded-2xl border px-4 py-2.5 text-sm", date === d ? "border-forest-800 bg-forest-800 text-white" : "border-line bg-white text-ink-soft hover:border-forest-700/30", !any && "opacity-60")}
+                        className={cn("flex min-w-20 shrink-0 flex-col items-center rounded-xl border px-3.5 py-2 text-sm", date === d ? "border-forest-800 bg-forest-800 text-white" : "border-line bg-white text-ink-soft hover:border-forest-700/30", !any && "opacity-60")}
                       >
                         <span className="font-semibold">{l.name}</span>
                         <span className={cn("text-xs", date === d ? "text-white/75" : "text-muted")}>{l.date}</span>
@@ -268,7 +268,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                 </div>
                 <div role="radiogroup" aria-label="Time slot" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                   {slots.filter((s) => s.date === date).map((s) => (
-                    <label key={s.slotId} className={cn("rounded-2xl border-2 p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", !s.available ? "cursor-not-allowed border-line bg-sage-50 text-muted" : slotId === s.slotId ? "cursor-pointer border-leaf-500 bg-lime-50" : "cursor-pointer border-line hover:border-forest-700/30")}>
+                    <label key={s.slotId} className={cn("rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", !s.available ? "cursor-not-allowed border-line bg-sage-50 text-muted" : slotId === s.slotId ? "cursor-pointer border-leaf-600 bg-lime-50 ring-1 ring-leaf-600" : "cursor-pointer border-line hover:border-forest-700/30")}>
                       <input type="radio" name={`${rg}-slot`} className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => setSlotId(s.slotId)} />
                       <span className="block font-semibold text-ink">{s.label}</span>
                       <span className="block tabular-nums text-ink-soft">{formatSlotTime(s.startTime)} – {formatSlotTime(s.endTime)}</span>
@@ -291,7 +291,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
                     const info = METHOD_INFO[m];
                     const Icon = info.icon;
                     return (
-                      <label key={m} className={cn("flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", method === m ? "border-leaf-500 bg-lime-50" : "border-line hover:border-forest-700/30")}>
+                      <label key={m} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", method === m ? "border-leaf-600 bg-lime-50 ring-1 ring-leaf-600" : "border-line hover:border-forest-700/30")}>
                         <input type="radio" name={`${rg}-method`} className="sr-only" checked={method === m} onChange={() => setMethod(m)} />
                         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-forest-800 ring-1 ring-line"><Icon className="size-5" aria-hidden /></span>
                         <span>
@@ -361,17 +361,15 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
         </aside>
       </div>
       {/* Phones: the summary is below a long form, so keep the total and a way to it in view. */}
-      <div className="h-20 lg:hidden" aria-hidden />
+      <div className="h-24 lg:hidden" aria-hidden />
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-16px_rgb(11_102_35/0.35)] backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
-          <p className="leading-tight">
-            <span className="block text-xs text-muted">Total{data?.area ? "" : " (+ delivery)"}</span>
-            <span className="text-lg font-bold tabular-nums text-forest-900">{quote ? formatINR(quote.total) : "…"}</span>
-          </p>
-          <a href="#checkout-summary" className="inline-flex h-11 items-center gap-2 rounded-full bg-forest-800 px-5 font-semibold text-white hover:bg-forest-900">
-            Review &amp; place order <ArrowRight className="size-4" aria-hidden />
-          </a>
-        </div>
+        <a href="#checkout-summary" className="mx-auto flex h-14 max-w-xl items-center justify-between gap-3 rounded-lg bg-leaf-600 px-4 text-white hover:bg-forest-700">
+          <span className="leading-tight">
+            <span className="block text-base font-bold tabular-nums">{quote ? formatINR(quote.total) : "…"}</span>
+            <span className="text-[0.6875rem] font-semibold uppercase tracking-wide opacity-85">Total{data?.area ? "" : " + delivery"}</span>
+          </span>
+          <span className="inline-flex items-center gap-1 font-bold">Review &amp; place order <ArrowRight className="size-4" aria-hidden /></span>
+        </a>
       </div>
     </div>
   );

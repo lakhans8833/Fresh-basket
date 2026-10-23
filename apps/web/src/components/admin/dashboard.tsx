@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { EmptyState, Notice } from "../ui/feedback";
 import { cn } from "../ui/cn";
 import { useAdminData } from "./use-admin-data";
+import { AnalyticsPanel } from "./analytics-panel";
 import { Card, CardHeader, LoadError, OrderStatusBadge, PageHeader, PaymentStatusBadge, formatDay, timeAgo } from "./ui";
 
 export interface Stats {
@@ -117,11 +118,11 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                           <Icon className="size-4" aria-hidden />
                         </span>
                       </div>
-                      <div className="mt-2 font-display text-[1.75rem] font-semibold leading-none tabular-nums text-forest-900">{c.value}</div>
+                      <div className="mt-2 text-[1.625rem] font-bold leading-none tabular-nums text-ink">{c.value}</div>
                       {c.hint ? <div className="mt-1.5 text-xs text-muted">{c.hint}</div> : null}
                     </>
                   );
-                  const cls = "block rounded-[var(--radius-card)] border border-line bg-white p-4 shadow-[var(--shadow-card)] transition-colors";
+                  const cls = "block rounded-xl border border-line bg-white p-4 shadow-[0_1px_3px_rgb(20_48_31/0.05)] transition-colors";
                   return c.href ? (
                     <Link key={c.label} href={c.href} className={cn(cls, "hover:border-forest-700/30 hover:bg-sage-50/60")}>{body}</Link>
                   ) : (
@@ -129,6 +130,8 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                   );
                 })}
           </div>
+
+          <AnalyticsPanel />
 
           {/* Setup reminders sit below today's numbers: they matter, but not before the orders. */}
           {data && (data.supportGaps?.length || data.notificationSetup?.allEventsReady === false || data.areaMismatches?.length) ? (

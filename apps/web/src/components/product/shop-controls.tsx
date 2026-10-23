@@ -17,7 +17,7 @@ export function SortSelect({ value }: { value: string }) {
       <Select
         id="sort"
         value={value}
-        className="h-10 w-auto min-w-44 rounded-full text-sm"
+        className="h-9 w-auto min-w-36 rounded-lg text-sm"
         onChange={(e) => {
           const sp = new URLSearchParams(params.toString());
           if (e.target.value === "featured") sp.delete("sort");
@@ -25,7 +25,7 @@ export function SortSelect({ value }: { value: string }) {
           start(() => router.push(`${pathname}?${sp}`, { scroll: false }));
         }}
       >
-        <option value="featured">Sort: Recommended</option>
+        <option value="featured">Recommended</option>
         <option value="price_asc">Price: low to high</option>
         <option value="price_desc">Price: high to low</option>
         <option value="name">Name: A–Z</option>
