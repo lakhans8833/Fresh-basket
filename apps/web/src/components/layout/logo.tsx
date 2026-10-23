@@ -61,14 +61,17 @@ export function Logo({
         <>
           <BasketMark className={cn(mark, "shrink-0 drop-shadow-sm")} />
           <span className="flex min-w-0 flex-col leading-none">
-            <span className={cn("font-brand font-bold tracking-[-0.01em] whitespace-nowrap", l1, main)}>{line1}</span>
-            {line2 ? (
-              <span className={cn("mt-0.5 flex items-center gap-1.5 whitespace-nowrap font-brand font-bold", l2, main)}>
-                <span aria-hidden className="hidden h-[2px] w-3 bg-current sm:block" />
-                {line2}
-                <span aria-hidden className="hidden h-[2px] w-3 bg-current sm:block" />
-              </span>
-            ) : null}
+            {/* The first word sits centred over "— Fresh Basket —". */}
+            <span className="flex w-fit max-w-full flex-col items-center">
+              <span className={cn("font-brand font-bold tracking-[-0.01em] whitespace-nowrap", l1, main)}>{line1}</span>
+              {line2 ? (
+                <span className={cn("mt-0.5 flex items-center gap-1.5 whitespace-nowrap font-brand font-bold", l2, main)}>
+                  <span aria-hidden className="hidden h-[2px] w-3 bg-current sm:block" />
+                  {line2}
+                  <span aria-hidden className="hidden h-[2px] w-3 bg-current sm:block" />
+                </span>
+              ) : null}
+            </span>
             {tag && size !== "sm" ? <span className={cn("mt-1 hidden whitespace-nowrap font-script text-[1.02rem] font-semibold sm:block", sub)}>{tag}</span> : null}
           </span>
         </>

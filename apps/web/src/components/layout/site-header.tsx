@@ -34,7 +34,7 @@ export function TopBar({ announcement, serviceArea }: { announcement: string | n
         </p>
         {/* Announcement + delivery area may shrink (the announcement truncates), so a long announcement never makes the page wider than a tablet screen. */}
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 xl:flex-none xl:justify-end">
-          <NextSlot className="flex min-w-0 shrink items-center gap-1.5" />
+          <NextSlot className="flex shrink-0 items-center gap-1.5 lg:min-w-0 lg:shrink" />
           {announcement ? (
             <p className="hidden min-w-0 items-center gap-2 truncate lg:flex">
               <Truck className="size-4 shrink-0 text-lime-300" aria-hidden />
@@ -42,10 +42,12 @@ export function TopBar({ announcement, serviceArea }: { announcement: string | n
             </p>
           ) : null}
           {announcement ? <span aria-hidden className="hidden h-4 w-px bg-white/30 lg:block" /> : null}
-          <button type="button" onClick={() => setOpen(true)} className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 font-medium hover:bg-white/10 xl:ml-0">
-            <MapPin className="size-4 text-lime-300" aria-hidden />
-            <span className="max-w-28 truncate sm:max-w-44">{location ? `Delivering to ${location.areaName}` : serviceArea}</span>
-            <ChevronDown className="size-3.5" aria-hidden />
+          <button type="button" onClick={() => setOpen(true)} className="ml-auto inline-flex min-w-0 items-center gap-1.5 rounded-full px-2 py-1 font-medium hover:bg-white/10 xl:ml-0">
+            <MapPin className="size-4 shrink-0 text-lime-300" aria-hidden />
+            <span className="min-w-0 truncate sm:max-w-44">
+              {location ? <><span className="hidden sm:inline">Delivering to </span>{location.areaName}</> : serviceArea}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0" aria-hidden />
             <span className="sr-only">— check delivery for your PIN code</span>
           </button>
         </div>
