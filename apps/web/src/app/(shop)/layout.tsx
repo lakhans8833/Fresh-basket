@@ -6,7 +6,6 @@ import { SiteHeader, TopBar } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { WhatsAppFloat } from "@/components/layout/whatsapp-float";
-import { storeBenefits } from "@/components/layout/benefits";
 import { InstallBanner } from "@/components/layout/install-app";
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +38,6 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         settings={settings}
         categories={categories}
         paymentMethods={supportedPaymentMethods(settings)}
-        benefits={storeBenefits(settings, { whatsapp: Boolean(whatsapp), serviceArea: storeConfig.serviceArea })}
         serviceArea={storeConfig.serviceArea}
       />
       {whatsapp ? <WhatsAppFloat number={whatsapp} storeName={settings.storeName} /> : null}

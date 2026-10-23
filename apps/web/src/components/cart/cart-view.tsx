@@ -59,7 +59,12 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
   const priced = new Map(quote?.lines.map((l) => [l.variantId, l]));
   const messages = data?.messages ?? {};
   const blocking = quote?.issues.filter((i) => BLOCKING.includes(i.code)) ?? [];
-  const canContinue = Boolean(quote) && blocking.length === 0 && !loading;
+  // Below the minimum order (or a PIN we don't deliver to): the buttons wait until the basket can be ordered,
+  // instead of letting the customer fill in checkout and be refused at the end.
+  const belowMinimum = Boolean(
+    (location && messages._cart) || (!location && quote && data?.minOrder && quote.subtotal - quote.discount < data.minOrder),
+  );
+  const canContinue = Boolean(quote) && blocking.length === 0 && !loading && !belowMinimum;
 
   return (
     <div className="container-page pt-6 md:pt-8">

@@ -41,7 +41,7 @@ export function SlotPicker({
           );
         })}
       </div>
-      <div role="radiogroup" aria-label="Time slot" className="grid gap-2.5 sm:grid-cols-3">
+      <div role="radiogroup" aria-label="Time slot" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {slots.filter((s) => s.date === date).map((s) => (
           <label key={s.slotId} className={cn("rounded-2xl border-2 p-3.5 text-sm transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200", !s.available ? "cursor-not-allowed border-line bg-sage-50 text-muted" : slotId === s.slotId ? "cursor-pointer border-leaf-500 bg-lime-50" : "cursor-pointer border-line hover:border-forest-700/30")}>
             <input type="radio" name={`${rg}-slot`} className="sr-only" disabled={!s.available} checked={slotId === s.slotId} onChange={() => onChange(s.date, s.slotId)} />

@@ -15,7 +15,7 @@ export function AccountOverview({ recent, defaultAddress }: { recent: Order | nu
       <section aria-labelledby="recent-heading" className="flex flex-col rounded-[var(--radius-card)] border border-line bg-white p-5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-full bg-lime-100 text-forest-700"><Package className="size-4" aria-hidden /></span>
-          <h2 id="recent-heading" className="font-sans text-sm font-semibold uppercase tracking-[0.1em] text-muted">Latest order</h2>
+          <h2 id="recent-heading" className="font-sans text-base font-semibold text-ink">Latest order</h2>
         </div>
         {recent ? (
           <>
@@ -42,7 +42,7 @@ export function AccountOverview({ recent, defaultAddress }: { recent: Order | nu
       <section aria-labelledby="address-heading" className="flex flex-col rounded-[var(--radius-card)] border border-line bg-white p-5">
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-full bg-lime-100 text-forest-700"><MapPin className="size-4" aria-hidden /></span>
-          <h2 id="address-heading" className="font-sans text-sm font-semibold uppercase tracking-[0.1em] text-muted">Default address</h2>
+          <h2 id="address-heading" className="font-sans text-base font-semibold text-ink">Default address</h2>
         </div>
         {defaultAddress ? (
           <>
