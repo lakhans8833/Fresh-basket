@@ -104,27 +104,6 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
               <p className="rounded-xl border border-line bg-sage-50 px-4 py-3 text-sm text-ink-soft">Nothing needs attention right now — no new orders waiting, nothing overdue, stock is fine.</p>
             )
           ) : null}
-          {data && (data.supportGaps?.length || data.notificationSetup?.allEventsReady === false || data.areaMismatches?.length) ? (
-            <section aria-label="Setup" className="space-y-2">
-              {data.areaMismatches?.length ? (
-                <Notice tone="warning" title="Delivery areas outside your service area">
-                  {data.areaMismatches.length} active delivery area{data.areaMismatches.length === 1 ? "" : "s"} ({data.areaMismatches.slice(0, 4).map((a) => `${a.pincode} ${a.city}`).join(", ")}{data.areaMismatches.length > 4 ? ", …" : ""}) {data.areaMismatches.length === 1 ? "is" : "are"} in {[...new Set(data.areaMismatches.map((a) => a.pinState))].join(" / ")}, but the store serves {data.areaMismatches[0]!.serviceArea} ({data.areaMismatches[0]!.storeState}).{" "}
-                  Check them in <Link href="/admin/delivery" className="font-semibold underline">Delivery</Link> — nothing has been changed automatically.
-                </Notice>
-              ) : null}
-              {data.supportGaps?.length ? (
-                <Notice tone="info" title="Customer support details missing">
-                  Not shown to customers until filled in: {data.supportGaps.join(", ")}. Add them in <Link href="/admin/settings" className="font-semibold underline">Settings → Customer support</Link>.
-                </Notice>
-              ) : null}
-              {data.notificationSetup && !data.notificationSetup.allEventsReady ? (
-                <Notice tone="info" title={data.notificationSetup.configured ? "Some WhatsApp order updates are off" : "Automatic WhatsApp order updates are off"}>
-                  Customers who opt in get updates only for events that are set up. Missing server settings:
-                  <span className="mt-1 flex flex-wrap gap-1">{data.notificationSetup.missing.map((m) => <code key={m} className="break-all rounded bg-white px-1 text-xs">{m}</code>)}</span>
-                </Notice>
-              ) : null}
-            </section>
-          ) : null}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             {!data
               ? Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton h-[6.5rem]" />)
@@ -151,6 +130,31 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                 })}
           </div>
 
+          {/* Setup reminders sit below today's numbers: they matter, but not before the orders. */}
+          {data && (data.supportGaps?.length || data.notificationSetup?.allEventsReady === false || data.areaMismatches?.length) ? (
+            <section aria-label="Setup" className="space-y-2">
+              {data.areaMismatches?.length ? (
+                <Notice tone="warning" title="Delivery areas outside your service area">
+                  {data.areaMismatches.length} active delivery area{data.areaMismatches.length === 1 ? "" : "s"} ({data.areaMismatches.slice(0, 4).map((a) => `${a.pincode} ${a.city}`).join(", ")}{data.areaMismatches.length > 4 ? ", …" : ""}) {data.areaMismatches.length === 1 ? "is" : "are"} in {[...new Set(data.areaMismatches.map((a) => a.pinState))].join(" / ")}, but the store serves {data.areaMismatches[0]!.serviceArea} ({data.areaMismatches[0]!.storeState}).{" "}
+                  Check them in <Link href="/admin/delivery" className="font-semibold underline">Delivery</Link> — nothing has been changed automatically.
+                </Notice>
+              ) : null}
+              {data.supportGaps?.length ? (
+                <Notice tone="info" title="Customer support details missing">
+                  Not shown to customers until filled in: {data.supportGaps.join(", ")}. Add them in <Link href="/admin/settings" className="font-semibold underline">Settings → Customer support</Link>.
+                </Notice>
+              ) : null}
+              {data.notificationSetup && !data.notificationSetup.allEventsReady ? (
+                <Notice tone="info" title={data.notificationSetup.configured ? "Some WhatsApp order updates are off" : "Automatic WhatsApp order updates are off"}>
+                  Customers who tick &quot;Send me order updates on WhatsApp&quot; only get messages for events that are set up. Orders work normally without them.
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-sm font-semibold underline-offset-4 hover:underline">Settings your developer needs to add ({data.notificationSetup.missing.length})</summary>
+                    <span className="mt-1.5 flex flex-wrap gap-1">{data.notificationSetup.missing.map((m) => <code key={m} className="break-all rounded bg-white px-1 text-xs">{m}</code>)}</span>
+                  </details>
+                </Notice>
+              ) : null}
+            </section>
+          ) : null}
           <div className="grid gap-6 xl:grid-cols-[1fr_22rem] xl:items-start">
             <Card aria-labelledby="recent-orders">
               <CardHeader id="recent-orders" title="Recent orders" actions={<Link href="/admin/orders" className="inline-flex items-center gap-1 text-sm font-semibold text-leaf-600 hover:text-forest-800">All orders <ArrowRight className="size-4" aria-hidden /></Link>} />
@@ -194,7 +198,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                 <p className="px-6 py-8 text-center text-sm text-muted">Everything is well stocked.</p>
               ) : (
                 <ul className="divide-y divide-line">
-                  {data.lowStock.map((v) => (
+                  {data.lowStock.slice(0, 6).map((v) => (
                     <li key={v.variantId ?? v.productId}>
                       <Link href={`/admin/inventory?q=${encodeURIComponent(v.productName)}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-sage-50 sm:px-6">
                         <span className="min-w-0">
@@ -207,6 +211,13 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
                       </Link>
                     </li>
                   ))}
+                  {data.lowStock.length > 6 ? (
+                    <li>
+                      <Link href="/admin/inventory?filter=low" className="block px-5 py-3 text-sm font-semibold text-leaf-600 hover:bg-sage-50 hover:text-forest-800 sm:px-6">
+                        See all {data.lowStock.length} in Inventory
+                      </Link>
+                    </li>
+                  ) : null}
                 </ul>
               )}
             </Card>

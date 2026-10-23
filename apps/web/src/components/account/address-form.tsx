@@ -79,6 +79,15 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
       <Field label="Mobile number" htmlFor={id("phone")} error={err("phone")} hint="For delivery updates">
         <Input id={id("phone")} type="tel" inputMode="tel" autoComplete="tel-national" placeholder="10-digit mobile" value={value.phone} onChange={set("phone")} invalid={!!err("phone")} aria-describedby={described("phone")} />
       </Field>
+      <Field label="Flat / house no., building, street" htmlFor={id("line1")} error={err("line1")} className="sm:col-span-2">
+        <Input id={id("line1")} autoComplete="address-line1" value={value.line1} onChange={set("line1")} invalid={!!err("line1")} aria-describedby={described("line1")} />
+      </Field>
+      <Field label="Area / locality (optional)" htmlFor={id("line2")} error={err("line2")}>
+        <Input id={id("line2")} autoComplete="address-line2" value={value.line2 ?? ""} onChange={set("line2")} />
+      </Field>
+      <Field label="Landmark (optional)" htmlFor={id("landmark")} error={err("landmark")}>
+        <Input id={id("landmark")} value={value.landmark ?? ""} onChange={set("landmark")} />
+      </Field>
       <Field label="PIN code" htmlFor={id("pincode")} error={err("pincode")}
         hint={
           pin.status === "checking" ? <span className="inline-flex items-center gap-1.5"><Spinner className="size-3.5" /> Checking delivery…</span>
@@ -97,18 +106,6 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
           aria-describedby={described("pincode")}
         />
       </Field>
-      <Field label="Save as" htmlFor={id("label")} error={err("label")} hint="e.g. Home, Work">
-        <Input id={id("label")} value={value.label} onChange={set("label")} maxLength={30} />
-      </Field>
-      <Field label="Flat / house no., building, street" htmlFor={id("line1")} error={err("line1")} className="sm:col-span-2">
-        <Input id={id("line1")} autoComplete="address-line1" value={value.line1} onChange={set("line1")} invalid={!!err("line1")} aria-describedby={described("line1")} />
-      </Field>
-      <Field label="Area / locality (optional)" htmlFor={id("line2")} error={err("line2")}>
-        <Input id={id("line2")} autoComplete="address-line2" value={value.line2 ?? ""} onChange={set("line2")} />
-      </Field>
-      <Field label="Landmark (optional)" htmlFor={id("landmark")} error={err("landmark")}>
-        <Input id={id("landmark")} value={value.landmark ?? ""} onChange={set("landmark")} />
-      </Field>
       <Field label="City" htmlFor={id("city")} error={err("city")}
         hint={cityMismatch ? (
           <span className="inline-flex flex-wrap items-center gap-1.5 text-amber">
@@ -126,6 +123,9 @@ export function AddressFields({ value, onChange, errors, idPrefix = "addr" }: { 
           </span>
         ) : undefined}>
         <Input id={id("state")} autoComplete="address-level1" value={value.state} onChange={set("state")} invalid={!!err("state")} aria-describedby={described("state")} />
+      </Field>
+      <Field label="Save this address as" htmlFor={id("label")} error={err("label")} hint="e.g. Home, Work, Mom's place">
+        <Input id={id("label")} value={value.label} onChange={set("label")} maxLength={30} />
       </Field>
     </div>
   );

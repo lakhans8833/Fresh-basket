@@ -13,7 +13,7 @@ export default async function CartPage() {
     <>
       <PageBanner
         title="Your Shopping Cart"
-        subtitle="Fresh vegetables, better health!"
+        subtitle="Check your items and pack sizes, then choose how to order."
         icon={<ShoppingCart className="size-14" strokeWidth={2.2} />}
         image="/images/site/banner-market.webp"
         script={storeConfig.secondaryTagline}

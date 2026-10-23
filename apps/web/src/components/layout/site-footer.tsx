@@ -3,7 +3,6 @@ import { Banknote, CreditCard, Landmark, Mail, MapPin, Phone, Clock, MessageCirc
 import type { Category, StoreSettings } from "@freshbasket/shared";
 import { Logo } from "./logo";
 import { NewsletterForm } from "./newsletter-form";
-import { BenefitsStrip, type Benefit } from "./benefits";
 import { InstallAppButton } from "./install-app";
 
 function SocialIcon({ kind }: { kind: "instagram" | "facebook" | "youtube" | "x" }) {
@@ -43,8 +42,8 @@ function PaymentChip({ icon, label }: { icon: React.ReactNode; label: string }) 
 }
 
 export function SiteFooter({
-  settings, categories, paymentMethods, benefits, serviceArea,
-}: { settings: StoreSettings; categories: Category[]; paymentMethods: string[]; benefits: Benefit[]; serviceArea: string }) {
+  settings, categories, paymentMethods, serviceArea,
+}: { settings: StoreSettings; categories: Category[]; paymentMethods: string[]; serviceArea: string }) {
   const socials = (Object.keys(settings.social) as (keyof StoreSettings["social"])[]).filter((k) => settings.social[k]);
   const hasContact = settings.supportPhone || settings.supportEmail || settings.address || settings.whatsapp;
   const year = new Date().getFullYear();
@@ -52,17 +51,6 @@ export function SiteFooter({
 
   return (
     <footer className="mt-16 md:mt-20">
-      <div className="border-t border-line bg-sage-50">
-        <div className="container-page flex flex-col items-center gap-6 py-7 lg:flex-row">
-          <BenefitsStrip benefits={benefits} tone="plain" className="w-full flex-1" />
-          <p className="hidden shrink-0 -rotate-6 text-center font-script text-[2rem] font-bold leading-[0.9] text-forest-800 xl:block">
-            Eat Fresh
-            <br />
-            Stay Healthy
-          </p>
-        </div>
-      </div>
-
       <div className="bg-forest-800 text-white">
         <div className="container-page grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr]">
           <div>

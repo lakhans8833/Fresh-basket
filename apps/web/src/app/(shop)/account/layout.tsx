@@ -16,8 +16,7 @@ export default async function AccountLayout({ children }: { children: React.Reac
     <div className="container-page pb-16 pt-6 md:pt-10">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">Your account</p>
-          <p className="mt-1 font-display text-[2rem] font-semibold leading-tight text-forest-900 md:text-[2.5rem]">
+          <p className="font-display text-[2rem] font-semibold leading-tight text-forest-900 md:text-[2.5rem]">
             {firstName ? `Hi, ${firstName}` : "Hi there"}
           </p>
           {profile.email ? <p className="mt-0.5 text-sm text-muted">{profile.email}</p> : null}

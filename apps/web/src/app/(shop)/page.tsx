@@ -143,11 +143,11 @@ export default async function HomePage() {
       ) : (
         <ProductRail id="favourites" title="Fresh Favourites" href="/shop" products={featured} layout="compact" />
       )}
-      {combos ? <ProductRail id="combos" eyebrow="Save more" title={combos.name} href={`/category/${combos.slug}`} products={comboProducts} /> : null}
-      {fruits ? <ProductRail id="fruits" eyebrow="Fresh & juicy" title={fruits.name} href={`/category/${fruits.slug}`} products={fruitProducts} /> : null}
-      {leafy ? <ProductRail id="leafy" eyebrow="Greens for every kitchen" title={leafy.name} href={`/category/${leafy.slug}`} products={leafyProducts} /> : null}
+      {combos ? <ProductRail id="combos" title={combos.name} href={`/category/${combos.slug}`} products={comboProducts} /> : null}
+      {fruits ? <ProductRail id="fruits" title={fruits.name} href={`/category/${fruits.slug}`} products={fruitProducts} /> : null}
+      {leafy ? <ProductRail id="leafy" title={leafy.name} href={`/category/${leafy.slug}`} products={leafyProducts} /> : null}
       <PriceTiles buckets={priceBuckets} />
-      <ProductRail id="seasonal" eyebrow="Seasonal picks" title="In Season Now" href="/shop?seasonal=1" products={seasonal} />
+      <ProductRail id="seasonal" title="In Season Now" href="/shop?seasonal=1" products={seasonal} />
       <DeliveryInfo serviceArea={area} areas={areas} slots={slots} codEnabled={settings.codEnabled} whatsapp={Boolean(whatsapp)} />
       <HowItWorks whatsapp={Boolean(whatsapp)} />
       {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to place an order.`)} /> : null}

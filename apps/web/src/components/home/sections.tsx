@@ -10,8 +10,9 @@ function SectionHeader({ id, title, href, eyebrow, linkLabel = "View all" }: { i
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div>
-        {eyebrow ? <p className="eyebrow mb-1 text-leaf-600">{eyebrow}</p> : null}
         <h2 id={id} className="text-[1.5rem] font-bold leading-tight text-ink sm:text-[1.75rem]">{title}</h2>
+        {/* A short line that says something about the section (e.g. "From your past orders"), not a label. */}
+        {eyebrow ? <p className="mt-1 text-sm text-muted">{eyebrow}</p> : null}
         <span aria-hidden className="mt-2 block h-1 w-10 rounded-full bg-forest-800" />
       </div>
       {href ? (
@@ -80,7 +81,7 @@ export function PriceTiles({ buckets }: { buckets: { key: string; label: string;
   if (shown.length < 2) return null;
   return (
     <section aria-labelledby="price-heading" className="container-page mt-12 md:mt-16">
-      <SectionHeader id="price-heading" title="Shop by Price" eyebrow="Budget-friendly picks" />
+      <SectionHeader id="price-heading" title="Shop by Price" />
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {shown.map((b, i) => (
           <li key={b.key}>
@@ -91,7 +92,6 @@ export function PriceTiles({ buckets }: { buckets: { key: string; label: string;
                 ["border-lime-300 bg-lime-50", "border-line bg-white", "border-[#f0d9a6] bg-[#fdf6e7]", "border-forest-800 bg-forest-800 text-white"][i % 4],
               )}
             >
-              <span className={cn("text-xs font-semibold uppercase tracking-wider", i % 4 === 3 ? "text-lime-200" : "text-leaf-600")}>Price range</span>
               <span className="text-[1.375rem] font-bold leading-tight sm:text-2xl">{b.label}</span>
               <span className={cn("inline-flex items-center gap-1 text-sm font-medium", i % 4 === 3 ? "text-white/85" : "text-muted")}>
                 {b.count} {b.count === 1 ? "item" : "items"} <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />

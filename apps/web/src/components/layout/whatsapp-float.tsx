@@ -12,6 +12,8 @@ import { WhatsAppIcon } from "../ui/whatsapp-icon";
 export function WhatsAppFloat({ number, storeName }: { number: string; storeName: string }) {
   const pathname = usePathname();
   if (/^\/(order|checkout|pay|cart)/.test(pathname)) return null;
+  // Product pages have their own "Order on WhatsApp" button (and a sticky Add to Cart bar on phones).
+  const onProduct = pathname.startsWith("/product/");
   const href = buildWhatsAppUrl(number, `Hi ${storeName}, I have a question about my order.`);
   return (
     <a
@@ -20,7 +22,7 @@ export function WhatsAppFloat({ number, storeName }: { number: string; storeName
       rel="noopener noreferrer"
       aria-label="Chat with us on WhatsApp"
       title="Chat with us on WhatsApp"
-      className="group fixed bottom-20 right-4 z-30 flex items-center gap-3 rounded-full bg-white p-1.5 shadow-[var(--shadow-lift)] ring-1 ring-line transition hover:-translate-y-0.5 md:bottom-6 md:right-6 md:hover:pr-5 md:focus-visible:pr-5"
+      className={`group fixed bottom-20 right-4 z-30 ${onProduct ? "hidden md:flex" : "flex"} items-center gap-3 rounded-full bg-white p-1.5 shadow-[var(--shadow-lift)] ring-1 ring-line transition hover:-translate-y-0.5 md:bottom-6 md:right-6 md:hover:pr-5 md:focus-visible:pr-5`}
     >
       <span className="grid size-12 place-items-center rounded-full bg-whatsapp text-white">
         <WhatsAppIcon className="size-7" />

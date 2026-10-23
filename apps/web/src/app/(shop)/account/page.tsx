@@ -18,8 +18,11 @@ export default async function AccountPage() {
 
   return (
     <div className="space-y-6">
+      <h1 className="sr-only">Your account</h1>
+      {/* What people come here for first: their latest order and where it goes. Profile details follow. */}
+      <AccountOverview recent={recent ?? null} defaultAddress={defaultAddress ?? null} />
       <section aria-labelledby="profile-heading" className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-7">
-        <h1 id="profile-heading" className="text-2xl font-semibold text-forest-900">Profile</h1>
+        <h2 id="profile-heading" className="text-2xl font-semibold text-forest-900">Profile</h2>
         <p className="mt-1 text-sm text-muted">Your name and mobile number are used for delivery updates.</p>
         <ProfileForm profile={profile} />
         {env.auth.mode === "supabase" ? (
@@ -29,7 +32,6 @@ export default async function AccountPage() {
         ) : null}
       </section>
 
-      <AccountOverview recent={recent ?? null} defaultAddress={defaultAddress ?? null} />
       {profile.role === "customer" ? <DeleteAccount /> : null}
     </div>
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useId } from "react";
+import { useEffect, useRef, useState, useId } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
 import { addablePacks, formatINR, formatWeight, MAX_QTY_PER_LINE, sharesWeightStock, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
 import { useCart } from "../cart/cart-context";
@@ -25,6 +25,17 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
   const { add, quantityOf, hydrated, setQuantity } = useCart();
   const toast = useToast();
   const variant = product.variants.find((v) => v.id === variantId) ?? first;
+  // Phones: once the Add to Cart row has scrolled away (reading the description or reviews), a slim bar
+  // above the tab bar keeps the chosen size, its price and the button in reach.
+  const buyRow = useRef<HTMLDivElement>(null);
+  const [rowGone, setRowGone] = useState(false);
+  useEffect(() => {
+    const el = buyRow.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setRowGone(!e.isIntersecting && e.boundingClientRect.top < 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [variant?.id]);
   if (!variant) return <p className="mt-6 text-muted">This product is currently unavailable.</p>;
   const out = variant.stock <= 0;
   const inCart = hydrated ? quantityOf(variant.id) : 0;
@@ -32,6 +43,13 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
   const maxAddable = addablePacks(product, variant.id, (id) => (hydrated ? quantityOf(id) : 0), MAX_QTY_PER_LINE);
   const shared = sharesWeightStock(product.stockGrams, product.variants);
   const otherSizesInCart = shared && hydrated ? product.variants.some((v) => v.id !== variant.id && quantityOf(v.id) > 0) : false;
+  const addToCart = () => {
+    const n = Math.min(qty, maxAddable); // the cart may have changed since the quantity was picked
+    if (n <= 0) return;
+    add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+    toast(`${n} × ${product.name} (${variant.label}) added to cart`);
+    setQty(1);
+  };
 
   return (
     <div className="mt-6">
@@ -102,20 +120,14 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
         ) : null}
       </p>
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div ref={buyRow} className="mt-5 flex flex-wrap items-center gap-3">
         {!out && maxAddable > 0 ? <QuantityStepper value={qty} onChange={(n) => setQty(Math.max(1, n))} max={maxAddable} label={product.name} tone="outline" /> : null}
         <Button
           variant="dark"
           size="lg"
           className="min-w-56 flex-1 sm:flex-none"
           disabled={out || maxAddable === 0}
-          onClick={() => {
-            const n = Math.min(qty, maxAddable); // the cart may have changed since the quantity was picked
-            if (n <= 0) return;
-            add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
-            toast(`${n} × ${product.name} (${variant.label}) added to cart`);
-            setQty(1);
-          }}
+          onClick={addToCart}
         >
           <ShoppingBasket className="size-5" aria-hidden /> {out ? "Out of stock" : maxAddable === 0 ? "Maximum in cart" : "Add to Cart"}
         </Button>
@@ -144,6 +156,22 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
         >
           <WhatsAppIcon className="size-5" /> Order on WhatsApp
         </button>
+      ) : null}
+      {rowGone && !out && maxAddable > 0 ? (
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t border-line bg-white/95 px-4 py-2.5 shadow-[0_-8px_24px_-16px_rgb(11_102_35/0.4)] backdrop-blur md:hidden">
+          <div className="flex items-center gap-3">
+            <p className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-semibold text-ink">{product.name} · {variant.label}</span>
+              <span className="text-sm tabular-nums text-forest-900">
+                {formatINR(variant.price)}
+                {inCart > 0 ? <span className="text-muted"> · {inCart} in cart</span> : null}
+              </span>
+            </p>
+            <Button variant="dark" className="shrink-0" onClick={addToCart}>
+              <ShoppingBasket className="size-4" aria-hidden /> Add to Cart
+            </Button>
+          </div>
+        </div>
       ) : null}
       <p className="mt-4 text-xs text-muted">
         Fresh produce varies in size; you&apos;re charged the listed price for the selected weight. See our{" "}
