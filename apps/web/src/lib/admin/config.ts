@@ -2,7 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import type { adminCouponSchema, adminDeliveryAreaSchema, adminSettingsSchema, adminSlotSchema } from "@freshbasket/shared";
 import { query, queryOne } from "../db";
-import { notFound } from "../http";
+import { HttpError, notFound } from "../http";
 
 /* Delivery areas */
 export const adminListAreas = () =>
@@ -96,7 +96,11 @@ export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>)
       `update store_settings set legal_name = $1, legal_address = $2, legal_registration = $3, grievance_officer = $4,
          grievance_email = $5, legal_jurisdiction = $6, policies_updated = $7::date where id`,
       [v(l.name), v(l.address), v(l.registration), v(l.grievanceOfficer), v(l.grievanceEmail), v(l.jurisdiction), v(l.updated)],
-    );
+    ).catch((e: { code?: string }) => {
+      // The other settings are already saved; only the legal columns are missing (migration not applied yet).
+      if (e.code === "42703") throw new HttpError(503, "Your other settings were saved, but the legal details need a database update first — redeploy the site, then save again.");
+      throw e;
+    });
   }
 }
 
