@@ -275,6 +275,7 @@ export default function Checkout() {
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected, selected }}
+                    aria-checked={selected}
                     style={[styles.option, selected && styles.optionSelected]}
                   >
                     <Radio on={selected} />
@@ -289,6 +290,7 @@ export default function Checkout() {
                   onPress={() => setUseNew(true)}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: useNew, selected: useNew }}
+                  aria-checked={useNew}
                   style={[styles.option, useNew && styles.optionSelected, { alignItems: "center" }]}
                 >
                   <Radio on={useNew} />
@@ -360,6 +362,8 @@ export default function Checkout() {
                       onPress={() => setSlotId(s.slotId)}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selected, selected, disabled: !s.available }}
+                      aria-checked={selected}
+                      aria-disabled={!s.available}
                       accessibilityLabel={`${s.label}, ${formatSlotTime(s.startTime)} to ${formatSlotTime(s.endTime)}${s.available ? "" : ", unavailable"}`}
                       style={[styles.option, selected && styles.optionSelected, !s.available && styles.optionDisabled]}
                     >
@@ -396,6 +400,7 @@ export default function Checkout() {
                     onPress={() => setPayment(m)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected, selected }}
+                    aria-checked={selected}
                     accessibilityLabel={PAYMENT_LABEL[m].title}
                     style={[styles.option, selected && styles.optionSelected]}
                   >

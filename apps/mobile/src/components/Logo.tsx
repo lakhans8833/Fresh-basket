@@ -3,9 +3,9 @@ import { StyleSheet, Text, View } from "react-native";
 import { imageUrl } from "@/lib/config";
 import { useSettings } from "@/lib/settings";
 import { colors, fonts } from "@/theme";
-import { LeafMark } from "./LeafMark";
+import { BasketMark } from "./BasketMark";
 
-/** Leaf mark + stacked lowercase store name ("fresh / basket."), or the uploaded logo. */
+/** Basket mark + store name (as on the website), or the uploaded logo. */
 export function Logo({ size = "md", inverse = false }: { size?: "sm" | "md" | "lg"; inverse?: boolean }) {
   const { settings } = useSettings();
   const name = settings?.storeName ?? "Fresh Basket";
@@ -23,20 +23,21 @@ export function Logo({ size = "md", inverse = false }: { size?: "sm" | "md" | "l
     );
   }
 
-  const words = name.toLowerCase().split(/\s+/).filter(Boolean);
-  const first = words.slice(0, Math.ceil(words.length / 2)).join(" ");
-  const second = words.slice(Math.ceil(words.length / 2)).join(" ");
-  const textColor = inverse ? colors.ivory : colors.forest900;
+  // Same lock-up as the website: "Rams" centred over "— Fresh Basket —" (last two words on line 2).
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const [line1, line2] = words.length >= 3 ? [words.slice(0, -2).join(" "), words.slice(-2).join(" ")] : words.length === 2 ? [words[0]!, words[1]!] : [name, null];
+  const main = inverse ? colors.white : colors.forest800;
 
   return (
     <View style={styles.row} accessible accessibilityRole="header" accessibilityLabel={name}>
-      <LeafMark size={30 * scale} color={inverse ? colors.lime300 : colors.leaf500} vein={inverse ? colors.forest900 : colors.ivory} />
-      <View style={{ marginLeft: 6 * scale }}>
-        <Text style={[styles.word, { fontSize: 17 * scale, lineHeight: 16 * scale, color: textColor }]}>{first}</Text>
-        {second ? (
-          <Text style={[styles.word, { fontSize: 17 * scale, lineHeight: 18 * scale, color: textColor }]}>
-            {second}
-            <Text style={{ color: inverse ? colors.lime300 : colors.leaf500 }}>.</Text>
+      <BasketMark size={44 * scale} />
+      <View style={{ marginLeft: 8 * scale, alignItems: "center" }}>
+        <Text style={[styles.word, { fontSize: 20 * scale, lineHeight: 22 * scale, color: main }]} numberOfLines={1}>
+          {line1}
+        </Text>
+        {line2 ? (
+          <Text style={[styles.word, { fontSize: 13.5 * scale, lineHeight: 16 * scale, color: main }]} numberOfLines={1}>
+            — {line2} —
           </Text>
         ) : null}
       </View>
@@ -46,5 +47,5 @@ export function Logo({ size = "md", inverse = false }: { size?: "sm" | "md" | "l
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
-  word: { fontFamily: fonts.serif, letterSpacing: -0.4 },
+  word: { fontFamily: fonts.serif },
 });

@@ -1,20 +1,20 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Category, ProductSummary } from "@shared/types";
 import { CartButton } from "@/components/CartButton";
-import { Chip } from "@/components/Chip";
+import { CART_BAR_SPACE, CartBar } from "@/components/CartBar";
 import { ProductGrid, ProductGridSkeleton } from "@/components/ProductGrid";
 import { ProductImage } from "@/components/ProductImage";
 import { SearchField } from "@/components/SearchField";
 import { EmptyState, ErrorState } from "@/components/States";
 import { useFetch } from "@/lib/useFetch";
-import { colors, fonts, HIT, radius, type } from "@/theme";
+import { colors, fonts, type } from "@/theme";
 
 type Sort = "featured" | "price_asc" | "price_desc" | "name";
 const SORTS: { key: Sort; label: string }[] = [
-  { key: "featured", label: "Featured" },
+  { key: "featured", label: "Recommended" },
   { key: "price_asc", label: "Price: low to high" },
   { key: "price_desc", label: "Price: high to low" },
   { key: "name", label: "Name A–Z" },
@@ -67,170 +67,132 @@ export default function Categories() {
     setInStock(false);
   };
 
+  const rail = [
+    { key: "all", name: "All", imageUrl: "/images/site/tile-all.webp", on: !category && !seasonal, onPress: () => { setCategory(""); setSeasonal(false); } },
+    ...(categories.data?.categories ?? []).map((c) => ({
+      key: c.id, name: c.name, imageUrl: c.imageUrl, on: category === c.slug, onPress: () => { setCategory(c.slug); setSeasonal(false); },
+    })),
+    { key: "seasonal", name: "In season", imageUrl: "/images/site/tile-seasonal.webp", on: seasonal && !category, onPress: () => { setCategory(""); setSeasonal(true); } },
+  ];
+  const count = products.data?.products.length ?? 0;
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.ivory }}
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
-      keyboardShouldPersistTaps="handled"
-      refreshControl={
-        <RefreshControl
-          refreshing={products.refreshing}
-          onRefresh={() => {
-            void products.refresh();
-            void categories.refresh();
-          }}
-          tintColor={colors.leaf600}
-          colors={[colors.leaf600]}
-        />
-      }
-    >
+    <View style={{ flex: 1, backgroundColor: colors.ivory, paddingTop: insets.top + 8 }}>
       <View style={styles.pad}>
         <View style={styles.titleRow}>
-          <Text style={type.h1} accessibilityRole="header">
-            {activeCat ? activeCat.name : seasonal ? "In season now" : "All vegetables"}
+          <Text style={[type.h1, { flex: 1 }]} accessibilityRole="header" numberOfLines={1}>
+            {activeCat ? activeCat.name : seasonal ? "In season now" : "All products"}
           </Text>
           <CartButton />
         </View>
         <SearchField value={q} onChangeText={setQ} onSubmit={() => setDebouncedQ(q.trim())} />
       </View>
 
-      {/* Category tiles */}
-      {categories.error ? (
-        <ErrorState compact message={categories.error} onRetry={categories.reload} />
-      ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
-          <CategoryTile name="All" imageUrl={null} selected={!category} onPress={() => setCategory("")} />
-          {(categories.data?.categories ?? []).map((c) => (
-            <CategoryTile
-              key={c.id}
-              name={c.name}
-              count={c.productCount}
-              imageUrl={c.imageUrl}
-              selected={category === c.slug}
-              onPress={() => setCategory(category === c.slug ? "" : c.slug)}
-            />
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Filters */}
-      <View style={[styles.pad, { marginTop: 4 }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 6 }}>
-          {SORTS.map((s) => (
-            <Chip key={s.key} label={s.label} selected={sort === s.key} onPress={() => setSort(s.key)} />
-          ))}
-        </ScrollView>
-        <View style={styles.toggles}>
-          <ToggleRow label="In season" value={seasonal} onChange={setSeasonal} />
-          <ToggleRow label="In stock only" value={inStock} onChange={setInStock} />
-        </View>
-      </View>
-
-      <View style={[styles.pad, { marginTop: 8 }]}>
-        {products.error ? (
-          <ErrorState message={products.error} onRetry={products.reload} />
-        ) : products.loading && !products.data ? (
-          <ProductGridSkeleton count={6} />
-        ) : products.data && products.data.products.length > 0 ? (
-          <>
-            <Text style={[type.small, { marginBottom: 10 }]} accessibilityLiveRegion="polite">
-              {products.data.products.length} item{products.data.products.length === 1 ? "" : "s"}
-              {debouncedQ ? ` for “${debouncedQ}”` : ""}
-            </Text>
-            <ProductGrid products={products.data.products} />
-          </>
-        ) : (
-          <EmptyState
-            title="No vegetables found"
-            message={debouncedQ ? `We couldn't find anything matching “${debouncedQ}”.` : "Nothing matches these filters right now."}
-            actionLabel={hasFilters ? "Clear filters" : undefined}
-            onAction={hasFilters ? clearAll : undefined}
-          />
+      <View style={styles.body}>
+        {/* Category rail: photo + name, the current one marked with a green bar (as on the website). */}
+        {categories.error ? null : (
+          <ScrollView style={styles.rail} contentContainerStyle={{ paddingBottom: CART_BAR_SPACE }} showsVerticalScrollIndicator={false}>
+            {rail.map((c) => (
+              <CategoryTile key={c.key} name={c.name} imageUrl={c.imageUrl} selected={c.on} onPress={c.onPress} />
+            ))}
+          </ScrollView>
         )}
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: 24 + CART_BAR_SPACE }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={products.refreshing}
+              onRefresh={() => {
+                void products.refresh();
+                void categories.refresh();
+              }}
+              tintColor={colors.leaf600}
+              colors={[colors.leaf600]}
+            />
+          }
+        >
+          {categories.error ? <ErrorState compact message={categories.error} onRetry={categories.reload} /> : null}
+          {/* Filters */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingBottom: 8 }}>
+            {SORTS.map((s) => (
+              <SmallChip key={s.key} label={s.label} selected={sort === s.key} onPress={() => setSort(s.key)} />
+            ))}
+            <SmallChip label="In stock" selected={inStock} onPress={() => setInStock(!inStock)} />
+          </ScrollView>
+
+          {products.error ? (
+            <ErrorState message={products.error} onRetry={products.reload} />
+          ) : products.loading && !products.data ? (
+            <ProductGridSkeleton count={6} />
+          ) : products.data && count > 0 ? (
+            <>
+              <Text style={[type.small, { marginBottom: 8 }]} accessibilityLiveRegion="polite">
+                {count} item{count === 1 ? "" : "s"}
+                {debouncedQ ? ` for “${debouncedQ}”` : ""}
+              </Text>
+              <ProductGrid products={products.data.products} gap={8} />
+            </>
+          ) : (
+            <EmptyState
+              title="No products found"
+              message={debouncedQ ? `We couldn't find anything matching “${debouncedQ}”.` : "Nothing matches these filters right now."}
+              actionLabel={hasFilters ? "Clear filters" : undefined}
+              onAction={hasFilters ? clearAll : undefined}
+            />
+          )}
+        </ScrollView>
       </View>
-    </ScrollView>
+      <CartBar />
+    </View>
   );
 }
 
-function CategoryTile({
-  name,
-  imageUrl,
-  selected,
-  onPress,
-  count,
-}: {
-  name: string;
-  imageUrl: string | null;
-  selected: boolean;
-  onPress: () => void;
-  count?: number;
-}) {
+function SmallChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={count !== undefined ? `${name}, ${count} items` : name}
-      style={({ pressed }) => [styles.tile, selected && styles.tileSelected, pressed && { opacity: 0.75 }]}
+      hitSlop={{ top: 5, bottom: 5 }}
+      style={({ pressed }) => [styles.chip, selected && styles.chipOn, pressed && { opacity: 0.75 }]}
     >
-      <ProductImage uri={imageUrl} style={styles.tileImg} tint={selected ? colors.lime200 : colors.lime100} />
-      <Text style={[styles.tileText, selected && { color: colors.ivory }]} numberOfLines={2}>
-        {name}
-      </Text>
+      <Text style={[styles.chipText, selected && { color: colors.forest800 }]}>{label}</Text>
     </Pressable>
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function CategoryTile({ name, imageUrl, selected, onPress }: { name: string; imageUrl: string | null; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
-      onPress={() => onChange(!value)}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
-      accessibilityLabel={label}
-      style={styles.toggle}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={name}
+      style={({ pressed }) => [styles.tile, selected && styles.tileSelected, pressed && { opacity: 0.75 }]}
     >
-      <Text style={styles.toggleText}>{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: colors.leaf600, false: colors.line }}
-        thumbColor={colors.white}
-        aria-hidden
-      />
+      <ProductImage uri={imageUrl} style={[styles.tileImg, selected && { borderColor: colors.leaf600, borderWidth: 2 }]} tint={colors.lime50} />
+      <Text style={[styles.tileText, selected && { color: colors.forest800, fontFamily: fonts.bold }]} numberOfLines={2}>
+        {name}
+      </Text>
+      {selected ? <View style={styles.tileBar} /> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   pad: { paddingHorizontal: 16 },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  catRow: { paddingHorizontal: 16, gap: 10, paddingVertical: 14 },
-  tile: {
-    width: 104,
-    padding: 8,
-    borderRadius: radius.lg,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    alignItems: "center",
-  },
-  tileSelected: { backgroundColor: colors.forest800, borderColor: colors.forest800 },
-  tileImg: { width: 56, height: 56, borderRadius: 28 },
-  tileText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 15, color: colors.forest900, textAlign: "center", marginTop: 6 },
-  toggles: { flexDirection: "row", gap: 10, marginTop: 4 },
-  toggle: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: HIT,
-    paddingLeft: 14,
-    paddingRight: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  toggleText: { fontFamily: fonts.medium, fontSize: 13, color: colors.ink },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8 },
+  body: { flex: 1, flexDirection: "row", marginTop: 10, borderTopWidth: 1, borderTopColor: colors.line },
+  rail: { width: 80, flexGrow: 0, backgroundColor: colors.white, borderRightWidth: 1, borderRightColor: colors.line },
+  tile: { alignItems: "center", paddingVertical: 10, paddingHorizontal: 4 },
+  tileSelected: { backgroundColor: colors.lime50 },
+  tileImg: { width: 50, height: 50, borderRadius: 12 },
+  tileText: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 13.5, color: colors.inkSoft, textAlign: "center", marginTop: 5 },
+  tileBar: { position: "absolute", right: 0, top: 10, bottom: 10, width: 4, borderTopLeftRadius: 4, borderBottomLeftRadius: 4, backgroundColor: colors.leaf600 },
+  chip: { height: 34, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, justifyContent: "center" },
+  chipOn: { borderColor: colors.leaf600, backgroundColor: colors.lime50 },
+  chipText: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.inkSoft },
 });

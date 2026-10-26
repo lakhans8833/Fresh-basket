@@ -1,4 +1,5 @@
 import { useFocusEffect, useRouter } from "expo-router";
+import { formatSlotLabel } from "@shared/slots";
 import { ChevronRight, ReceiptText, RotateCcw } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -146,7 +147,7 @@ export default function Orders() {
               <ChevronRight size={20} color={colors.muted} />
             </View>
             <Text style={[type.small, { marginTop: 10 }]}>
-              {o.items.length} item{o.items.length === 1 ? "" : "s"} · Delivery {formatDateLabel(o.deliveryDate)}, {o.slotLabel}
+              {o.items.length} item{o.items.length === 1 ? "" : "s"} · Delivery {formatDateLabel(o.deliveryDate)}, {formatSlotLabel(o.slotLabel)}
             </Text>
           </Pressable>
           <View style={styles.cardBottom}>

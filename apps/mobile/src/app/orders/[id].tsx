@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { formatSlotLabel } from "@shared/slots";
 import { Check, CircleX, Clock } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -216,7 +217,7 @@ export default function OrderDetail() {
           <View style={[styles.rowBetween, { marginBottom: 10, justifyContent: "flex-start", gap: 8 }]}>
             <Clock size={16} color={colors.leaf600} />
             <Text style={styles.slot}>
-              {formatDateLabel(order.deliveryDate)} · {order.slotLabel}
+              {formatDateLabel(order.deliveryDate)} · {formatSlotLabel(order.slotLabel)}
             </Text>
           </View>
           <AddressSummary address={order.address} />

@@ -43,3 +43,8 @@ export function formatSlotTime(t: string): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return ms === "00" ? `${h12} ${suffix}` : `${h12}:${ms} ${suffix}`;
 }
+
+/** "Afternoon, 12:00–15:00" (as stored on an order) → "Afternoon, 12 PM–3 PM", as the website shows it. */
+export function formatSlotLabel(label: string): string {
+  return label.replace(/(\d{2}:\d{2})/g, (t) => formatSlotTime(t));
+}
