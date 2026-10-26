@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MailCheck } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
+import { api } from "@/lib/client/api";
 import { OTP_MAX, OTP_MIN, sendErrorMessage, verifyErrorMessage, waitSeconds } from "@/lib/client/otp-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
@@ -16,9 +17,11 @@ const RESEND_SECONDS = 60;
  * The email must contain {{ .Token }} — see apps/web/README.md.
  */
 export function SignupCode({
-  email, justSent, password, onConfirmed, onCancel, onFailed,
+  email, justSent, password, onConfirmed, onCancel, onFailed, byApp = false,
 }: {
   email: string; justSent: boolean;
+  /** Codes are emailed by this server over SMTP: verify as "email" (covers sign-up and new codes). */
+  byApp?: boolean;
   /** The password typed on the sign-up / sign-in form: becomes the account's password once the email is proven. */
   password?: string;
   onConfirmed: () => Promise<boolean>; onCancel: () => void; onFailed: () => void;
@@ -50,7 +53,7 @@ export function SignupCode({
     setBusy("verify");
     setError(null);
     try {
-      const { error } = await sb.auth.verifyOtp({ email, token, type: "signup" });
+      const { error } = await sb.auth.verifyOtp({ email, token, type: byApp ? "email" : "signup" });
       if (error) return setError(verifyErrorMessage(error));
       setVerified(true);
       setInfo("Email confirmed. Signing you in…");
@@ -78,7 +81,8 @@ export function SignupCode({
     setBusy("resend");
     setError(null);
     try {
-      const { error } = await sb.auth.resend({
+      if (byApp) await api("/api/auth/email", { method: "POST", json: { action: "resend", email } });
+      const { error } = byApp ? { error: null } : await sb.auth.resend({
         type: "signup",
         email,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(new URLSearchParams(window.location.search).get("next") ?? "/account")}` },

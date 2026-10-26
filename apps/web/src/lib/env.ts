@@ -95,9 +95,30 @@ export const env = {
     },
   },
 
+  /**
+   * Outgoing email over SMTP (Nodemailer), e.g. Gmail with an app password, Zoho, Brevo or Amazon SES.
+   * Server-only secrets. Account-verification codes go out this way when it is set up together with
+   * Supabase Auth's service role key; otherwise Supabase sends its own confirmation emails (as before).
+   */
+  smtp: {
+    host: read("SMTP_HOST"),
+    port: Number(read("SMTP_PORT") ?? 587),
+    /** TLS from the first byte (port 465). Port 587 upgrades with STARTTLS. */
+    secure: read("SMTP_SECURE") ? read("SMTP_SECURE") === "true" : Number(read("SMTP_PORT") ?? 587) === 465,
+    user: read("SMTP_USER"),
+    pass: read("SMTP_PASS"),
+    /** "Rams Fresh Basket <orders@example.com>"; defaults to SMTP_USER. */
+    from: read("MAIL_FROM"),
+  },
+
   cronSecret: read("CRON_SECRET"),
   devFeaturesAllowed,
 };
+
+/** Verification codes are emailed by this app (Nodemailer) instead of Supabase's own mailer. */
+export function emailCodesBySmtp(): boolean {
+  return Boolean(env.smtp.host && env.smtp.user && env.smtp.pass && env.auth.mode === "supabase" && env.storage.serviceRoleKey && env.appSecret);
+}
 
 export function requireAppSecret(): string {
   if (!env.appSecret) throw new Error("APP_SECRET is not configured");

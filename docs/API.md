@@ -10,7 +10,8 @@ Types for every response live in `packages/shared/src/types.ts`; request validat
 * **Mobile / other clients:** `Authorization: Bearer <token>`
   * Supabase mode → the Supabase access token (`supabase.auth.getSession()`).
   * Development mode → the `token` returned by `POST /api/auth/dev-login`.
-* `GET /api/auth/config` → `{ mode: "supabase" | "dev" | "unconfigured", supabaseUrl, supabaseAnonKey }`
+* `GET /api/auth/config` → `{ mode: "supabase" | "dev" | "unconfigured", supabaseUrl, supabaseAnonKey, emailCodes: "app" | "supabase" }`
+* `POST /api/auth/email` (only when `emailCodes` is `"app"`, else 404) `{ action: "signin" | "signup" | "resend" | "recovery", email, name?, password? }` → `{ sent: true }`. The store emails the code over its own SMTP; verify it with Supabase `verifyOtp({ email, token, type: "email" })`. 409 `EMAIL_EXISTS` on sign-up for an existing account; 429 when rate-limited.
 * `POST /api/auth/dev-login` `{ email, name? }` → `{ profile, token }` *(development mode only)*
 * `POST /api/auth/logout`
 

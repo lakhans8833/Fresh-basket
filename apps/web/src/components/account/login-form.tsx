@@ -24,7 +24,7 @@ const LINK_ERRORS: Record<"expired" | "device" | "link", string> = {
   link: "That sign-in link didn't work. Please request a new one below.",
 };
 
-export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null }) {
+export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp = false }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null; /** sign-in / sign-up emails are sent by this server over SMTP */ emailByApp?: boolean }) {
   const router = useRouter();
   const { refresh } = useSession();
   const [method, setMethod] = useState<"code" | "password">("code");
@@ -98,6 +98,11 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
         await done();
+      } else if (emailByApp) {
+        // This store emails the confirmation code itself (SMTP); the account is created on the server.
+        await api("/api/auth/email", { method: "POST", json: { action: "signup", email: email.trim(), password, name: name.trim() || null } });
+        setConfirming({ email: email.trim().toLowerCase(), justSent: true });
+        setBusy(null);
       } else {
         const { data, error } = await sb.auth.signUp({
           email,
@@ -143,6 +148,16 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
     setError(null);
     setInfo(null);
     setBusy("forgot");
+    if (emailByApp) {
+      try {
+        await api("/api/auth/email", { method: "POST", json: { action: "recovery", email: email.trim() } });
+        setInfo(`If an account exists for ${email}, we've emailed a link to set a new password. Check your inbox (and spam).`);
+      } catch (err) {
+        setError((err as Error).message);
+      }
+      setBusy(null);
+      return;
+    }
     const { error } = await sb.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/reset-password")}`,
     });
@@ -156,6 +171,12 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
     const sb = getBrowserSupabase();
     if (!sb || !email) return;
     setBusy("resend");
+    if (emailByApp) {
+      // Codes come from this store: confirm with the code instead of a link.
+      setBusy(null);
+      setConfirming({ email: email.trim().toLowerCase(), justSent: false });
+      return;
+    }
     const { error } = await sb.auth.resend({
       type: "signup",
       email,
@@ -229,9 +250,10 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
             ))}
           </div>
           {method === "code" ? (
-            <OtpLogin next={next} onSignedIn={done} />
+            <OtpLogin next={next} onSignedIn={done} byApp={emailByApp} />
           ) : confirming ? (
             <SignupCode
+              byApp={emailByApp}
               email={confirming.email}
               justSent={confirming.justSent}
               onConfirmed={done}

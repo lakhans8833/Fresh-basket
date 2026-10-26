@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { env } from "@/lib/env";
+import { emailCodesBySmtp, env } from "@/lib/env";
 import { LoginForm } from "@/components/account/login-form";
 import { safeNextPath } from "@/lib/safe-next";
 
@@ -21,7 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (session && !linkError) redirect(next);
   return (
     <div className="container-page grid min-h-[60vh] place-items-center py-10">
-      <LoginForm mode={env.auth.mode} next={next} linkError={linkError} signedInAs={linkError && session ? (session.profile.email ?? "your account") : null} />
+      <LoginForm mode={env.auth.mode} emailByApp={emailCodesBySmtp()} next={next} linkError={linkError} signedInAs={linkError && session ? (session.profile.email ?? "your account") : null} />
     </div>
   );
 }
