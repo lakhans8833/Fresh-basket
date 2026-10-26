@@ -1,4 +1,5 @@
 // Import single weights so only these font files are bundled.
+import { BRAND_NAME } from "@shared/types";
 import { Fraunces_500Medium } from "@expo-google-fonts/fraunces/500Medium";
 import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces/600SemiBold";
 import { Poppins_600SemiBold } from "@expo-google-fonts/poppins/600SemiBold";
@@ -42,7 +43,7 @@ export default function RootLayout() {
 
   if (!ready) {
     return (
-      <View style={styles.splash} accessibilityLabel="Loading Fresh Basket">
+      <View style={styles.splash} accessibilityLabel={`Loading ${BRAND_NAME}`}>
         <LeafMark size={64} color={colors.lime300} vein={colors.forest900} />
         <ActivityIndicator color={colors.lime300} style={{ marginTop: 24 }} />
       </View>

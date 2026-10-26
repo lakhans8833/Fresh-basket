@@ -2,6 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { Lock } from "lucide-react";
+import { BRAND_NAME } from "@freshbasket/shared";
 import { EmptyState } from "../ui/feedback";
 import { ButtonLink } from "../ui/button";
 
@@ -12,7 +13,7 @@ export interface AdminInfo {
   devMode: boolean;
 }
 
-const Ctx = createContext<AdminInfo>({ role: "staff", storeName: "Fresh Basket", devMode: false });
+const Ctx = createContext<AdminInfo>({ role: "staff", storeName: BRAND_NAME, devMode: false });
 
 export function AdminProvider({ value, children }: { value: AdminInfo; children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

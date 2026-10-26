@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Category, ProductSummary } from "@shared/types";
+import { HOME_RAIL, uniqueRails } from "@shared/home-rails";
 import { percentOff } from "@shared/variants";
 import { CART_BAR_SPACE, CartBar } from "@/components/CartBar";
 import { CartButton } from "@/components/CartButton";
@@ -52,9 +53,17 @@ export default function Home() {
 
   const products = useMemo(() => all.data?.products ?? [], [all.data]);
   const cats = useMemo(() => (categories.data?.categories ?? []).filter((c) => (c.productCount ?? 0) > 0), [categories.data]);
-  const popular = useMemo(() => browseFirst([...products.filter((p) => p.featured), ...products.filter((p) => !p.featured)]).filter((p) => p.inStock).slice(0, 12), [products]);
-  const deals = useMemo(() => browseFirst(products.filter(hasDeal)).slice(0, 14), [products]);
-  const seasonal = useMemo(() => browseFirst(products.filter((p) => p.seasonal)).slice(0, 14), [products]);
+  // Same rows as the website; a product shows up only once on the page (the first row that wants it).
+  const rows = useMemo(
+    () =>
+      uniqueRails([
+        { id: "popular", title: "Popular picks", category: undefined as string | undefined, seasonal: false, products: browseFirst([...products.filter((p) => p.featured), ...products.filter((p) => !p.featured)]).filter((p) => p.inStock), max: HOME_RAIL.popular },
+        { id: "deals", title: "Deals of the Day", category: undefined, seasonal: false, products: browseFirst(products.filter(hasDeal)), max: HOME_RAIL.deals, min: HOME_RAIL.minRow },
+        ...cats.map((c) => ({ id: `cat-${c.id}`, title: c.name, category: c.slug as string | undefined, seasonal: false, products: browseFirst(products.filter((p) => p.categoryId === c.id)), max: HOME_RAIL.category, min: HOME_RAIL.minRow })),
+        { id: "seasonal", title: "In Season Now", category: undefined, seasonal: true, products: browseFirst(products.filter((p) => p.seasonal)), max: HOME_RAIL.seasonal, min: HOME_RAIL.minRow },
+      ]),
+    [products, cats],
+  );
   const seasonalCount = products.filter((p) => p.seasonal).length;
 
   const goCategory = (slug?: string) => router.push({ pathname: "/categories", params: slug ? { category: slug } : { category: "" } });
@@ -183,10 +192,9 @@ export default function Home() {
           </View>
         ) : (
           <>
-            {rail("popular", "Popular picks", popular, () => goCategory())}
-            {rail("deals", "Deals of the Day", deals, () => goCategory())}
-            {cats.map((c) => rail(`cat-${c.id}`, c.name, browseFirst(products.filter((p) => p.categoryId === c.id)).slice(0, 14), () => goCategory(c.slug)))}
-            {rail("seasonal", "In Season Now", seasonal, () => router.push({ pathname: "/categories", params: { seasonal: "1" } }))}
+            {rows.map((r) =>
+              rail(r.id, r.title, r.products, () => (r.seasonal ? router.push({ pathname: "/categories", params: { seasonal: "1" } }) : goCategory(r.category))),
+            )}
           </>
         )}
       </ScrollView>

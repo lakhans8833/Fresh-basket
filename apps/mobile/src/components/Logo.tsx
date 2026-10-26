@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
+import { BRAND_NAME } from "@shared/types";
 import { imageUrl } from "@/lib/config";
 import { useSettings } from "@/lib/settings";
 import { colors, fonts } from "@/theme";
@@ -8,7 +9,7 @@ import { BasketMark } from "./BasketMark";
 /** Basket mark + store name (as on the website), or the uploaded logo. */
 export function Logo({ size = "md", inverse = false }: { size?: "sm" | "md" | "lg"; inverse?: boolean }) {
   const { settings } = useSettings();
-  const name = settings?.storeName ?? "Fresh Basket";
+  const name = settings?.storeName ?? BRAND_NAME;
   const logo = imageUrl(settings?.logoUrl);
   const scale = size === "lg" ? 1.5 : size === "sm" ? 0.85 : 1;
 

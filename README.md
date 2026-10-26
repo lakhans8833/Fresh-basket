@@ -1,6 +1,6 @@
 # Fresh Basket — vegetable shop (website, admin panel, mobile app)
 
-**Ram Avatar Fresh Basket** — *Fresh Vegetables, Healthy Life* — online vegetable shop for Faridabad & nearby areas.
+**Rams Fresh Basket** — *Fresh Vegetables, Healthy Life* — online vegetable shop for Faridabad & nearby areas.
 The store name, logo, contact details, WhatsApp number, social links, delivery areas, slots, fees, minimum order
 and Cash-on-Delivery are all editable in **Admin → Settings / Delivery**.
 

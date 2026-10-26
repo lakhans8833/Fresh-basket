@@ -4,7 +4,7 @@
 -- Review everything in the admin panel before going live.
 
 insert into public.store_settings (id, store_name, tagline, cod_enabled, default_min_order, slot_days_ahead)
-values (true, 'Ram Avatar Fresh Basket', 'Fresh Vegetables, Healthy Life', true, 9900, 3)
+values (true, 'Rams Fresh Basket', 'Fresh Vegetables, Healthy Life', true, 9900, 3)
 on conflict (id) do nothing;
 
 insert into public.categories (slug, name, description, image_url, sort_order) values

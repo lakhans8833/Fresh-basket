@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { BRAND_NAME } from "@freshbasket/shared";
 import { getSettings } from "@/lib/settings";
 import { storeConfig } from "@/config/store";
 
@@ -7,7 +8,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   return {
     id: "/",
     name: s.storeName,
-    short_name: s.storeName.split(" ").slice(-2).join(" ").slice(0, 12) || "Fresh Basket",
+    // The same name as everywhere else (the home screen shortens it if it has to).
+    short_name: s.storeName || BRAND_NAME,
     description: `${s.tagline || "Fresh vegetables"} — order online for delivery in ${storeConfig.serviceArea}.`,
     start_url: "/?source=pwa",
     scope: "/",

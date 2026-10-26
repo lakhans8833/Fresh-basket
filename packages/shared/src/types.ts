@@ -31,6 +31,9 @@ export interface StoreSettings {
   legal: LegalDetails;
 }
 
+/** Official store name — shown only when the saved store settings can't be loaded. */
+export const BRAND_NAME = "Rams Fresh Basket";
+
 export interface LegalDetails {
   /** Registered business / proprietor name, e.g. the name on the GST or shop registration. */
   name: string | null;
