@@ -75,7 +75,7 @@ export default function Login() {
   const supabaseSubmit = () =>
     run(async () => {
       if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new Error("Enter a valid email address");
-      if (password.length < 6) throw new Error("Password must be at least 6 characters");
+      if (password.length < (tab === "signup" ? 8 : 6)) throw new Error(tab === "signup" ? "Choose a password of at least 8 characters" : "Password must be at least 6 characters");
       if (tab === "signin") {
         await auth.signInWithPassword(email, password);
         done();
@@ -258,7 +258,7 @@ export default function Login() {
                     secureTextEntry
                     autoComplete={tab === "signin" ? "current-password" : "new-password"}
                     textContentType={tab === "signin" ? "password" : "newPassword"}
-                    hint={tab === "signup" ? "At least 6 characters" : undefined}
+                    hint={tab === "signup" ? "At least 8 characters" : undefined}
                     onSubmitEditing={supabaseSubmit}
                     returnKeyType="go"
                   />

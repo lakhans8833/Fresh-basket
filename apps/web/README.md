@@ -44,6 +44,13 @@ match `NEXT_PUBLIC_SUPABASE_URL` on Vercel):
    testing. Use a custom SMTP provider (e.g. Resend, Brevo, Amazon SES) with a verified sending domain for
    real customers; check the provider's logs if emails don't arrive.
 
+   **Free alternative — the store sends the codes itself.** Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`,
+   `SMTP_PASS` and `MAIL_FROM` (see `.env.example`; e.g. a Gmail App password or a free Brevo account) plus
+   `SUPABASE_SERVICE_ROLE_KEY`. The website and the phone app then ask `POST /api/auth/email`, which has
+   Supabase create the code (Supabase sends nothing) and emails it from your own address. `GET /api/auth/config`
+   shows `"emailCodes": "app"` when this is on. Limits: 1 email per address per 45 s (6 an hour), 10 per network
+   per 10 min, 200 an hour for the shop.
+
 Before release, use a disposable customer account: signup → code received → verification → session →
 checkout, plus a wrong code, an expired code, a reused code and “Send a new code”. Do not reuse an old
 link/code after requesting a fresh one.

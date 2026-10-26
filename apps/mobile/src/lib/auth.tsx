@@ -11,6 +11,8 @@ interface AuthConfigResponse {
   mode: AuthMode;
   supabaseUrl: string | null;
   supabaseAnonKey: string | null;
+  /** "app": the store emails sign-in / sign-up codes itself (POST /api/auth/email); otherwise Supabase does. */
+  emailCodes?: "app" | "supabase";
 }
 
 interface AuthState {
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const devToken = useRef<string | null>(null);
   const supabase = useRef<SupabaseClient | null>(null);
   const modeRef = useRef<AuthMode | null>(null);
+  const codesByApp = useRef(false);
 
   const getToken = useCallback(async (): Promise<string | null> => {
     if (modeRef.current === "dev") return devToken.current;
@@ -100,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cfg = await api<AuthConfigResponse>("/api/auth/config", { auth: false });
         if (cancelled) return;
         modeRef.current = cfg.mode;
+        codesByApp.current = cfg.emailCodes === "app";
         if (cfg.mode === "dev") {
           devToken.current = await secureStorage.get(DEV_TOKEN_KEY);
         } else if (cfg.mode === "supabase" && cfg.supabaseUrl && cfg.supabaseAnonKey) {
@@ -162,6 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUpWithPassword = useCallback(
     async (email: string, password: string, name?: string) => {
       if (!supabase.current) throw new Error("Sign-up is not configured.");
+      if (codesByApp.current) {
+        // The store creates the account and emails the confirmation code itself (SMTP).
+        await api("/api/auth/email", { method: "POST", body: { action: "signup", email: email.trim().toLowerCase(), password, name: name ?? null }, auth: false });
+        return { needsConfirmation: true };
+      }
       const { data, error } = await supabase.current.auth.signUp({
         email: email.trim(),
         password,
@@ -177,6 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendEmailCode = useCallback(async (email: string, name?: string) => {
     if (!supabase.current) throw new Error("Sign-in is not configured.");
+    if (codesByApp.current) {
+      await api("/api/auth/email", { method: "POST", body: { action: "signin", email: email.trim().toLowerCase(), name: name ?? null }, auth: false });
+      return;
+    }
     const { error } = await supabase.current.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: { shouldCreateUser: true, ...(name ? { data: { full_name: name } } : {}) },
@@ -187,7 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyEmailCode = useCallback(
     async (email: string, code: string, kind: "email" | "signup") => {
       if (!supabase.current) throw new Error("Sign-in is not configured.");
-      const { error } = await supabase.current.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type: kind });
+      // Codes emailed by the store are checked as "email" (covers new accounts and confirmations).
+      const type = codesByApp.current ? "email" : kind;
+      const { error } = await supabase.current.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type });
       if (error) throw new Error(friendlyAuthError(error));
       const p = await refreshProfile();
       if (!p) throw new Error("Signed in, but could not load your profile. Please try again.");
@@ -197,6 +212,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resendSignupCode = useCallback(async (email: string) => {
     if (!supabase.current) throw new Error("Sign-up is not configured.");
+    if (codesByApp.current) {
+      await api("/api/auth/email", { method: "POST", body: { action: "resend", email: email.trim().toLowerCase() }, auth: false });
+      return;
+    }
     const { error } = await supabase.current.auth.resend({ type: "signup", email: email.trim().toLowerCase() });
     if (error) throw new Error(friendlyAuthError(error));
   }, []);

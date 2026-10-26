@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, MailCheck } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
+import { api } from "@/lib/client/api";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
@@ -16,7 +17,7 @@ const RESEND_SECONDS = 60;
  * New customers get an account automatically on their first code. The code is checked by
  * Supabase Auth (verifyOtp); nothing about it is stored or checked in this app.
  */
-export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () => Promise<boolean> }) {
+export function OtpLogin({ next, onSignedIn, byApp = false }: { next: string; onSignedIn: () => Promise<boolean>; /** codes are emailed by this server over SMTP (not Supabase) */ byApp?: boolean }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -54,7 +55,11 @@ export function OtpLogin({ next, onSignedIn }: { next: string; onSignedIn: () =>
     setInfo(null);
     setBusy("send");
     try {
-      const { error } = await sb.auth.signInWithOtp({
+      if (byApp) {
+        // This store emails the code itself (SMTP); Supabase still checks it below.
+        await api("/api/auth/email", { method: "POST", json: { action: "signin", email: addr, name: name.trim() || null } });
+      }
+      const { error } = byApp ? { error: null } : await sb.auth.signInWithOtp({
         email: addr,
         options: {
           shouldCreateUser: true,
