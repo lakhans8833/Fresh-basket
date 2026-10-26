@@ -1,4 +1,4 @@
-# Google Play release — Ram Avatar Fresh Basket (Android)
+# Google Play release — Rams Fresh Basket (Android)
 
 Everything Claude could prepare is in this folder and in `apps/mobile/app.json` / `eas.json`.
 The steps marked **Owner** need the store owner's own Google / Expo accounts, payments or business details.
@@ -29,13 +29,13 @@ npx eas-cli build -p android --profile production
 ```
 
 * `eas.json` → profile `production` builds an **.aab** and points the app at `https://fresh-basket-brown.vercel.app`.
-* App id: **`com.ramavatar.freshbasket`** (can never change after the first upload). Name: **Ram Avatar Fresh Basket**.
+* App id: **`com.ramavatar.freshbasket`** (can never change after the first upload). Name: **Rams Fresh Basket**.
 * Let EAS create and keep the upload key ("Generate a new keystore" → yes). Back it up from expo.dev → Credentials.
 * For a quick test on a phone first: `npx eas-cli build -p android --profile preview` (installable .apk).
 
 ## 3. Play Console — create the app
 
-* App name: `Ram Avatar Fresh Basket` · Default language: English (India) · App · Free.
+* App name: `Rams Fresh Basket` · Default language: English (India) · App · Free.
 * **Store listing** (texts below, graphics in `store/android/`):
   * App icon: `android/icon-512.png` (512×512)
   * Feature graphic: `android/feature-graphic-1024x500.png`
@@ -60,7 +60,7 @@ npx eas-cli build -p android --profile production
 
 **Full description**
 
-> Ram Avatar Fresh Basket brings fresh vegetables and fruits from our store to your home.
+> Rams Fresh Basket brings fresh vegetables and fruits from our store to your home.
 >
 > • Shop daily vegetables, leafy greens, fruits, herbs and value combos
 > • Choose the pack size you need — 100 g, 250 g, 500 g, 1 kg and more — with the price per kg shown

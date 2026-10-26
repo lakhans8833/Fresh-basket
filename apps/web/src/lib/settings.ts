@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import type { StoreSettings } from "@freshbasket/shared";
+import { BRAND_NAME, type StoreSettings } from "@freshbasket/shared";
 import { queryOne } from "./db";
 import { env } from "./env";
 import { resolveWhatsAppNumber } from "@/config/store";
@@ -23,7 +23,7 @@ const isoDay = (v: Date | string | null | undefined) =>
   v == null ? null : v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : String(v).slice(0, 10);
 
 export const DEFAULT_SETTINGS: StoreSettings = {
-  storeName: "Fresh Basket",
+  storeName: BRAND_NAME,
   tagline: "Your everyday vegetables, just a tap away.",
   logoUrl: null,
   supportPhone: null,

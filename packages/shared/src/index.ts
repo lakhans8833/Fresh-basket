@@ -10,3 +10,4 @@ export * from "./catalog-search";
 export * from "./stock";
 export * from "./upi";
 export * from "./variants";
+export * from "./home-rails";

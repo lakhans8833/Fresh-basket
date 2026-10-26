@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { buildWhatsAppUrl, formatINR, type PromoBanner } from "@freshbasket/shared";
+import { buildWhatsAppUrl, formatINR, HOME_RAIL, uniqueRails, type PromoBanner } from "@freshbasket/shared";
 import { bestSavingPct, bestSellerIds, dealsFrom, listBuyAgain, listCategories, listProducts } from "@/lib/catalog";
 import { listActiveBanners } from "@/lib/banners";
 import { getSession } from "@/lib/auth";
@@ -40,12 +40,12 @@ export default async function HomePage() {
   const browseFirst = <T extends { inStock: boolean; imageUrl: string | null }>(list: T[]) =>
     [...list].sort((a, b) => Number(b.inStock) - Number(a.inStock) || Number(Boolean(b.imageUrl)) - Number(Boolean(a.imageUrl)));
   // One rail per category, like the quick-commerce apps.
-  const inCategory = (id: string) => browseFirst(all.filter((p) => p.categoryId === id)).slice(0, 14);
+  const inCategory = (id: string) => browseFirst(all.filter((p) => p.categoryId === id));
   // Few best sellers yet (new store): fill the first row with featured, then other photographed products.
   const popular = bestSellers.length >= 6 ? null : [
     ...bestSellers,
     ...browseFirst([...featured, ...all.filter((p) => !p.featured)]).filter((p) => p.inStock && !bestSellers.some((b) => b.id === p.id)),
-  ].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i).slice(0, 12);
+  ].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
 
   const leafy = categories.find((c) => /leaf|green/.test(c.slug));
   // Extra rails appear only when the store actually has these categories with products in them.
@@ -130,6 +130,18 @@ export default async function HomePage() {
   ];
   const slides = allSlides.slice(0, 7);
 
+  // Product rows in page order; a product shows up only once on the page (the first row that wants it).
+  const rails = uniqueRails([
+    popular
+      ? { id: "popular", title: "Popular picks", href: "/shop", products: popular, max: HOME_RAIL.popular }
+      : { id: "best", title: "Best Sellers", href: "/shop", products: bestSellers, max: HOME_RAIL.popular },
+    { id: "deals", title: "Deals of the Day", href: "/deals", products: browseFirst(deals), max: HOME_RAIL.deals, min: HOME_RAIL.minRow },
+    ...categories
+      .filter((c) => (c.productCount ?? 0) > 0)
+      .map((c) => ({ id: `rail-${c.slug}`, title: c.name, href: `/category/${c.slug}`, products: inCategory(c.id), max: HOME_RAIL.category, min: HOME_RAIL.minRow })),
+    { id: "seasonal", title: "In Season Now", href: "/shop?seasonal=1", products: browseFirst(seasonal), max: HOME_RAIL.seasonal, min: HOME_RAIL.minRow },
+  ]);
+
   return (
     <>
       <h1 className="sr-only">{settings.storeName} — fresh vegetables delivered in {area}</h1>
@@ -137,16 +149,9 @@ export default async function HomePage() {
       <PromoStrip banners={banners.slice(0, 3)} />
       <BuyAgainRail products={buyAgain.products} lastVariant={buyAgain.lastVariant} />
       <CategoryGrid categories={categories} seasonalCount={seasonalCount} />
-      {popular ? (
-        <ProductRail id="popular" title="Popular picks" href="/shop" products={popular} />
-      ) : (
-        <ProductRail id="best" title="Best Sellers" href="/shop" products={bestSellers} />
-      )}
-      {deals.length ? <ProductRail id="deals" title="Deals of the Day" href="/deals" products={browseFirst(deals).slice(0, 14)} /> : null}
-      {categories.filter((c) => (c.productCount ?? 0) > 0).map((c) => (
-        <ProductRail key={c.id} id={`rail-${c.slug}`} title={c.name} href={`/category/${c.slug}`} products={inCategory(c.id)} />
+      {rails.map((r) => (
+        <ProductRail key={r.id} id={r.id} title={r.title} href={r.href} products={r.products} />
       ))}
-      <ProductRail id="seasonal" title="In Season Now" href="/shop?seasonal=1" products={browseFirst(seasonal).slice(0, 14)} />
       <DeliveryInfo serviceArea={area} areas={areas} slots={slots} codEnabled={settings.codEnabled} whatsapp={Boolean(whatsapp)} />
       {whatsapp ? <WhatsAppBand whatsappUrl={buildWhatsAppUrl(whatsapp, `Hi ${settings.storeName}, I'd like to place an order.`)} /> : null}
     </>

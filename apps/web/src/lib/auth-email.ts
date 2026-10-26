@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { BRAND_NAME } from "@freshbasket/shared";
 import { env } from "./env";
 import { HttpError } from "./http";
 import { sendMail } from "./mail";
@@ -56,7 +57,7 @@ const isNotFound = (e: { code?: string; message: string; status?: number }) => e
 
 export async function sendAuthEmail(action: AuthEmailAction, email: string, opts: { name?: string | null; password?: string | null } = {}) {
   const sb = admin();
-  const store = (await getSettings().catch(() => null))?.storeName ?? "Fresh Basket";
+  const store = (await getSettings().catch(() => null))?.storeName ?? BRAND_NAME;
   const data = opts.name ? { full_name: opts.name } : undefined;
 
   if (action === "recovery") {

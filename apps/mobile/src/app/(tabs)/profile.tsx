@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { profileUpdateSchema } from "@shared/schemas";
-import type { Profile } from "@shared/types";
+import { BRAND_NAME, type Profile } from "@shared/types";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Logo } from "@/components/Logo";
@@ -89,7 +89,7 @@ export default function ProfileTab() {
         {auth.signedIn && auth.profile?.role === "customer" ? <DeleteAccountCard onSite={() => openSite("/delete-account")} /> : null}
 
         <Text style={[type.small, { textAlign: "center" }]}>
-          {settings?.storeName ?? "Fresh Basket"} app v{version}
+          {settings?.storeName ?? BRAND_NAME} app v{version}
           {auth.mode === "dev" ? " · development server" : ""}
         </Text>
       </ScrollView>
