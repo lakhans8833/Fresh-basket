@@ -106,7 +106,7 @@ export default function Login() {
   const verifyCode = () =>
     run(async () => {
       if (!/^\d{6,8}$/.test(code.trim())) throw new Error("Enter the code from the email (6–8 digits)");
-      await auth.verifyEmailCode(email, code, codeFor ?? "email");
+      await auth.verifyEmailCode(email, code, codeFor ?? "email", codeFor === "signup" ? password : undefined);
       done();
     });
   const resend = () =>

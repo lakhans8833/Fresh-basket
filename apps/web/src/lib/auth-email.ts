@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "./env";
 import { HttpError } from "./http";
@@ -85,6 +86,12 @@ export async function sendAuthEmail(action: AuthEmailAction, email: string, opts
   // signInWithOtp); verifying the code with type "email" also confirms an unconfirmed account.
   const { data: r, error } = await sb.auth.admin.generateLink({ type: "magiclink", email, options: data ? { data } : undefined });
   if (error) throw new HttpError(502, "Couldn't send the code just now. Please try again in a minute.");
+  // Signing in with a code to an account that was never confirmed: someone else may have registered
+  // this address earlier with THEIR password. Replace it with a random one, so only the inbox owner
+  // gets in (they can set a password later with "Forgot password?").
+  if (action === "signin" && r.user && !r.user.email_confirmed_at) {
+    await sb.auth.admin.updateUserById(r.user.id, { password: randomBytes(24).toString("base64url") }).catch(() => undefined);
+  }
   await sendMail(
     codeMail(store, email, r.properties.email_otp, action === "resend" ? "Here is a new code to confirm your email." : `Here is your code to sign in to ${store}.`),
   );

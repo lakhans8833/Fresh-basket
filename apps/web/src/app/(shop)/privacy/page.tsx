@@ -56,6 +56,9 @@ export default async function PrivacyPage() {
         <ul>
           <li>our payment provider (Razorpay) to process online payments and refunds;</li>
           <li>our hosting provider (Vercel) and our database and sign-in provider (Supabase), who store and process data on our behalf;</li>
+          <li>our email provider, which delivers sign-in codes and account emails to your address;</li>
+          <li>Meta (WhatsApp), when you order on WhatsApp or ask for order updates on WhatsApp — your number and the order details in those messages;</li>
+          <li>BigDataCloud, only when you tap &ldquo;Use my location&rdquo;: your browser sends your approximate coordinates to it to look up your area name;</li>
           <li>our staff and delivery personnel, who see the order and delivery details needed to fulfil it;</li>
           <li>authorities where required by law.</li>
         </ul>

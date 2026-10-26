@@ -2,6 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import type { adminCouponSchema, adminDeliveryAreaSchema, adminSettingsSchema, adminSlotSchema } from "@freshbasket/shared";
 import { query, queryOne } from "../db";
+import { CACHE_TAGS, invalidate } from "../cache";
 import { HttpError, notFound } from "../http";
 
 /* Delivery areas */
@@ -98,6 +99,8 @@ export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>)
       [v(l.name), v(l.address), v(l.registration), v(l.grievanceOfficer), v(l.grievanceEmail), v(l.jurisdiction), v(l.updated)],
     ).catch((e: { code?: string }) => {
       // The other settings are already saved; only the legal columns are missing (migration not applied yet).
+      // route() only refreshes cached settings on success — do it here so the shop shows what was saved.
+      invalidate(CACHE_TAGS.settings);
       if (e.code === "42703") throw new HttpError(503, "Your other settings were saved, but the legal details need a database update first — redeploy the site, then save again.");
       throw e;
     });

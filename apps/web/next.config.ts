@@ -14,14 +14,16 @@ const supabaseHost = publicSupabaseUrl ? new URL(publicSupabaseUrl).hostname : n
 // Supabase project (auth), Razorpay, and the free reverse-geocoding API used by "Use my location".
 const supabaseOrigin = supabaseHost ? `https://${supabaseHost}` : "https://*.supabase.co";
 const supabaseWs = supabaseHost ? `wss://${supabaseHost}` : "wss://*.supabase.co";
+// Vercel preview deployments load the Vercel toolbar (feedback/comments) from vercel.live.
+const previewToolbar = process.env.VERCEL_ENV === "preview" ? " https://vercel.live" : "";
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com",
+  `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com${previewToolbar}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://*.razorpay.com https://api.bigdatacloud.net`,
-  "frame-src 'self' https://*.razorpay.com",
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://*.razorpay.com https://api.bigdatacloud.net${previewToolbar}`,
+  `frame-src 'self' https://*.razorpay.com${previewToolbar}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",

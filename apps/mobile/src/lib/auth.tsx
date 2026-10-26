@@ -28,7 +28,8 @@ interface AuthState {
   /** Passwordless: emails a one-time code (a new customer gets an account on the first code). Free (Supabase email). */
   sendEmailCode(email: string, name?: string): Promise<void>;
   /** Checks the emailed code. "email" = code sign-in, "signup" = confirm a new password account. */
-  verifyEmailCode(email: string, code: string, kind: "email" | "signup"): Promise<void>;
+  /** `password`: the one typed at sign-up — set again after the code is confirmed (see below). */
+  verifyEmailCode(email: string, code: string, kind: "email" | "signup", password?: string): Promise<void>;
   resendSignupCode(email: string): Promise<void>;
   /** True when Google sign-in is switched on in Supabase (the button only shows then). */
   googleEnabled: boolean;
@@ -198,12 +199,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const verifyEmailCode = useCallback(
-    async (email: string, code: string, kind: "email" | "signup") => {
+    async (email: string, code: string, kind: "email" | "signup", password?: string) => {
       if (!supabase.current) throw new Error("Sign-in is not configured.");
       // Codes emailed by the store are checked as "email" (covers new accounts and confirmations).
       const type = codesByApp.current ? "email" : kind;
       const { error } = await supabase.current.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type });
       if (error) throw new Error(friendlyAuthError(error));
+      // Whoever proves the inbox owns the account (same as the website): if the address had an older,
+      // unconfirmed sign-up — maybe by someone else — Supabase keeps THAT password. Set the one typed
+      // now and end every other session of the account.
+      if (kind === "signup" && password && password.length >= 8) {
+        await supabase.current.auth.updateUser({ password }).catch(() => undefined);
+        await supabase.current.auth.signOut({ scope: "others" }).catch(() => undefined);
+      }
       const p = await refreshProfile();
       if (!p) throw new Error("Signed in, but could not load your profile. Please try again.");
     },
