@@ -71,6 +71,13 @@ function Editor({ initial }: { initial: StoreSettings }) {
     upiId: initial.upiId ?? "",
     upiPayeeName: initial.upiPayeeName ?? "",
     upiQrUrl: initial.upiQrUrl,
+    legalName: initial.legal?.name ?? "",
+    legalAddress: initial.legal?.address ?? "",
+    legalRegistration: initial.legal?.registration ?? "",
+    grievanceOfficer: initial.legal?.grievanceOfficer ?? "",
+    grievanceEmail: initial.legal?.grievanceEmail ?? "",
+    legalJurisdiction: initial.legal?.jurisdiction ?? "",
+    policiesUpdated: initial.legal?.updated ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -124,8 +131,18 @@ function Editor({ initial }: { initial: StoreSettings }) {
     const minOrder = inputToPaise(f.defaultMinOrder);
     if (minOrder === null || Number.isNaN(minOrder)) errs.defaultMinOrder = "Enter an amount (0 for none)";
     const days = /^\d+$/.test(f.slotDaysAhead) ? Number(f.slotDaysAhead) : -1;
+    const { legalName, legalAddress, legalRegistration, grievanceOfficer, grievanceEmail, legalJurisdiction, policiesUpdated, ...rest } = f;
     const r = adminSettingsSchema.safeParse({
-      ...f,
+      ...rest,
+      legal: {
+        name: legalName.trim() || null,
+        address: legalAddress.trim() || null,
+        registration: legalRegistration.trim() || null,
+        grievanceOfficer: grievanceOfficer.trim() || null,
+        grievanceEmail: grievanceEmail.trim(),
+        jurisdiction: legalJurisdiction.trim() || null,
+        updated: policiesUpdated,
+      },
       logoUrl: f.logoUrl || null,
       supportPhone: f.supportPhone.trim() || null,
       supportEmail: f.supportEmail.trim(),
@@ -141,8 +158,9 @@ function Editor({ initial }: { initial: StoreSettings }) {
     });
     if (!r.success) {
       for (const i of r.error.issues) {
-        const k = String(i.path[0]);
-        errs[k] ??= k === "storeName" ? "Enter the store name (2–60 characters)" : k === "supportEmail" ? "Enter a valid email or leave empty" : k === "slotDaysAhead" ? "Between 1 and 14 days" : i.message;
+        const legalKey: Record<string, string> = { name: "legalName", address: "legalAddress", registration: "legalRegistration", grievanceOfficer: "grievanceOfficer", grievanceEmail: "grievanceEmail", jurisdiction: "legalJurisdiction", updated: "policiesUpdated" };
+        const k = i.path[0] === "legal" ? (legalKey[String(i.path[1])] ?? "legalName") : String(i.path[0]);
+        errs[k] ??= k === "storeName" ? "Enter the store name (2–60 characters)" : k === "supportEmail" || k === "grievanceEmail" ? "Enter a valid email or leave empty" : k === "policiesUpdated" ? "Pick a date" : k === "slotDaysAhead" ? "Between 1 and 14 days" : i.message;
       }
     }
     setErrors(errs);
@@ -295,6 +313,25 @@ function Editor({ initial }: { initial: StoreSettings }) {
               {f.upiQrUrl ? <Button type="button" size="sm" variant="ghost" onClick={() => set({ upiQrUrl: null })}><X className="size-4" aria-hidden /> Remove</Button> : null}
             </div>
           </div>
+        </div>
+      </Card>
+
+      <Card aria-labelledby="legal-h" id="legal">
+        <CardHeader
+          id="legal-h"
+          title="Legal & policies"
+          description="Shown on the Privacy policy, Terms of use and Returns & refunds pages. Use your real registered details; anything left empty is simply left out of those pages."
+        />
+        <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+          {text("legalName", "Registered business name", { max: 120, hint: "As on your GST / shop registration, e.g. the proprietor or firm name" })}
+          {text("legalRegistration", "Registration numbers (optional)", { max: 200, hint: "e.g. GSTIN and FSSAI licence number" })}
+          <Field label="Registered address" htmlFor="st-legalAddress" error={errors.legalAddress} className="sm:col-span-2">
+            <Textarea id="st-legalAddress" value={f.legalAddress} maxLength={300} className="min-h-20" onChange={(e) => set({ legalAddress: e.target.value })} />
+          </Field>
+          {text("grievanceOfficer", "Grievance officer name", { max: 80, hint: "The person customers can escalate complaints to" })}
+          {text("grievanceEmail", "Grievance / privacy email", { type: "email", inputMode: "email" })}
+          {text("legalJurisdiction", "Courts for disputes (city, state)", { max: 80, hint: "Leave empty if unsure — ask your legal adviser" })}
+          {text("policiesUpdated", "Policies last updated", { type: "date", hint: "Change this whenever you edit your policies" })}
         </div>
       </Card>
 

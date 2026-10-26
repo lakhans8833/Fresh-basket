@@ -89,6 +89,15 @@ export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>)
     if (val === undefined) continue;
     await query(`update store_settings set ${col} = $1 where id`, [val?.trim() ? val.trim() : null]);
   }
+  if (d.legal) {
+    const v = (x: string | null | undefined) => (x?.trim() ? x.trim() : null);
+    const l = d.legal;
+    await query(
+      `update store_settings set legal_name = $1, legal_address = $2, legal_registration = $3, grievance_officer = $4,
+         grievance_email = $5, legal_jurisdiction = $6, policies_updated = $7::date where id`,
+      [v(l.name), v(l.address), v(l.registration), v(l.grievanceOfficer), v(l.grievanceEmail), v(l.jurisdiction), v(l.updated)],
+    );
+  }
 }
 
 /* Messages & subscribers */

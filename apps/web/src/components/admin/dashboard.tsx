@@ -28,6 +28,7 @@ export interface Stats {
   lowStock: { productId: string; productName: string; variantId: string | null; label: string | null; stock: number | null; stockGrams: number | null; out: boolean }[];
   notificationSetup?: { configured: boolean; allEventsReady: boolean; missing: string[]; events: { event: string; ready: boolean }[] };
   supportGaps?: string[];
+  legalGaps?: string[];
   areaMismatches?: { id: string; pincode: string; areaName: string; city: string; pinState: string; storeState: string; serviceArea: string }[];
 }
 
@@ -134,7 +135,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
           <AnalyticsPanel />
 
           {/* Setup reminders sit below today's numbers: they matter, but not before the orders. */}
-          {data && (data.supportGaps?.length || data.notificationSetup?.allEventsReady === false || data.areaMismatches?.length) ? (
+          {data && (data.supportGaps?.length || data.legalGaps?.length || data.notificationSetup?.allEventsReady === false || data.areaMismatches?.length) ? (
             <section aria-label="Setup" className="space-y-2">
               {data.areaMismatches?.length ? (
                 <Notice tone="warning" title="Delivery areas outside your service area">
@@ -145,6 +146,12 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
               {data.supportGaps?.length ? (
                 <Notice tone="info" title="Customer support details missing">
                   Not shown to customers until filled in: {data.supportGaps.join(", ")}. Add them in <Link href="/admin/settings" className="font-semibold underline">Settings → Customer support</Link>.
+                </Notice>
+              ) : null}
+              {data.legalGaps?.length ? (
+                <Notice tone="warning" title="Business details missing on your policy pages">
+                  Indian e-commerce rules expect these on your policies: {data.legalGaps.join(", ")}. Until you add them in{" "}
+                  <Link href="/admin/settings#legal" className="font-semibold underline">Settings → Legal &amp; policies</Link>, the Privacy, Terms and Returns pages simply leave them out.
                 </Notice>
               ) : null}
               {data.notificationSetup && !data.notificationSetup.allEventsReady ? (

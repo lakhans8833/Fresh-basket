@@ -12,7 +12,15 @@ type Row = {
   facebook_url: string | null; youtube_url: string | null; x_url: string | null; cod_enabled: boolean;
   default_min_order: number; slot_days_ahead: number; announcement: string | null;
   upi_id?: string | null; upi_payee_name?: string | null; upi_qr_url?: string | null;
+  legal_name?: string | null; legal_address?: string | null; legal_registration?: string | null; grievance_officer?: string | null;
+  grievance_email?: string | null; legal_jurisdiction?: string | null; policies_updated?: Date | string | null;
 };
+
+const EMPTY_LEGAL = { name: null, address: null, registration: null, grievanceOfficer: null, grievanceEmail: null, jurisdiction: null, updated: null };
+// node-postgres turns a `date` into a Date at LOCAL midnight; read it back with local getters so the day never shifts.
+const pad = (n: number) => String(n).padStart(2, "0");
+const isoDay = (v: Date | string | null | undefined) =>
+  v == null ? null : v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : String(v).slice(0, 10);
 
 export const DEFAULT_SETTINGS: StoreSettings = {
   storeName: "Fresh Basket",
@@ -33,6 +41,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   upiPayeeName: null,
   upiQrUrl: null,
   paymentLinks: false,
+  legal: EMPTY_LEGAL,
 };
 
 export const getSettings = cache(async (): Promise<StoreSettings> => {
@@ -47,7 +56,7 @@ export const getSettings = cache(async (): Promise<StoreSettings> => {
 });
 
 /** Store settings row, cached across requests (dropped when Admin → Settings is saved). Throws on DB errors. */
-const loadSettings = cached("settings-v1", [CACHE_TAGS.settings], 600, async (): Promise<StoreSettings | null> => {
+const loadSettings = cached("settings-v2", [CACHE_TAGS.settings], 600, async (): Promise<StoreSettings | null> => {
   const r = await queryOne<Row>("select * from store_settings where id");
   if (!r) return null;
   return {
@@ -68,6 +77,15 @@ const loadSettings = cached("settings-v1", [CACHE_TAGS.settings], 600, async ():
     upiId: r.upi_id ?? null,
     upiPayeeName: r.upi_payee_name ?? null,
     upiQrUrl: r.upi_qr_url ?? null,
+    legal: {
+      name: r.legal_name ?? null,
+      address: r.legal_address ?? null,
+      registration: r.legal_registration ?? null,
+      grievanceOfficer: r.grievance_officer ?? null,
+      grievanceEmail: r.grievance_email ?? null,
+      jurisdiction: r.legal_jurisdiction ?? null,
+      updated: isoDay(r.policies_updated),
+    },
   };
 });
 
@@ -87,6 +105,17 @@ export function whatsappPaymentMethods(s: StoreSettings): ("cod" | "upi" | "razo
   if (s.upiId) out.push("upi");
   if (s.paymentLinks) out.push("razorpay_link");
   return out;
+}
+
+/** Business details the policy pages leave out until they're filled in (Admin → Settings → Legal & policies). */
+export function legalGaps(s: StoreSettings): string[] {
+  const l = s.legal;
+  const gaps: string[] = [];
+  if (!l.name) gaps.push("Registered business name");
+  if (!l.address) gaps.push("Registered address");
+  if (!l.grievanceOfficer || !l.grievanceEmail) gaps.push("Grievance officer name & email");
+  if (!l.updated) gaps.push("Policies last-updated date");
+  return gaps;
 }
 
 /** Customer-support details still empty in Admin → Settings (shown to staff as a setup notice; never invented). */

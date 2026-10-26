@@ -5,7 +5,7 @@ import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, ORDER_COLUMNS, releaseExpired, type OrderRow } from "../orders";
 import { notificationSetup, notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
 import { cancelPaymentLinkFor } from "../payments/link-cancel";
-import { getSettings, supportGaps } from "../settings";
+import { getSettings, legalGaps, supportGaps } from "../settings";
 import { serviceAreaMismatches, toArea } from "../delivery";
 
 /**
@@ -173,6 +173,7 @@ export async function adminStats() {
   return {
     ...counts[0], recent: await hydrateOrders(pool, recentRows), lowStock, notificationSetup: notificationSetup(),
     supportGaps: supportGaps(settings),
+    legalGaps: legalGaps(settings),
     areaMismatches: serviceAreaMismatches(areaRows.map(toArea)),
   };
 }
