@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check, Heart } from "lucide-react-native";
+import { ArrowLeft, Check, Clock, Heart } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   NativeScrollEvent,
@@ -14,6 +14,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatINR } from "@shared/money";
 import { MAX_QTY_PER_LINE } from "@shared/pricing";
+import { unitPriceLabel } from "@shared/catalog-search";
+import { addablePacks } from "@shared/stock";
+import { defaultVariant, percentOff } from "@shared/variants";
+import { useNextSlotLabel } from "@/lib/slots";
 import type { ProductDetail } from "@shared/types";
 import { Button } from "@/components/Button";
 import { CartButton } from "@/components/CartButton";
@@ -47,13 +51,16 @@ export default function ProductScreen() {
 
   useEffect(() => {
     if (!product) return;
-    const first = activeVariants.find((v) => v.stock > 0) ?? activeVariants[0];
+    // Same pack the website opens on (500 g when in stock).
+    const first = defaultVariant(activeVariants);
     setVariantId((cur) => (cur && activeVariants.some((v) => v.id === cur) ? cur : first?.id ?? null));
   }, [product, activeVariants]);
 
   const variant = activeVariants.find((v) => v.id === variantId) ?? null;
   const inCart = variant ? cart.quantityOf(variant.id) : 0;
-  const maxQty = variant ? Math.max(0, Math.min(MAX_QTY_PER_LINE, variant.stock) - inCart) : 0;
+  // Weight products share one stock in kg across pack sizes: sizes already in the basket count too.
+  const maxQty = variant && product ? Math.max(0, addablePacks(product, variant.id, (id) => cart.quantityOf(id), MAX_QTY_PER_LINE)) : 0;
+  const slot = useNextSlotLabel();
 
   useEffect(() => {
     setQty((q) => Math.max(1, Math.min(q, maxQty || 1)));
@@ -191,14 +198,21 @@ export default function ProductScreen() {
 
         <View style={styles.body}>
           <Text style={type.eyebrow}>{product.categoryName}{product.seasonal ? " · In season" : ""}</Text>
-          <Text style={[type.h1, { fontSize: 30, lineHeight: 36, marginTop: 6 }]} accessibilityRole="header">
+          <Text style={[type.h1, { fontSize: 24, lineHeight: 30, marginTop: 6 }]} accessibilityRole="header">
             {product.name}
           </Text>
+          {slot ? (
+            <View style={styles.slotPill}>
+              <Clock size={13} color={colors.leaf600} />
+              <Text style={styles.slotText}>Delivery {slot}</Text>
+            </View>
+          ) : null}
           {variant ? (
             <Text style={styles.priceLine}>
               <Text style={styles.price}>{formatINR(variant.price)}</Text>
               <Text style={styles.per}> / {variant.label}{variant.note ? ` (${variant.note})` : ""}</Text>
-              {variant.mrp && variant.mrp > variant.price ? <Text style={styles.mrp}>  {formatINR(variant.mrp)}</Text> : null}
+              {variant.mrp && variant.mrp > variant.price ? <Text style={styles.mrp}>  MRP {formatINR(variant.mrp)}</Text> : null}
+              {percentOff(variant.price, variant.mrp) ? <Text style={styles.offInline}>  {percentOff(variant.price, variant.mrp)}% OFF</Text> : null}
             </Text>
           ) : (
             <Text style={[type.body, { marginTop: 8 }]}>Currently unavailable.</Text>
@@ -206,7 +220,7 @@ export default function ProductScreen() {
 
           {activeVariants.length > 0 ? (
             <>
-              <Text style={styles.label}>Choose weight</Text>
+              <Text style={styles.label}>Select unit</Text>
               <View style={styles.tiles} accessibilityRole="radiogroup">
                 {activeVariants.map((v) => {
                   const selected = v.id === variantId;
@@ -217,6 +231,8 @@ export default function ProductScreen() {
                       onPress={() => setVariantId(v.id)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected, checked: selected, disabled: out }}
+                      aria-checked={selected}
+                      aria-disabled={out}
                       accessibilityLabel={`${v.label}, ${formatINR(v.price)}${out ? ", out of stock" : ""}`}
                       style={({ pressed }) => [
                         styles.tile,
@@ -225,15 +241,16 @@ export default function ProductScreen() {
                         pressed && { opacity: 0.8 },
                       ]}
                     >
-                      <Text style={[styles.tileLabel, selected && { color: colors.ivory }]}>{v.label}</Text>
-                      <Text style={[styles.tilePrice, selected && { color: colors.lime200 }]}>
-                        {out ? "Sold out" : formatINR(v.price)}
-                      </Text>
-                      {v.note ? (
-                        <Text style={[styles.tilePrice, { fontSize: 11, opacity: 0.85 }, selected && { color: colors.lime200 }]} numberOfLines={1}>
-                          {v.note}
-                        </Text>
+                      {percentOff(v.price, v.mrp) ? (
+                        <View style={styles.tileOff}>
+                          <Text style={styles.tileOffText}>{percentOff(v.price, v.mrp)}% OFF</Text>
+                        </View>
                       ) : null}
+                      <Text style={styles.tileLabel}>{v.label}</Text>
+                      <Text style={styles.tilePrice}>{out ? "Sold out" : formatINR(v.price)}</Text>
+                      {v.mrp && v.mrp > v.price && !out ? <Text style={styles.tileMrp}>{formatINR(v.mrp)}</Text> : null}
+                      {unitPriceLabel(v.price, v.label) ? <Text style={styles.tileSub}>{unitPriceLabel(v.price, v.label)}</Text> : null}
+                      {v.note ? <Text style={styles.tileSub} numberOfLines={1}>{v.note}</Text> : null}
                     </Pressable>
                   );
                 })}
@@ -324,26 +341,37 @@ const styles = StyleSheet.create({
     paddingTop: 22,
   },
   priceLine: { marginTop: 8 },
-  price: { fontFamily: fonts.bold, fontSize: 22, color: colors.forest900 },
+  price: { fontFamily: fonts.bold, fontSize: 24, color: colors.ink },
   per: { fontFamily: fonts.regular, fontSize: 15, color: colors.muted },
   mrp: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted, textDecorationLine: "line-through" },
   label: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink, marginTop: 22, marginBottom: 10 },
   tiles: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   tile: {
-    minWidth: 104,
-    minHeight: 60,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
+    width: "31%",
+    minWidth: 96,
+    flexGrow: 1,
+    maxWidth: "48%",
+    paddingHorizontal: 8,
+    paddingTop: 18,
+    paddingBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
-    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
-  tileSelected: { backgroundColor: colors.forest800, borderColor: colors.forest800 },
+  tileSelected: { backgroundColor: colors.lime50, borderColor: colors.leaf600, borderWidth: 2 },
   tileOut: { opacity: 0.55, borderStyle: "dashed" },
-  tileLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.forest900 },
-  tilePrice: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginTop: 2 },
+  tileOff: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.offer, paddingVertical: 1, alignItems: "center" },
+  tileOffText: { fontFamily: fonts.bold, fontSize: 9.5, color: colors.white, letterSpacing: 0.4 },
+  tileLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  tilePrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink, marginTop: 2 },
+  tileMrp: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, textDecorationLine: "line-through" },
+  tileSub: { fontFamily: fonts.regular, fontSize: 10.5, color: colors.muted, marginTop: 1 },
+  slotPill: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", backgroundColor: colors.sage100, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginTop: 8 },
+  slotText: { fontFamily: fonts.bold, fontSize: 12, color: colors.ink },
+  offInline: { fontFamily: fonts.bold, fontSize: 13, color: colors.offer },
   qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
   highlights: { marginTop: 12, gap: 8 },
   highlight: { flexDirection: "row", alignItems: "center", gap: 8 },

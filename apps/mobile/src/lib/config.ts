@@ -13,5 +13,5 @@ export function imageUrl(url: string | null | undefined): string | null {
   return `${API_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
-export const HERO_IMAGE = `${API_URL}/images/dev/hero-basket.jpg`;
+export const HERO_IMAGE = `${API_URL}/images/site/hero-veg-basket.webp`;
 export const APP_SCHEME = "freshbasket";

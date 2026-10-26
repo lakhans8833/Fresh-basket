@@ -1,6 +1,8 @@
 // Import single weights so only these font files are bundled.
 import { Fraunces_500Medium } from "@expo-google-fonts/fraunces/500Medium";
 import { Fraunces_600SemiBold } from "@expo-google-fonts/fraunces/600SemiBold";
+import { Poppins_600SemiBold } from "@expo-google-fonts/poppins/600SemiBold";
+import { Poppins_700Bold } from "@expo-google-fonts/poppins/700Bold";
 import { Inter_400Regular } from "@expo-google-fonts/inter/400Regular";
 import { Inter_500Medium } from "@expo-google-fonts/inter/500Medium";
 import { Inter_600SemiBold } from "@expo-google-fonts/inter/600SemiBold";
@@ -25,6 +27,8 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     Fraunces_500Medium,
     Fraunces_600SemiBold,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
