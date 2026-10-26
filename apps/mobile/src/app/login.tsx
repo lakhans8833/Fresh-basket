@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { X } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/Button";
@@ -30,6 +30,17 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [tab, setTab] = useState<"signin" | "signup">("signin");
+  /** "code" = passwordless email code (default, like the website); "password" = email + password. */
+  const [method, setMethod] = useState<"code" | "password">("code");
+  /** Step after an email was sent: enter the code ("email" sign-in or "signup" confirmation). */
+  const [codeFor, setCodeFor] = useState<"email" | "signup" | null>(null);
+  const [code, setCode] = useState("");
+  const [wait, setWait] = useState(0);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,10 +82,43 @@ export default function Login() {
       } else {
         const res = await auth.signUpWithPassword(email, password, name.trim() || undefined);
         if (res.needsConfirmation) {
-          setNotice("Check your email to confirm your account, then sign in.");
-          setTab("signin");
+          // Confirm right here with the code from the email (no need to open a link on this phone).
+          setCodeFor("signup");
+          setCode("");
+          setWait(60);
+          setNotice(`We emailed a code to ${email.trim()}. Enter it below to finish creating your account.`);
         } else done();
       }
+    });
+
+  const validEmail = () => {
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw new Error("Enter a valid email address");
+  };
+  const sendCode = () =>
+    run(async () => {
+      validEmail();
+      await auth.sendEmailCode(email, name.trim() || undefined);
+      setCodeFor("email");
+      setCode("");
+      setWait(60);
+      setNotice(`We emailed a sign-in code to ${email.trim()}. It may take a minute; check spam too.`);
+    });
+  const verifyCode = () =>
+    run(async () => {
+      if (!/^\d{6,8}$/.test(code.trim())) throw new Error("Enter the code from the email (6–8 digits)");
+      await auth.verifyEmailCode(email, code, codeFor ?? "email");
+      done();
+    });
+  const resend = () =>
+    run(async () => {
+      if (codeFor === "signup") await auth.resendSignupCode(email);
+      else await auth.sendEmailCode(email);
+      setWait(60);
+      setNotice("A new code is on its way. Use the newest email.");
+    });
+  const google = () =>
+    run(async () => {
+      if (await auth.signInWithGoogle()) done();
     });
 
   return (
@@ -91,7 +135,7 @@ export default function Login() {
         </View>
 
         <Text style={[type.display, { marginTop: 28 }]} accessibilityRole="header">
-          {tab === "signup" && auth.mode === "supabase" ? "Create your account" : "Welcome back"}
+          {codeFor ? "Check your email" : tab === "signup" && method === "password" && auth.mode === "supabase" ? "Create your account" : "Welcome back"}
         </Text>
         <Text style={[type.body, { marginTop: 6, marginBottom: 22 }]}>
           Sign in to place orders, save addresses and track deliveries.
@@ -134,47 +178,102 @@ export default function Login() {
             <Text style={[type.small, { textAlign: "center", marginTop: 6 }]}>{SAMPLE_CUSTOMER}</Text>
           </View>
         ) : auth.mode === "supabase" ? (
-          <View>
-            <View style={styles.tabs} accessibilityRole="tablist">
-              <View style={{ flex: 1 }}>
-                <Chip label="Sign in" selected={tab === "signin"} onPress={() => setTab("signin")} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Chip label="Create account" selected={tab === "signup"} onPress={() => setTab("signup")} />
+          codeFor ? (
+            <View>
+              <TextField
+                label="Code from the email"
+                value={code}
+                onChangeText={(t) => setCode(t.replace(/\D/g, "").slice(0, 8))}
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                textContentType="oneTimeCode"
+                maxLength={8}
+                returnKeyType="go"
+                onSubmitEditing={verifyCode}
+              />
+              <Button label={codeFor === "signup" ? "Confirm & sign in" : "Verify & sign in"} variant="dark" size="lg" fullWidth loading={busy} onPress={verifyCode} />
+              <View style={styles.codeRow}>
+                <Button label={wait > 0 ? `Resend code in ${wait}s` : "Resend code"} variant="ghost" size="sm" disabled={busy || wait > 0} onPress={resend} />
+                <Button label="Change email" variant="ghost" size="sm" disabled={busy} onPress={() => { setCodeFor(null); setNotice(null); setError(null); }} />
               </View>
             </View>
-            {tab === "signup" ? (
-              <TextField label="Your name" value={name} onChangeText={setName} autoComplete="name" textContentType="name" />
-            ) : null}
-            <TextField
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
-            />
-            <TextField
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete={tab === "signin" ? "current-password" : "new-password"}
-              textContentType={tab === "signin" ? "password" : "newPassword"}
-              hint={tab === "signup" ? "At least 6 characters" : undefined}
-              onSubmitEditing={supabaseSubmit}
-              returnKeyType="go"
-            />
-            <Button
-              label={tab === "signin" ? "Sign in" : "Create account"}
-              variant="dark"
-              size="lg"
-              fullWidth
-              loading={busy}
-              onPress={supabaseSubmit}
-            />
-          </View>
+          ) : (
+            <View>
+              {auth.googleEnabled ? (
+                <>
+                  <Button label="Continue with Google" variant="outline" size="lg" fullWidth disabled={busy} onPress={google} />
+                  <Text style={styles.or}>or use your email</Text>
+                </>
+              ) : null}
+              <View style={styles.tabs} accessibilityRole="tablist">
+                <View style={{ flex: 1 }}>
+                  <Chip label="Email code" selected={method === "code"} onPress={() => setMethod("code")} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Chip label="Password" selected={method === "password"} onPress={() => setMethod("password")} />
+                </View>
+              </View>
+              {method === "code" ? (
+                <>
+                  <TextField
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="go"
+                    onSubmitEditing={sendCode}
+                    hint="No password needed: we email you a code. New here? Your account is created with it."
+                  />
+                  <Button label="Email me a code" variant="dark" size="lg" fullWidth loading={busy} onPress={sendCode} />
+                </>
+              ) : (
+                <>
+                  <View style={[styles.tabs, { marginBottom: 12 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Chip label="Sign in" selected={tab === "signin"} onPress={() => setTab("signin")} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Chip label="Create account" selected={tab === "signup"} onPress={() => setTab("signup")} />
+                    </View>
+                  </View>
+                  {tab === "signup" ? (
+                    <TextField label="Your name" value={name} onChangeText={setName} autoComplete="name" textContentType="name" />
+                  ) : null}
+                  <TextField
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                  />
+                  <TextField
+                    label="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    autoComplete={tab === "signin" ? "current-password" : "new-password"}
+                    textContentType={tab === "signin" ? "password" : "newPassword"}
+                    hint={tab === "signup" ? "At least 6 characters" : undefined}
+                    onSubmitEditing={supabaseSubmit}
+                    returnKeyType="go"
+                  />
+                  <Button
+                    label={tab === "signin" ? "Sign in" : "Create account"}
+                    variant="dark"
+                    size="lg"
+                    fullWidth
+                    loading={busy}
+                    onPress={supabaseSubmit}
+                  />
+                </>
+              )}
+            </View>
+          )
         ) : (
           <InlineMessage tone="warning">Sign-in isn't configured on the server yet. Please try again later.</InlineMessage>
         )}
@@ -209,4 +308,5 @@ const styles = StyleSheet.create({
   devText: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.inkSoft, marginTop: 4 },
   or: { textAlign: "center", fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginVertical: 16 },
   tabs: { flexDirection: "row", gap: 8, marginBottom: 18 },
+  codeRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
 });
