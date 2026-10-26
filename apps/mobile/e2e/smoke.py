@@ -6,7 +6,7 @@ Usage:
   python3 e2e/smoke.py http://localhost:8081
 Checks: home has category tiles and product rows; cards open on the 500 g pack and show % OFF + MRP;
 ADD turns into a stepper; the View basket bar shows count + total; categories rail filters;
-product page opens on 500 g with "Select unit"; order slot times read "12 PM–3 PM", not "12:00–15:00".
+product page opens on 500 g with "Select unit"; signed-in home has "Buy again"; order slot times read "12 PM–3 PM", not "12:00–15:00".
 """
 import re, sys
 from playwright.sync_api import sync_playwright, expect
@@ -23,6 +23,7 @@ with sync_playwright() as p:
     pg.goto(A + "/", wait_until="networkidle"); pg.wait_for_timeout(1500)
     check("home: category tiles", pg.get_by_text("Shop by category").count() == 1 and pg.get_by_role("button", name="Leafy Greens").count() >= 1)
     check("home: Popular picks row", pg.get_by_text("Popular picks").count() == 1)
+    check("signed out: no Buy again row", pg.get_by_text("Buy again", exact=True).count() == 0)
     card = pg.get_by_role("link", name=re.compile(r"^Broccoli")).first
     label = card.get_attribute("aria-label") or ""
     check("card opens on the 500 g pack", "500 g" in label, label)
@@ -41,6 +42,8 @@ with sync_playwright() as p:
     check("product page: Select unit, 500 g chosen", pg.get_by_text("Select unit").count() == 1 and (sel.get_attribute("aria-checked") == "true" or sel.get_attribute("aria-selected") == "true"))
     pg.goto(A + "/login", wait_until="networkidle"); pg.wait_for_timeout(800)
     pg.get_by_text("Sample customer").click(); pg.wait_for_timeout(2500)
+    pg.goto(A + "/", wait_until="networkidle"); pg.wait_for_timeout(2000)
+    check("signed in with past orders: Buy again row", pg.get_by_text("Buy again", exact=True).count() == 1)
     pg.goto(A + "/orders", wait_until="networkidle"); pg.wait_for_timeout(2000)
     body = pg.locator("body").inner_text()
     check("orders: slot times in 12-hour format", not re.search(r"\d{2}:\d{2}–\d{2}:\d{2}", body) and re.search(r"(AM|PM)", body), body[:200])
