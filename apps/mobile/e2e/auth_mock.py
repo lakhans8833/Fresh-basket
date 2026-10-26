@@ -72,6 +72,9 @@ def run(google: bool):
         pg.get_by_label("Code from the email").fill("123456"); pg.get_by_text("Confirm & sign in").click(); pg.wait_for_timeout(2000)
         out["signed_in_after_signup_code"] = "/login" not in pg.url
         out["verify_type_signup"] = any(p == "/auth/v1/verify" and b.get("type") == "signup" for p, b in calls)
+        # Whoever confirms the inbox sets the password (an older unconfirmed sign-up may have someone else's).
+        out["signup_password_set_after_code"] = any(p == "/auth/v1/user" and b.get("password") == "secret-pass-1" for p, b in calls)
+        out["other_sessions_signed_out"] = any(p == "/auth/v1/logout" for p, b in calls)
         b.close()
     return out, calls
 

@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const gen = vi.hoisted(() => ({ calls: [] as unknown[], result: null as unknown }));
+const gen = vi.hoisted(() => ({ calls: [] as unknown[], updates: [] as { id: string; attrs: { password?: string } }[], result: null as unknown }));
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     auth: {
@@ -12,6 +12,10 @@ vi.mock("@supabase/supabase-js", () => ({
         generateLink: async (p: unknown) => {
           gen.calls.push(p);
           return gen.result;
+        },
+        updateUserById: async (id: string, attrs: { password?: string }) => {
+          gen.updates.push({ id, attrs });
+          return { data: {}, error: null };
         },
       },
     },
@@ -48,7 +52,8 @@ async function load(vars: Record<string, string>) {
 
 beforeEach(() => {
   gen.calls = [];
-  gen.result = { data: { properties: { email_otp: "482913", hashed_token: "hash-abc", verification_type: "magiclink" } }, error: null };
+  gen.updates = [];
+  gen.result = { data: { properties: { email_otp: "482913", hashed_token: "hash-abc", verification_type: "magiclink" }, user: { id: "u-confirmed", email_confirmed_at: "2026-10-01T00:00:00Z" } }, error: null };
   sent.mails = [];
 });
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -112,12 +117,43 @@ describe("with SMTP", () => {
     expect(sent.mails).toHaveLength(0);
   });
 
-  it("one email per address per 45 s; a bad address is a 400", async () => {
+  it("one email per address per 45 s from a network; Gmail dots/+tags are the same address; a bad address is a 400", async () => {
     const { post } = await load(SMTP_ENV);
-    expect((await post({ action: "signin", email: "e@example.com" })).status).toBe(200);
-    expect((await post({ action: "signin", email: "e@example.com" }, "198.51.100.9")).status).toBe(429);
+    expect((await post({ action: "signin", email: "e.f@gmail.com" })).status).toBe(200);
+    expect((await post({ action: "signin", email: "ef+x@gmail.com" })).status).toBe(429);
     expect((await post({ action: "signin", email: "not-an-email" })).status).toBe(400);
     expect(sent.mails).toHaveLength(1);
+  });
+
+  it("someone hammering an address from another network can't use up its owner's allowance", async () => {
+    const { post } = await load(SMTP_ENV);
+    // Attacker sends from several networks; each network is held to 1 per 45 s for this address.
+    for (let i = 0; i < 5; i++) {
+      expect((await post({ action: "signin", email: "victim@example.com" }, `198.51.100.${i + 1}`)).status).toBe(200);
+      expect((await post({ action: "signin", email: "victim@example.com" }, `198.51.100.${i + 1}`)).status).toBe(429);
+    }
+    // The victim, on their own network, still gets a code.
+    expect((await post({ action: "signin", email: "victim@example.com" }, "203.0.113.200")).status).toBe(200);
+  });
+
+  it("IPv6 addresses in one /64 count as one network", async () => {
+    const { post } = await load(SMTP_ENV);
+    expect((await post({ action: "signin", email: "g@example.com" }, "2001:db8:1:2::1")).status).toBe(200);
+    expect((await post({ action: "signin", email: "g@example.com" }, "2001:db8:1:2:ffff::9")).status).toBe(429);
+    expect((await post({ action: "signin", email: "g@example.com" }, "2001:db8:1:3::1")).status).toBe(200);
+  });
+
+  it("code sign-in to a never-confirmed account replaces the password someone else may have set", async () => {
+    const { post } = await load(SMTP_ENV);
+    gen.result = { data: { properties: { email_otp: "555111", hashed_token: "h", verification_type: "magiclink" }, user: { id: "u-unconfirmed", email_confirmed_at: null } }, error: null };
+    expect((await post({ action: "signin", email: "h@example.com" })).status).toBe(200);
+    expect(gen.updates).toHaveLength(1);
+    expect(gen.updates[0]!.id).toBe("u-unconfirmed");
+    expect(gen.updates[0]!.attrs.password!.length).toBeGreaterThanOrEqual(30);
+    // A confirmed account keeps its password.
+    gen.result = { data: { properties: { email_otp: "555222", hashed_token: "h", verification_type: "magiclink" }, user: { id: "u-confirmed", email_confirmed_at: "2026-10-01T00:00:00Z" } }, error: null };
+    expect((await post({ action: "signin", email: "i@example.com" })).status).toBe(200);
+    expect(gen.updates).toHaveLength(1);
   });
 
   it("the same network can't spray codes to many addresses", async () => {
