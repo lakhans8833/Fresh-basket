@@ -323,13 +323,16 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          aria-label={`${r.productName} ${r.label} active`}
-                          checked={v.active}
-                          onChange={(e) => edit(r.variantId, { active: e.target.checked })}
-                          className="size-4.5 accent-leaf-600"
-                        />
+                        {/* 40 px tap area around the box (phones). */}
+                        <label className="inline-grid size-10 cursor-pointer place-items-center rounded-lg hover:bg-sage-50">
+                          <input
+                            type="checkbox"
+                            aria-label={`${r.productName} ${r.label} active`}
+                            checked={v.active}
+                            onChange={(e) => edit(r.variantId, { active: e.target.checked })}
+                            className="size-5 cursor-pointer accent-leaf-600"
+                          />
+                        </label>
                       </td>
                       <td className="whitespace-nowrap px-4 py-1.5">
                         {isChanged ? (

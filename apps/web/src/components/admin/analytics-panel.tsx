@@ -152,12 +152,16 @@ function SalesColumns({ daily }: { daily: Analytics["daily"] }) {
   const every = daily.length <= 7 ? 1 : daily.length <= 30 ? 5 : 15;
   const peak = daily.reduce((best, d, i) => (d.sales > (daily[best]?.sales ?? -1) ? i : best), 0);
   const total = daily.reduce((s, d) => s + d.sales, 0);
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setHover(Math.max(0, Math.min(daily.length - 1, Math.floor(((e.clientX - r.left) / r.width) * daily.length))));
+  };
 
   return (
     <figure>
       <figcaption className="mb-3 flex items-center justify-between gap-3">
         <span className="text-sm font-semibold text-ink">Sales per day</span>
-        <button type="button" onClick={() => setAsTable((v) => !v)} className="text-xs font-semibold text-leaf-600 hover:underline" aria-pressed={asTable}>
+        <button type="button" onClick={() => setAsTable((v) => !v)} className="-my-2 rounded-lg px-2 py-2 text-xs font-semibold text-leaf-600 hover:bg-lime-50 hover:underline" aria-pressed={asTable}>
           {asTable ? "Show chart" : "Show as table"}
         </button>
       </figcaption>
@@ -181,7 +185,14 @@ function SalesColumns({ daily }: { daily: Analytics["daily"] }) {
             ))}
           </div>
           <div>
-            <div className="relative h-56" onMouseLeave={() => setHover(null)}>
+            {/* Phones: touch or drag across the chart to read any day (columns are only a few px wide). */}
+            <div
+              className="relative h-56 touch-pan-y"
+              // Only a real mouse leaving clears it: after a tap, browsers also send a mouseleave.
+              onPointerLeave={(e) => { if (e.pointerType === "mouse") setHover(null); }}
+              onPointerDown={(e) => { if (e.pointerType !== "mouse") pick(e); }}
+              onPointerMove={(e) => { if (e.pointerType !== "mouse" && e.buttons) pick(e); }}
+            >
               {ticks.map((t) => (
                 <span key={t} aria-hidden className={cn("absolute inset-x-0 h-px", t === 0 ? "bg-sage-200" : "bg-line")} style={{ bottom: `${(t / max) * 100}%` }} />
               ))}

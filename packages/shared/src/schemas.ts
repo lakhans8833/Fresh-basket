@@ -5,6 +5,16 @@ import { ORDER_STATUSES, UNAVAILABLE_ITEM_PREFERENCES } from "./orderStatus";
 import { UPI_ID_REGEX } from "./upi";
 import { whatsappCustomerSchema } from "./whatsapp";
 
+/** "YYYY-MM-DD" that is a real calendar day ("2026-10-99" / "2026-02-30" are refused with a 400, not a database error). */
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((d) => {
+  const t = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d;
+}, "Not a valid date");
+/** A date-time the database can store (ISO text from the admin form), or empty. */
+const dateTimeText = z.string().trim().max(40).refine((v) => v === "" || !Number.isNaN(Date.parse(v)), "Not a valid date and time");
+/** Rupee amounts in paise: up to ₹1 crore, far below the database integer limit. */
+const paise = z.number().int().min(0).max(1_000_000_000);
+
 const uuid = z.uuid();
 const trimmed = (max: number) => z.string().trim().max(max);
 
@@ -54,7 +64,7 @@ export const placeOrderSchema = z.object({
   address: addressInputSchema.optional(),
   saveAddress: z.boolean().optional().default(false),
   slotId: uuid,
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  deliveryDate: isoDay,
   paymentMethod: z.enum(["cod", "razorpay", "mock", "upi"]),
   customerNote: trimmed(300).optional().nullable(),
   /** If an item can't be supplied: call first (default) or remove + refund. Never auto-substitute. */
@@ -167,6 +177,8 @@ export const adminProductSchema = z.object({
    * null = keep stock per pack (e.g. "1 bunch"). Leave out to keep what's saved.
    */
   stockGrams: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  /** Total grams shown when the form was opened: only the change is applied (sales meanwhile stay counted). */
+  stockGramsLoaded: z.number().int().min(0).max(1_000_000_000).optional(),
 });
 export type AdminProductInput = z.infer<typeof adminProductSchema>;
 
@@ -225,17 +237,18 @@ export const adminCouponSchema = z
     code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{3,32}$/, "3–32 letters/numbers"),
     description: trimmed(160).optional().nullable(),
     kind: z.enum(["percent", "flat"]),
-    value: z.number().int().min(1),
-    minOrder: z.number().int().min(0).default(0),
-    maxDiscount: z.number().int().min(0).optional().nullable(),
-    startsAt: z.string().optional().nullable(),
-    endsAt: z.string().optional().nullable(),
-    usageLimit: z.number().int().min(1).optional().nullable(),
-    perUserLimit: z.number().int().min(1).optional().nullable(),
+    value: z.number().int().min(1).max(1_000_000_000),
+    minOrder: paise.default(0),
+    maxDiscount: paise.optional().nullable(),
+    startsAt: dateTimeText.optional().nullable(),
+    endsAt: dateTimeText.optional().nullable(),
+    usageLimit: z.number().int().min(1).max(1_000_000).optional().nullable(),
+    perUserLimit: z.number().int().min(1).max(1000).optional().nullable(),
     firstOrderOnly: z.boolean().default(false),
     active: z.boolean().default(true),
   })
-  .refine((c) => c.kind !== "percent" || c.value <= 100, { message: "Percent must be 1–100", path: ["value"] });
+  .refine((c) => c.kind !== "percent" || c.value <= 100, { message: "Percent must be 1–100", path: ["value"] })
+  .refine((c) => !c.startsAt || !c.endsAt || Date.parse(c.endsAt) > Date.parse(c.startsAt), { message: "End must be after the start", path: ["endsAt"] });
 
 const optionalUrl = z
   .string()
@@ -260,7 +273,7 @@ export const adminSettingsSchema = z.object({
   youtube: optionalUrl,
   x: optionalUrl,
   codEnabled: z.boolean(),
-  defaultMinOrder: z.number().int().min(0),
+  defaultMinOrder: paise,
   slotDaysAhead: z.number().int().min(1).max(14),
   announcement: trimmed(160).optional().nullable(),
   /** UPI ID customers pay to (e.g. ramavatar@okaxis). Leave empty to turn UPI off. */
@@ -290,7 +303,7 @@ export const whatsappOrderSchema = z.object({
   unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
   idempotencyKey: z.string().min(8).max(80),
   /** Delivery date + slot chosen on the WhatsApp order page (both or neither). */
-  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  deliveryDate: isoDay.optional().nullable(),
   slotId: uuid.optional().nullable(),
 }).refine((v) => Boolean(v.deliveryDate) === Boolean(v.slotId), { message: "Choose a delivery date and time slot.", path: ["slotId"] });
 export type WhatsAppOrderInput = z.infer<typeof whatsappOrderSchema>;

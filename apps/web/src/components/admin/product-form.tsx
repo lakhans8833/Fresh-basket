@@ -276,6 +276,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       stockGrams: byWeight
         ? (stockTouched || initial?.stockGrams == null ? totalGramsNow : undefined)
         : (initial?.stockGrams != null ? null : undefined),
+      stockGramsLoaded: byWeight && stockTouched && initial?.stockGrams != null ? initial.stockGrams : undefined,
     };
     if (byWeight && (stockTouched || initial?.stockGrams == null) && totalGramsNow === null) errs.stockGrams = "Enter kilos like 25 or 2.5";
     const r = adminProductSchema.safeParse(raw);

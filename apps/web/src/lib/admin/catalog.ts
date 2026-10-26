@@ -99,6 +99,11 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
       await c.query("insert into product_images (product_id, url, alt, sort_order) values ($1,$2,$3,$4)", [productId, img.url, img.alt ?? null, i]);
     }
 
+    // Switching from "total stock in kg" to stock per pack: clear the total FIRST. While it is set, the
+    // database derives every weight pack's stock from it and ignores the per-pack numbers typed in;
+    // cleared afterwards, each pack would keep its derived count and the same kilos would sell several times.
+    if (d.stockGrams === null) await c.query("update products set stock_grams = null where id = $1", [productId]);
+
     const keep: string[] = [];
     for (const [i, v] of d.variants.entries()) {
       if (v.id) {
@@ -128,13 +133,19 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
       [productId, keep],
     );
     await c.query("update product_variants set active = false where product_id = $1 and not (id = any($2::uuid[]))", [productId, keep]);
-    if (d.stockGrams !== undefined) {
+    if (d.stockGrams != null) {
       // Only sizes on sale matter: a hidden size without a weight is kept for old orders, not sold.
-      if (d.stockGrams !== null && d.variants.some((v) => v.active !== false && packGrams(v.label) === null)) {
+      if (d.variants.some((v) => v.active !== false && packGrams(v.label) === null)) {
         throw badRequest("Total stock in kg only works when every option is a weight like “500 g” or “1 kg”.");
       }
-      // Setting a total re-derives every weight pack's stock (database trigger).
-      await c.query("update products set stock_grams = $1 where id = $2", [d.stockGrams, productId]);
+      // Setting a total re-derives every weight pack's stock (database trigger). With the total seen when
+      // the form opened, only the change is applied, so grams sold meanwhile are not handed back.
+      await c.query(
+        `update products set stock_grams = case when $3::bigint is null or stock_grams is null then $1::bigint
+                                                else greatest(0, stock_grams + ($1::bigint - $3::bigint)) end
+          where id = $2`,
+        [d.stockGrams, productId, d.stockGramsLoaded ?? null],
+      );
     }
     return { id: productId };
   });

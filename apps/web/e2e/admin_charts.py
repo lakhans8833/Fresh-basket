@@ -22,7 +22,7 @@ with sync_playwright() as p:
     pg.wait_for_url(re.compile(r"/admin/?$"))
     state = c.storage_state(); c.close()
     for w, h in ((1280, 900), (390, 844)):
-        c = b.new_context(storage_state=state, viewport={"width": w, "height": h}); pg = c.new_page(); errs = []
+        c = b.new_context(storage_state=state, viewport={"width": w, "height": h}, has_touch=w < 500); pg = c.new_page(); errs = []
         pg.on("console", lambda m: m.type == "error" and errs.append(m.text[:150]))
         pg.goto(BASE + "/admin", wait_until="networkidle")
         bars = pg.locator("ol[aria-label^='Sales per day'] > li")
@@ -37,6 +37,15 @@ with sync_playwright() as p:
         last.focus()
         tip = pg.get_by_role("tooltip")
         check(f"{w}px: focusing a day shows its figures", tip.is_visible() and re.search(r"₹[\d,]+(\.\d+)? · \d+ orders?", tip.inner_text()), tip.inner_text() if tip.count() else "")
+        if w < 500:
+            pg.get_by_role("button", name="30 days").click(); expect(bars).to_have_count(30)
+            area = pg.locator("ol[aria-label^='Sales per day']").locator("xpath=..")
+            box = area.bounding_box()
+            pg.mouse.move(0, 0); pg.keyboard.press("Tab")  # drop the focus left on the 7-days column
+            pg.touchscreen.tap(box["x"] + box["width"] * 0.5, box["y"] + box["height"] * 0.6)
+            tip = pg.get_by_role("tooltip")
+            check(f"{w}px: tapping the chart shows that day's figures", tip.count() == 1 and tip.is_visible(), tip.count())
+            pg.get_by_role("button", name="7 days").click(); expect(bars).to_have_count(7)
         pg.get_by_role("button", name="Show as table").click()
         check(f"{w}px: table view lists 7 days", pg.locator("figure table tbody tr").count() == 7)
         check(f"{w}px: bar lists present", all(pg.get_by_role("heading", name=n).is_visible() for n in ("Top products", "Orders by status", "Top delivery areas")))
