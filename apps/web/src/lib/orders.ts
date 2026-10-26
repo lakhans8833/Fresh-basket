@@ -451,7 +451,8 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
           throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
         }
         const shop = await c.query<{ n: number }>(
-          "select count(*)::int as n from orders where user_id is null and status = 'pending_confirmation'",
+          // Unpaid UPI / payment-link guest orders hold stock too, so they count towards the shop-wide cap.
+          "select count(*)::int as n from orders where user_id is null and status in ('pending_payment', 'pending_confirmation')",
         );
         if ((shop.rows[0]?.n ?? 0) >= GUEST_UNCONFIRMED_SHOP_LIMIT) {
           throw new HttpError(503, "We're getting a lot of orders right now. Please sign in to order, or try again in a little while.", "BUSY");
