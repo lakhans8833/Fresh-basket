@@ -16,6 +16,7 @@ import { SearchField } from "@/components/SearchField";
 import { SectionHeader } from "@/components/SectionHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { ErrorState } from "@/components/States";
+import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { HERO_IMAGE } from "@/lib/config";
 import { useSettings } from "@/lib/settings";
@@ -37,12 +38,16 @@ export default function Home() {
   const slot = useNextSlotLabel();
   const [query, setQuery] = useState("");
   const [locOpen, setLocOpen] = useState(false);
+  const { profile } = useAuth();
   const all = useFetch<{ products: ProductSummary[] }>("/api/products");
+  // Signed in: products from past orders, opening on the pack bought last time (same as the website).
+  const buyAgain = useFetch<{ products: ProductSummary[]; lastVariant: Record<string, string> }>(profile ? "/api/me/buy-again" : null, [profile?.id]);
   const categories = useFetch<{ categories: Category[] }>("/api/categories");
   const refreshing = all.refreshing || categories.refreshing;
   const onRefresh = () => {
     void all.refresh();
     void categories.refresh();
+    if (profile) void buyAgain.refresh();
   };
 
   const products = useMemo(() => all.data?.products ?? [], [all.data]);
@@ -57,7 +62,7 @@ export default function Home() {
   // 4 tiles per row with 10 px gaps inside 16 px side padding.
   const tileW = Math.floor((Math.min(width, 520) - 32 - 30) / 4);
 
-  const rail = (id: string, title: string, list: ProductSummary[], onAll: () => void) =>
+  const rail = (id: string, title: string, list: ProductSummary[], onAll: () => void, preferVariant?: Record<string, string>) =>
     list.length ? (
       <View key={id} style={{ marginTop: 22 }}>
         <View style={styles.pad}>
@@ -66,7 +71,7 @@ export default function Home() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
           {list.map((p) => (
             <View key={p.id} style={{ width: 150 }}>
-              <ProductCard product={p} />
+              <ProductCard product={p} preferVariantId={preferVariant?.[p.id]} />
             </View>
           ))}
         </ScrollView>
@@ -131,6 +136,10 @@ export default function Home() {
             </View>
           </Pressable>
         </View>
+
+        {profile && buyAgain.data?.products.length
+          ? rail("buy-again", "Buy again", buyAgain.data.products, () => router.push("/orders"), buyAgain.data.lastVariant)
+          : null}
 
         {/* Category tiles */}
         <View style={[styles.pad, { marginTop: 20 }]}>

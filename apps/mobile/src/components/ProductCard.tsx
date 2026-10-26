@@ -17,12 +17,12 @@ import { QuantityStepper } from "./QuantityStepper";
  * Quick-commerce product card (same layout as the website): square photo with "% OFF", name, pack,
  * price with the MRP struck through, and a small ADD that turns into a green − N + stepper.
  */
-export function ProductCard({ product }: { product: ProductSummary; index?: number }) {
+export function ProductCard({ product, preferVariantId }: { product: ProductSummary; index?: number; /** "Buy again": open on the pack bought last time, if it is still in stock. */ preferVariantId?: string }) {
   const router = useRouter();
   const cart = useCart();
   const fav = useFavourites();
   // Same pack as the website opens on: 500 g when in stock, else the first size in stock.
-  const variant = defaultVariant(product.variants);
+  const variant = (preferVariantId ? product.variants.find((v) => v.id === preferVariantId && v.stock > 0) : undefined) ?? defaultVariant(product.variants);
   const inCart = variant ? cart.quantityOf(variant.id) : 0;
   // Weight products: every pack size draws from one total, so packs of other sizes in the basket count too.
   const canAdd = variant ? addablePacks(product, variant.id, (id) => cart.quantityOf(id), MAX_QTY_PER_LINE) : 0;

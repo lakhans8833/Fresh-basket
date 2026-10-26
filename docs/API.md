@@ -41,6 +41,7 @@ Image URLs may be relative (`/images/dev/tomato.jpg`): prefix with the API base 
 | GET/PUT | `/api/me` | `{ profile }`; PUT `{ fullName, phone? }` |
 | GET/POST | `/api/me/addresses` | `{ addresses }` / `{ address }` (body = `addressInputSchema`) |
 | PUT/DELETE | `/api/me/addresses/:id` | |
+| GET | `/api/me/buy-again` | `{ products, lastVariant }` — products from my past orders, newest first; `lastVariant[productId]` = pack bought last time |
 | GET | `/api/orders` | `{ orders: Order[] }` |
 | POST | `/api/orders` | body = `placeOrderSchema` → `PlaceOrderResponse` `{ order, payment? }` |
 | GET | `/api/orders/:id` | `{ order }` (poll this after payment) |
