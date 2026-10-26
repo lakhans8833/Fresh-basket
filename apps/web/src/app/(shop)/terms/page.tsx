@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getSettings } from "@/lib/settings";
 import { InfoPage } from "@/components/info/info-page";
+import { Grievance, operatorSentence, policyDate } from "@/components/info/legal";
 
 export const metadata: Metadata = { title: "Terms of use" };
 
@@ -10,13 +11,12 @@ const a = "font-medium text-leaf-600 underline underline-offset-4 hover:text-for
 export default async function TermsPage() {
   const s = await getSettings();
   return (
-    <InfoPage eyebrow="Policies" title="Terms of use" template updated="[date]"
+    <InfoPage eyebrow="Policies" title="Terms of use" updated={policyDate(s)}
       intro={`The terms that apply when you use ${s.storeName} and place orders with us.`}>
       <div className="prose-policy">
         <h2>1. About these terms</h2>
         <p>
-          {s.storeName} is operated by [registered business name] ([registration details], [registered address]).
-          By creating an account or placing an order you agree to these terms, together with our{" "}
+          {operatorSentence(s) ? <>{operatorSentence(s)} </> : null}By creating an account or placing an order you agree to these terms, together with our{" "}
           <Link href="/privacy" className={a}>privacy policy</Link>, <Link href="/delivery-policy" className={a}>delivery policy</Link>{" "}
           and <Link href="/returns" className={a}>returns &amp; refunds policy</Link>.
         </p>
@@ -31,7 +31,7 @@ export default async function TermsPage() {
         <h2>3. Products and prices</h2>
         <ul>
           <li>Products are fresh produce sold in the weights or packs shown. Natural variation in size, appearance and exact weight is expected.</li>
-          <li>Prices are in Indian Rupees and [state whether inclusive of applicable taxes]. Prices and availability can change at any time; the price that applies is the one confirmed at checkout when you place the order.</li>
+          <li>Prices are in Indian Rupees. The total shown at checkout (item prices, less any discount, plus any delivery fee) is the amount you pay; nothing is added afterwards. Prices and availability can change at any time; the price that applies is the one confirmed at checkout when you place the order.</li>
           <li>Delivery fees and minimum order amounts depend on your delivery area and are shown before you pay.</li>
           <li>Coupons are subject to their own conditions (such as validity dates, minimum order and usage limits) and can&apos;t be exchanged for cash.</li>
         </ul>
@@ -54,7 +54,7 @@ export default async function TermsPage() {
         <p>
           We deliver to the areas and in the time slots listed in our <Link href="/delivery-policy" className={a}>delivery policy</Link>.
           We aim to deliver within the slot you choose, but times are estimates and may be affected by circumstances outside our
-          control. Please ensure someone is available to receive the order. [Describe what happens if nobody is available.]
+          control. Please ensure someone is available to receive the order; if you won&apos;t be, <Link href="/contact" className={a}>contact us</Link> as early as you can.
         </p>
 
         <h2>7. Problems with an order</h2>
@@ -70,20 +70,21 @@ export default async function TermsPage() {
 
         <h2>9. Liability</h2>
         <p>
-          [Limitation of liability wording, reviewed by your legal adviser.] Nothing in these terms limits any rights you have
-          under applicable consumer protection law.
+          Nothing in these terms limits any rights you have under applicable consumer protection law, including the
+          Consumer Protection Act, 2019.
         </p>
 
         <h2>10. Changes and governing law</h2>
         <p>
           We may update these terms from time to time; the version published here when you place an order applies to that order.
-          These terms are governed by the laws of [jurisdiction], and disputes are subject to the courts of [city/state].
+          These terms are governed by the laws of India{s.legal.jurisdiction ? `, and disputes are subject to the courts of ${s.legal.jurisdiction}` : ""}.
         </p>
 
         <h2>11. Contact</h2>
         <p>
-          Questions about these terms? Please <Link href="/contact" className={a}>contact us</Link>. [Add grievance officer details if required.]
+          Questions about these terms? Please <Link href="/contact" className={a}>contact us</Link>.
         </p>
+        <Grievance s={s} a={a} />
       </div>
     </InfoPage>
   );

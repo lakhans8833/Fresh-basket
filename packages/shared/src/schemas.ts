@@ -283,6 +283,18 @@ export const adminSettingsSchema = z.object({
     .nullable(),
   upiPayeeName: trimmed(60).optional().nullable(),
   upiQrUrl: z.string().max(500).optional().nullable(),
+  /** Legal & policy details; only saved when sent (older admin screens don't send them). */
+  legal: z
+    .object({
+      name: trimmed(120).optional().nullable(),
+      address: trimmed(300).optional().nullable(),
+      registration: trimmed(200).optional().nullable(),
+      grievanceOfficer: trimmed(80).optional().nullable(),
+      grievanceEmail: z.union([z.email(), z.literal("")]).optional().nullable(),
+      jurisdiction: trimmed(80).optional().nullable(),
+      updated: z.union([z.iso.date(), z.literal("")]).optional().nullable(),
+    })
+    .optional(),
 });
 
 /** UPI reference / UTR typed by the customer after paying (a claim to check, not proof). */

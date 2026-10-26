@@ -8,11 +8,34 @@ const publicSupabaseUrl = envAlias("NEXT_PUBLIC_SUPABASE_URL") ?? envAlias("SUPA
 const publicSupabaseAnonKey = envAlias("NEXT_PUBLIC_SUPABASE_ANON_KEY") ?? envAlias("SUPABASE_ANON_KEY");
 const supabaseHost = publicSupabaseUrl ? new URL(publicSupabaseUrl).hostname : null;
 
+// Content-Security-Policy (production builds only — `next dev` needs eval for hot reload). Scripts stay
+// limited to this site + Razorpay Checkout; 'unsafe-inline' is needed for Next.js's inline bootstrap scripts
+// and the product JSON-LD (no nonces, so pages can stay statically cached). Connections: this site, the
+// Supabase project (auth), Razorpay, and the free reverse-geocoding API used by "Use my location".
+const supabaseOrigin = supabaseHost ? `https://${supabaseHost}` : "https://*.supabase.co";
+const supabaseWs = supabaseHost ? `wss://${supabaseHost}` : "wss://*.supabase.co";
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://*.razorpay.com https://api.bigdatacloud.net`,
+  "frame-src 'self' https://*.razorpay.com",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://*.razorpay.com",
+  "frame-ancestors 'self'",
+].join("; ");
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), payment=(self \"https://checkout.razorpay.com\")" },
+  ...(process.env.NODE_ENV === "production" ? [{ key: "Content-Security-Policy", value: csp }] : []),
 ];
 
 const nextConfig: NextConfig = {

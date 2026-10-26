@@ -2,7 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import type { adminCouponSchema, adminDeliveryAreaSchema, adminSettingsSchema, adminSlotSchema } from "@freshbasket/shared";
 import { query, queryOne } from "../db";
-import { notFound } from "../http";
+import { HttpError, notFound } from "../http";
 
 /* Delivery areas */
 export const adminListAreas = () =>
@@ -88,6 +88,19 @@ export async function adminSaveSettings(d: z.output<typeof adminSettingsSchema>)
   for (const [col, val] of upi) {
     if (val === undefined) continue;
     await query(`update store_settings set ${col} = $1 where id`, [val?.trim() ? val.trim() : null]);
+  }
+  if (d.legal) {
+    const v = (x: string | null | undefined) => (x?.trim() ? x.trim() : null);
+    const l = d.legal;
+    await query(
+      `update store_settings set legal_name = $1, legal_address = $2, legal_registration = $3, grievance_officer = $4,
+         grievance_email = $5, legal_jurisdiction = $6, policies_updated = $7::date where id`,
+      [v(l.name), v(l.address), v(l.registration), v(l.grievanceOfficer), v(l.grievanceEmail), v(l.jurisdiction), v(l.updated)],
+    ).catch((e: { code?: string }) => {
+      // The other settings are already saved; only the legal columns are missing (migration not applied yet).
+      if (e.code === "42703") throw new HttpError(503, "Your other settings were saved, but the legal details need a database update first — redeploy the site, then save again.");
+      throw e;
+    });
   }
 }
 

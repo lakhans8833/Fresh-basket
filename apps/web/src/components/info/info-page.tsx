@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { Notice } from "../ui/feedback";
 import { cn } from "../ui/cn";
 
 /** Header + body wrapper shared by the information and policy pages. */
 export function InfoPage({
-  eyebrow, title, intro, children, wide, template, updated,
+  eyebrow, title, intro, children, wide, updated,
 }: {
   eyebrow: string;
   title: string;
@@ -13,9 +12,8 @@ export function InfoPage({
   children: ReactNode;
   /** Use the full page width (e.g. for a form + side panel). Text pages stay at ~48rem. */
   wide?: boolean;
-  /** Show the "template" notice used on legal-ish pages. */
-  template?: boolean;
-  updated?: string;
+  /** "Last updated" date; the line is left out when null. */
+  updated?: string | null;
 }) {
   return (
     <div className="pb-16">
@@ -32,11 +30,6 @@ export function InfoPage({
       </header>
       <div className="container-page pt-8 md:pt-10">
         <div className={cn(!wide && "max-w-3xl")}>
-        {template ? (
-          <Notice tone="warning" title="Template" className="mb-8">
-            Template — review with a legal adviser and update business details before launch.
-          </Notice>
-        ) : null}
         {children}
         </div>
       </div>

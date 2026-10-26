@@ -27,6 +27,22 @@ export interface StoreSettings {
   upiQrUrl: string | null;
   /** Razorpay Payment Links can be created (Razorpay keys configured on the server). */
   paymentLinks: boolean;
+  /** Business details for the policy pages (Admin → Settings → Legal & policies). null = not filled in yet. */
+  legal: LegalDetails;
+}
+
+export interface LegalDetails {
+  /** Registered business / proprietor name, e.g. the name on the GST or shop registration. */
+  name: string | null;
+  address: string | null;
+  /** Registration numbers to show, e.g. "GSTIN …, FSSAI licence …". */
+  registration: string | null;
+  grievanceOfficer: string | null;
+  grievanceEmail: string | null;
+  /** City whose courts handle disputes, e.g. "Faridabad, Haryana". */
+  jurisdiction: string | null;
+  /** ISO date (YYYY-MM-DD) the policies were last reviewed. */
+  updated: string | null;
 }
 
 export interface Category {
