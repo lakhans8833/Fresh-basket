@@ -9,6 +9,7 @@ import { api } from "@/lib/client/api";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { useSession } from "./session-context";
 import { OtpLogin } from "./otp-login";
+import { GoogleSignIn } from "./google-sign-in";
 import { SignupCode } from "./signup-code";
 import { sendErrorMessage } from "@/lib/client/otp-errors";
 import { Button } from "../ui/button";
@@ -219,6 +220,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null }: { mode: 
         </div>
       ) : mode === "supabase" ? (
         <>
+          <GoogleSignIn next={next} />
           <div role="tablist" aria-label="How to sign in" className="mt-6 grid grid-cols-2 rounded-full bg-sage-100 p-1 text-sm font-semibold">
             {([["code", "Email code", Mail], ["password", "Password", KeyRound]] as const).map(([m, label, Icon]) => (
               <button key={m} role="tab" type="button" aria-selected={method === m} onClick={() => { setMethod(m); setError(null); setInfo(null); }} className={cn("inline-flex h-10 items-center justify-center gap-1.5 rounded-full", method === m ? "bg-white text-forest-900 shadow-sm" : "text-muted")}>

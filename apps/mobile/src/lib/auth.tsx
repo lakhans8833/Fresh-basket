@@ -23,6 +23,15 @@ interface AuthState {
   devLogin(email: string, name?: string): Promise<void>;
   signInWithPassword(email: string, password: string): Promise<void>;
   signUpWithPassword(email: string, password: string, name?: string): Promise<{ needsConfirmation: boolean }>;
+  /** Passwordless: emails a one-time code (a new customer gets an account on the first code). Free (Supabase email). */
+  sendEmailCode(email: string, name?: string): Promise<void>;
+  /** Checks the emailed code. "email" = code sign-in, "signup" = confirm a new password account. */
+  verifyEmailCode(email: string, code: string, kind: "email" | "signup"): Promise<void>;
+  resendSignupCode(email: string): Promise<void>;
+  /** True when Google sign-in is switched on in Supabase (the button only shows then). */
+  googleEnabled: boolean;
+  /** true when signed in; false when the customer closed the Google window. */
+  signInWithGoogle(): Promise<boolean>;
   signOut(): Promise<void>;
   refreshProfile(): Promise<Profile | null>;
   setProfile(p: Profile): void;
@@ -38,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [configAttempt, setConfigAttempt] = useState(0);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   const devToken = useRef<string | null>(null);
   const supabase = useRef<SupabaseClient | null>(null);
@@ -95,8 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else if (cfg.mode === "supabase" && cfg.supabaseUrl && cfg.supabaseAnonKey) {
           const { createClient } = await import("@supabase/supabase-js");
           supabase.current = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
-            auth: { storage: AsyncStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+            // PKCE: Google sign-in returns a one-time code to the app, exchanged for a session below.
+            auth: { storage: AsyncStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
           });
+          // Which sign-in methods are on (public Supabase settings): show "Continue with Google" only when it works.
+          fetch(`${cfg.supabaseUrl.replace(/\/+$/, "")}/auth/v1/settings`, { headers: { apikey: cfg.supabaseAnonKey } })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((st: { external?: Record<string, boolean> } | null) => {
+              if (!cancelled) setGoogleEnabled(Boolean(st?.external?.google));
+            })
+            .catch(() => undefined);
           const { data } = supabase.current.auth.onAuthStateChange((event) => {
             if (event === "SIGNED_OUT") setProfile(null);
           });
@@ -157,6 +175,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refreshProfile],
   );
 
+  const sendEmailCode = useCallback(async (email: string, name?: string) => {
+    if (!supabase.current) throw new Error("Sign-in is not configured.");
+    const { error } = await supabase.current.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: { shouldCreateUser: true, ...(name ? { data: { full_name: name } } : {}) },
+    });
+    if (error) throw new Error(friendlyAuthError(error));
+  }, []);
+
+  const verifyEmailCode = useCallback(
+    async (email: string, code: string, kind: "email" | "signup") => {
+      if (!supabase.current) throw new Error("Sign-in is not configured.");
+      const { error } = await supabase.current.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type: kind });
+      if (error) throw new Error(friendlyAuthError(error));
+      const p = await refreshProfile();
+      if (!p) throw new Error("Signed in, but could not load your profile. Please try again.");
+    },
+    [refreshProfile],
+  );
+
+  const resendSignupCode = useCallback(async (email: string) => {
+    if (!supabase.current) throw new Error("Sign-up is not configured.");
+    const { error } = await supabase.current.auth.resend({ type: "signup", email: email.trim().toLowerCase() });
+    if (error) throw new Error(friendlyAuthError(error));
+  }, []);
+
+  const signInWithGoogle = useCallback(async () => {
+    if (!supabase.current) throw new Error("Sign-in is not configured.");
+    const [{ openAuthSessionAsync }, Linking] = await Promise.all([import("expo-web-browser"), import("expo-linking")]);
+    const redirectTo = Linking.createURL("auth-callback");
+    const { data, error } = await supabase.current.auth.signInWithOAuth({ provider: "google", options: { redirectTo, skipBrowserRedirect: true } });
+    if (error || !data?.url) throw new Error(error ? friendlyAuthError(error) : "Could not start Google sign-in.");
+    const result = await openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success") return false; // closed by the customer: nothing to do
+    const back = new URL(result.url);
+    const code = back.searchParams.get("code");
+    const err = back.searchParams.get("error_description") ?? back.searchParams.get("error");
+    if (!code) throw new Error(err ?? "Google sign-in didn't finish. Please try again.");
+    const ex = await supabase.current.auth.exchangeCodeForSession(code);
+    if (ex.error) throw new Error(friendlyAuthError(ex.error));
+    const p = await refreshProfile();
+    if (!p) throw new Error("Signed in, but could not load your profile. Please try again.");
+    return true;
+  }, [refreshProfile]);
+
   const signOut = useCallback(async () => {
     if (modeRef.current === "supabase" && supabase.current) {
       await supabase.current.auth.signOut().catch(() => undefined);
@@ -174,12 +237,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       devLogin,
       signInWithPassword,
       signUpWithPassword,
+      sendEmailCode,
+      verifyEmailCode,
+      resendSignupCode,
+      googleEnabled,
+      signInWithGoogle,
       signOut,
       refreshProfile,
       setProfile,
       retryConfig: () => setConfigAttempt((n) => n + 1),
     }),
-    [mode, configError, ready, profile, devLogin, signInWithPassword, signUpWithPassword, signOut, refreshProfile],
+    [mode, configError, ready, profile, devLogin, signInWithPassword, signUpWithPassword, sendEmailCode, verifyEmailCode, resendSignupCode, googleEnabled, signInWithGoogle, signOut, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -189,4 +257,13 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
+}
+
+/** Supabase Auth errors in plain words (rate limits, wrong / expired codes). */
+function friendlyAuthError(e: { message: string; code?: string; status?: number }): string {
+  const m = `${e.code ?? ""} ${e.message}`.toLowerCase();
+  if (e.status === 429 || /rate limit|over_email_send_rate|too many/.test(m)) return "Too many codes requested. Please wait a minute and try again.";
+  if (/expired|otp_expired|invalid|token/.test(m)) return "That code is wrong or has expired. Check the latest email or ask for a new code.";
+  if (/email not confirmed|email_not_confirmed/.test(m)) return "Please confirm your email first: enter the code we emailed you.";
+  return e.message;
 }
