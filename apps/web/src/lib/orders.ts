@@ -1,4 +1,5 @@
 import "server-only";
+import { MAX_ADDRESSES } from "./account";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
@@ -11,7 +12,7 @@ import { conflict, badRequest, notFound, HttpError } from "./http";
 import { buildQuote, quoteMessages } from "./quote";
 import { lockAndCheckSlot } from "./delivery";
 import { getSettings, supportedPaymentMethods, whatsappPaymentMethods } from "./settings";
-import { scheduleOrderNotification } from "./notify/whatsapp";
+import { retryFailedNotifications, scheduleOrderNotification } from "./notify/whatsapp";
 import { cancelPaymentLinkFor } from "./payments/link-cancel";
 
 type Q = Pick<PoolClient, "query">;
@@ -140,7 +141,10 @@ export async function releaseExpiredSoon(): Promise<void> {
   if (releasing) return void (await releasing.catch(() => undefined));
   if (Date.now() - lastRelease < 60_000) return;
   lastRelease = Date.now();
-  releasing = releaseExpired().catch((e) => console.error("[orders] releasing expired holds failed", e instanceof Error ? e.message : e));
+  releasing = Promise.all([
+    releaseExpired().catch((e) => console.error("[orders] releasing expired holds failed", e instanceof Error ? e.message : e)),
+    retryFailedNotifications(), // WhatsApp updates that failed earlier get another try
+  ]);
   try {
     await releasing;
   } finally {
@@ -360,8 +364,11 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
       } else {
         const a = input.address!;
         address = { label: a.label, fullName: a.fullName, phone: a.phone, line1: a.line1, line2: a.line2 ?? null, landmark: a.landmark ?? null, city: a.city, state: a.state, pincode: a.pincode };
-        if (input.saveAddress) {
-          const { rows: cnt } = await c.query<{ n: string }>("select count(*) as n from addresses where user_id = $1", [userId]);
+        const { rows: cnt } = input.saveAddress
+          ? await c.query<{ n: string }>("select count(*) as n from addresses where user_id = $1", [userId])
+          : { rows: [] as { n: string }[] };
+        // The address book is capped (MAX_ADDRESSES); the order itself never fails because of it.
+        if (input.saveAddress && Number(cnt[0]?.n ?? 0) < MAX_ADDRESSES) {
           const first = Number(cnt[0]?.n ?? 0) === 0;
           // Don't save the same address twice (repeat orders to the same place).
           await c.query(

@@ -152,6 +152,31 @@ export function scheduleOrderNotification(orderId: string, event: NotifyEvent | 
   }
 }
 
+/**
+ * Retry WhatsApp updates that failed (e.g. WhatsApp briefly down) or got cut off mid-send — the
+ * claim in notifyOrderEvent allows 3 attempts, a minute apart. Runs from the periodic sweep
+ * (releaseExpiredSoon) and the cron; at most 10 per run. Never throws.
+ */
+export async function retryFailedNotifications(): Promise<number> {
+  if (!whatsappNotificationsEnabled()) return 0;
+  try {
+    const rows = await query<{ order_id: string; event: NotifyEvent }>(
+      `select order_id, event from order_notifications
+        where channel = 'whatsapp' and attempts < 3
+          and ((status = 'failed' and updated_at < now() - interval '1 minute')
+               or (status = 'sending' and updated_at < now() - interval '10 minutes'))
+        order by updated_at limit 10`,
+    );
+    for (const r of rows) {
+      if (env.whatsappCloud.templates[r.event]) await notifyOrderEvent(r.order_id, r.event);
+    }
+    return rows.length;
+  } catch (e) {
+    console.error("[notify] retrying WhatsApp updates failed", e instanceof Error ? e.message : e);
+    return 0;
+  }
+}
+
 export async function orderNotifications(orderId: string) {
   return query<{ event: NotifyEvent; status: string; recipient: string | null; error: string | null; attempts: number; updatedAt: string }>(
     `select event, status, recipient, error, attempts, updated_at as "updatedAt" from order_notifications where order_id = $1 order by created_at`,

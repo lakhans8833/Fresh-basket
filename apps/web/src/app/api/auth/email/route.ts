@@ -3,7 +3,7 @@ import { z } from "zod";
 import { clientIp, HttpError, json, parseBody, rateLimit, route } from "@/lib/http";
 import { emailCodesBySmtp } from "@/lib/env";
 import { sendAuthEmail } from "@/lib/auth-email";
-import { emailLimitKey, ipLimitKey } from "@/lib/limit-keys";
+import { emailLimitKey } from "@/lib/limit-keys";
 
 const schema = z.object({
   action: z.enum(["signin", "signup", "resend", "recovery"]),
@@ -26,7 +26,7 @@ const schema = z.object({
 export const POST = route(async (req) => {
   if (!emailCodesBySmtp()) throw new HttpError(404, "Email codes are sent by Supabase on this store.", "EMAIL_BY_SUPABASE");
   const body = await parseBody(req, schema);
-  const ip = ipLimitKey(clientIp(req));
+  const ip = clientIp(req); // IPv6 already grouped by /64
   const to = emailLimitKey(body.email);
   await rateLimit(`auth-email:ip:${ip}`, 10, 10 * 60_000);
   await rateLimit(`auth-email:ip-to:${ip}:${to}`, 1, 45_000);

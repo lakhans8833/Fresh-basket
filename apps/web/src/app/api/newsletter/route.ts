@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 
 export const POST = route(async (req) => {
   await rateLimit(`newsletter:${clientIp(req)}`, 5, 60_000);
+  await rateLimit("newsletter:shop-day", 500, 24 * 60 * 60_000);
   const { email } = await parseBody(req, newsletterSchema);
   await query("insert into newsletter_subscribers (email) values ($1) on conflict do nothing", [email.toLowerCase()]);
   // Same response whether or not the email already existed (no list enumeration).

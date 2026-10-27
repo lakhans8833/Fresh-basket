@@ -1,4 +1,5 @@
 import "server-only";
+import { ipLimitKey } from "./limit-keys";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -56,6 +57,10 @@ export function route<C = unknown>(fn: Handler<C>): Handler<C> {
       if (pgCode === "22P02") {
         // Malformed id in the URL (e.g. not a UUID): treat as "not found", not a server error.
         return NextResponse.json({ error: "Not found.", code: "NOT_FOUND" }, { status: 404 });
+      }
+      if (pgCode === "22021") {
+        // A NUL / invalid byte in a text field (the database can't store it): the input's fault, not ours.
+        return NextResponse.json({ error: "Some text contains a character that can't be saved. Please remove it and try again.", code: "BAD_TEXT" }, { status: 400 });
       }
       if (pgCode === "23505") {
         return NextResponse.json({ error: "That already exists.", code: "DUPLICATE" }, { status: 409 });
@@ -121,10 +126,11 @@ export async function rateLimit(key: string, limit: number, windowMs: number) {
  */
 export function clientIp(req: Request) {
   const h = req.headers;
-  return (
+  const ip =
     h.get("x-real-ip")?.trim() ||
     h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    "local"
-  );
+    "local";
+  // Used for rate limits: one IPv6 connection owns a whole /64, so it counts as one caller.
+  return ipLimitKey(ip);
 }

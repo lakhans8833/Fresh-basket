@@ -1,4 +1,5 @@
 import "server-only";
+import { emailIdentity } from "./account-identity";
 import type { Address, AddressInput } from "@freshbasket/shared";
 import { asUser, tx } from "./db";
 import { conflict, forbidden, HttpError, notFound } from "./http";
@@ -19,9 +20,15 @@ const toAddress = (r: Row): Address => ({
 export const listAddresses = (userId: string) =>
   asUser(userId, async (c) => (await c.query<Row>("select * from addresses where user_id = auth.uid() order by is_default desc, created_at")).rows.map(toAddress));
 
+/** Most saved addresses per customer (stops one account filling the database). */
+export const MAX_ADDRESSES = 20;
+
 export async function saveAddress(userId: string, id: string | null, a: AddressInput): Promise<Address> {
   return asUser(userId, async (c) => {
     const { rows: cnt } = await c.query<{ n: string }>("select count(*) as n from addresses where user_id = auth.uid()");
+    if (!id && Number(cnt[0]?.n ?? 0) >= MAX_ADDRESSES) {
+      throw new HttpError(400, `You can save up to ${MAX_ADDRESSES} addresses. Delete one you no longer use to add another.`, "TOO_MANY_ADDRESSES");
+    }
     const makeDefault = a.isDefault || Number(cnt[0]?.n ?? 0) === 0;
     if (makeDefault) await c.query("update addresses set is_default = false where user_id = auth.uid() and is_default and ($1::uuid is null or id <> $1)", [id]);
     const p = [a.label, a.fullName, a.phone, a.line1, a.line2 ?? null, a.landmark ?? null, a.city, a.state, a.pincode, makeDefault];
@@ -74,6 +81,27 @@ export async function deleteAccount(userId: string): Promise<{ ordersKept: numbe
     const open = await c.query<{ order_number: string }>(`select order_number from public.orders where ${OPEN_ORDER_SQL} order by created_at`, [userId]);
     if (open.rows.length) {
       throw conflict(`You have an order in progress (${open.rows.map((r) => r.order_number).join(", ")}). You can delete your account once it's delivered or cancelled.`, undefined, "OPEN_ORDERS");
+    }
+    // Coupon history that must outlive the account (first-order and per-customer coupons), keyed by a
+    // hash of the email — so deleting the account and signing up again doesn't reset them.
+    const who = await c.query<{ email: string | null }>(
+      "select coalesce((select email from auth.users where id = $1), (select email from public.profiles where id = $1)) as email",
+      [userId],
+    );
+    const identity = emailIdentity(who.rows[0]?.email);
+    if (identity) {
+      await c.query(
+        `insert into public.deleted_account_identities (identity, had_orders, coupon_uses)
+         select $2,
+                exists (select 1 from public.orders where user_id = $1 and status <> 'cancelled'),
+                coalesce((select jsonb_object_agg(coupon_id::text, n) from (select coupon_id, count(*)::int n from public.coupon_redemptions where user_id = $1 group by coupon_id) x), '{}'::jsonb)
+         on conflict (identity) do update set
+           had_orders = deleted_account_identities.had_orders or excluded.had_orders,
+           coupon_uses = (select coalesce(jsonb_object_agg(k, (coalesce((deleted_account_identities.coupon_uses->>k)::int, 0) + coalesce((excluded.coupon_uses->>k)::int, 0))), '{}'::jsonb)
+                            from (select jsonb_object_keys(deleted_account_identities.coupon_uses) k union select jsonb_object_keys(excluded.coupon_uses)) keys),
+           deleted_at = now()`,
+        [userId, identity],
+      );
     }
     const detached = await c.query<{ id: string }>("update public.orders set user_id = null where user_id = $1 returning id", [userId]);
     const orderIds = detached.rows.map((o) => o.id);

@@ -1,4 +1,5 @@
 import "server-only";
+import { emailIdentity } from "./account-identity";
 import type { PoolClient } from "pg";
 import {
   computeQuote, describeIssue, effectiveMinOrder, formatINR, MAX_QTY_PER_LINE,
@@ -104,13 +105,26 @@ export async function buildQuote(
     const { rows } = await db.query<CouponRow>(`select * from coupons where code = $1 ${opts.lock ? "for update" : ""}`, [code]);
     const c = rows[0];
     if (c) {
-      let usedByUser = 0;
+      // A deleted account's coupon history follows its email to a new account (see deleteAccount).
+      let past: { had_orders: boolean; coupon_uses: Record<string, number> } | null = null;
+      if (opts.userId && (c.first_order_only || c.per_user_limit !== null)) {
+        const { rows: e } = await db.query<{ email: string | null }>("select email from profiles where id = $1", [opts.userId]);
+        const identity = emailIdentity(e[0]?.email);
+        if (identity) {
+          const { rows: d } = await db.query<{ had_orders: boolean; coupon_uses: Record<string, number> }>(
+            "select had_orders, coupon_uses from deleted_account_identities where identity = $1",
+            [identity],
+          );
+          past = d[0] ?? null;
+        }
+      }
+      let usedByUser = Number(past?.coupon_uses?.[c.id] ?? 0);
       if (opts.userId && c.per_user_limit !== null) {
         const { rows: u } = await db.query<{ n: string }>(
           "select count(*) as n from coupon_redemptions where coupon_id = $1 and user_id = $2",
           [c.id, opts.userId],
         );
-        usedByUser = Number(u[0]?.n ?? 0);
+        usedByUser += Number(u[0]?.n ?? 0);
       }
       // First-order coupons: count the customer's earlier orders that weren't cancelled.
       let isFirstOrder: boolean | null = null;
@@ -119,7 +133,7 @@ export async function buildQuote(
           "select count(*) as n from orders where user_id = $1 and status <> 'cancelled'",
           [opts.userId],
         );
-        isFirstOrder = Number(o[0]?.n ?? 0) === 0;
+        isFirstOrder = Number(o[0]?.n ?? 0) === 0 && !past?.had_orders;
       }
       couponId = c.id;
       coupon = {

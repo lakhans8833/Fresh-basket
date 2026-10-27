@@ -127,8 +127,11 @@ async function loadSession(u: { id: string; email: string | null } | null): Prom
   if (!u) return null;
   let row = await queryOne<ProfileRow>("select id, email, full_name, phone, role from profiles where id = $1", [u.id]);
   if (!row && env.auth.mode === "supabase") {
+    // Only for a login that still exists: a token of a just-deleted account (still valid on another
+    // device for up to an hour) is simply signed out, instead of a foreign-key error on every request.
     row = await queryOne<ProfileRow>(
-      "insert into profiles (id, email) values ($1, $2) on conflict (id) do update set email = excluded.email returning id, email, full_name, phone, role",
+      `insert into profiles (id, email) select $1, $2 where exists (select 1 from auth.users where id = $1)
+       on conflict (id) do update set email = excluded.email returning id, email, full_name, phone, role`,
       [u.id, u.email],
     );
   }
