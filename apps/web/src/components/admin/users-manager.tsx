@@ -111,7 +111,11 @@ function Inner() {
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
           <Input id="user-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, email or mobile" className="pl-10" />
         </div>
-        {data ? <p className="text-sm text-muted">{users.length} {users.length === 1 ? "user" : "users"} · {confirmed} email confirmed</p> : null}
+        {data ? (
+          <p className="text-sm text-muted">
+            {users.length >= 300 ? "Showing the first 300 users (staff first, then newest) — search to find others" : `${users.length} ${users.length === 1 ? "user" : "users"}`} · {confirmed} email confirmed
+          </p>
+        ) : null}
       </div>
 
       {error && !data ? (

@@ -36,6 +36,8 @@ interface CartState {
   setCouponCode: (c: string | null) => void;
   setLocation: (l: DeliveryLocation | null) => void;
   replaceAll: (lines: CartLine[]) => void;
+  /** Today's unit prices from a server quote, so the header / cart bar total matches the cart. */
+  syncPrices: (prices: { variantId: string; unitPrice: number }[]) => void;
 }
 
 const Ctx = createContext<CartState | null>(null);
@@ -124,6 +126,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       },
       quantityOf: (id) => lines.find((l) => l.variantId === id)?.quantity ?? 0,
       setCouponCode: setCouponCodeState,
+      syncPrices: (prices) =>
+        setLines((prev) => {
+          let changed = false;
+          const next = prev.map((l) => {
+            const p = prices.find((x) => x.variantId === l.variantId)?.unitPrice;
+            if (p === undefined || p === l.priceHint) return l;
+            changed = true;
+            return { ...l, priceHint: p };
+          });
+          return changed ? next : prev; // same array when nothing changed: no re-render loop
+        }),
       setLocation: (l) => {
         setLocationState(l);
         save(LOC_KEY, l);

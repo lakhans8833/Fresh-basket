@@ -341,7 +341,7 @@ export default function Checkout() {
                     <Chip
                       key={d.date}
                       label={formatDateLabel(d.date)}
-                      sublabel={any ? undefined : "Full"}
+                      sublabel={any ? undefined : "Unavailable"}
                       selected={date === d.date}
                       disabled={!any}
                       onPress={() => {
@@ -481,8 +481,9 @@ export default function Checkout() {
             ) : null}
           </View>
         ) : null}
-        {settings && settings.defaultMinOrder > 0 ? (
-          <Text style={[type.small, { textAlign: "center" }]}>Minimum order {formatINR(settings.defaultMinOrder)}.</Text>
+        {/* The minimum that applies to this address (area vs store-wide, the higher one), from the server quote. */}
+        {(quote?.minOrder ?? settings?.defaultMinOrder ?? 0) > 0 ? (
+          <Text style={[type.small, { textAlign: "center" }]}>Minimum order {formatINR(quote?.minOrder ?? settings!.defaultMinOrder)}.</Text>
         ) : null}
       </ScrollView>
 

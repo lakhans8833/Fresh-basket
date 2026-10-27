@@ -27,9 +27,10 @@ export const storeConfig = {
 };
 
 /**
- * The WhatsApp number to use: NEXT_PUBLIC_WHATSAPP_NUMBER, or else the WhatsApp number
- * saved in Admin → Settings (a 10-digit Indian mobile gets the 91 country code).
+ * The WhatsApp number to use: the one saved in Admin → Settings (a 10-digit Indian mobile gets the 91
+ * country code), or else NEXT_PUBLIC_WHATSAPP_NUMBER as a fallback — so a number changed in the admin
+ * panel always takes effect.
  */
 export function resolveWhatsAppNumber(adminWhatsapp: string | null | undefined): string | null {
-  return storeConfig.whatsappNumber ?? normalizeWhatsAppNumber(adminWhatsapp);
+  return normalizeWhatsAppNumber(adminWhatsapp) ?? storeConfig.whatsappNumber;
 }

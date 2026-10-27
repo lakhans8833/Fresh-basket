@@ -96,6 +96,55 @@ export function expandSearchTerms(query: string): string[] {
   return [...out].slice(0, 6);
 }
 
+/** "tomatoes" -> "tomato", "berries" -> "berry", "carrots" -> "carrot"; short words and "-ss" stay. */
+export function singular(w: string): string {
+  if (w.length <= 3 || w.endsWith("ss")) return w;
+  if (w.endsWith("ies") && w.length > 4) return `${w.slice(0, -3)}y`;
+  if (w.endsWith("oes") || w.endsWith("ches") || w.endsWith("shes")) return w.slice(0, -2);
+  if (w.endsWith("s")) return w.slice(0, -1);
+  return w;
+}
+
+/** Levenshtein distance, stopping early once it's above `max`. */
+function within(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+      rowMin = Math.min(rowMin, cur[j]!);
+    }
+    if (rowMin > max) return false;
+    prev = cur;
+  }
+  return prev[b.length]! <= max;
+}
+
+// Colour / freshness words people add ("green capsicum", "fresh tomatoes") that product names often leave out.
+const DESCRIPTORS = new Set(["green", "red", "yellow", "fresh", "desi", "small", "big", "large", "new", "the", "and", "of", "kg", "g", "gm"]);
+
+/**
+ * Forgiving search used when the exact search finds nothing: plurals ("tomatoes"), word order and
+ * extra words ("green capsicum"), and one-letter typos ("brocoli", "carot"). Every remaining query word
+ * must match a word of the product (or its Hindi name), so results stay relevant.
+ */
+export function looseMatch(query: string, haystack: string[]): boolean {
+  const words = norm(query).split(" ").filter(Boolean).map(singular);
+  const core = words.filter((w) => !DESCRIPTORS.has(w));
+  const want = core.length ? core : words;
+  if (!want.length) return false;
+  const hayWords = haystack.flatMap((h) => norm(h).split(" ")).filter(Boolean).map(singular);
+  return want.every((w) => {
+    const alias = ALIAS_TO_NAME.get(w);
+    const options = alias ? [w, ...norm(alias).split(" ")] : [w];
+    return options.some((o) =>
+      hayWords.some((h) => h === o || (o.length >= 3 && h.startsWith(o)) || (o.length >= 4 && within(o, h, o.length >= 8 ? 2 : 1))),
+    );
+  });
+}
+
 /** The English name a Hindi/Hinglish query maps to, for "Showing results for …" hints. */
 export function englishNameFor(query: string): string | null {
   const terms = expandSearchTerms(query);

@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatINR } from "@shared/money";
+import { MAX_QTY_PER_LINE } from "@shared/pricing";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { LocationRow } from "@/components/LocationPicker";
@@ -100,12 +101,15 @@ export default function CartScreen() {
                     </Pressable>
                   </View>
                   <Text style={type.small}>
-                    {l.variantLabel} · {formatINR(l.priceHint)} each
+                    {/* Today's price from the server quote (the one charged); the price seen when added only until it loads. */}
+                    {l.variantLabel} · {formatINR(quote?.lines.find((x) => x.variantId === l.variantId)?.unitPrice ?? l.priceHint)} each
                   </Text>
                   <View style={styles.lineBottom}>
                     <QuantityStepper
                       size="sm"
                       value={l.quantity}
+                      // Stock left for this pack (from the server quote), like the website's "+" button.
+                      max={Math.max(l.quantity, quote?.lines.find((x) => x.variantId === l.variantId)?.maxQuantity ?? MAX_QTY_PER_LINE)}
                       onChange={(v) => cart.setQuantity(l.variantId, v)}
                       itemName={l.productName}
                       allowRemove

@@ -129,6 +129,25 @@ export async function releaseExpired(): Promise<number> {
   return n;
 }
 
+/**
+ * Release expired holds before showing stock or slots to shoppers, at most once a minute per server
+ * instance. Otherwise an abandoned unpaid order keeps its items "out of stock" (and its slot place)
+ * until someone places an order, an admin page loads, or the daily cron runs. Never throws.
+ */
+let lastRelease = 0;
+let releasing: Promise<unknown> | null = null;
+export async function releaseExpiredSoon(): Promise<void> {
+  if (releasing) return void (await releasing.catch(() => undefined));
+  if (Date.now() - lastRelease < 60_000) return;
+  lastRelease = Date.now();
+  releasing = releaseExpired().catch((e) => console.error("[orders] releasing expired holds failed", e instanceof Error ? e.message : e));
+  try {
+    await releasing;
+  } finally {
+    releasing = null;
+  }
+}
+
 /** How long stock is held for orders paid by UPI (checked by staff) or a payment link. */
 export const MANUAL_PAYMENT_HOLD_MINUTES = 24 * 60;
 /**

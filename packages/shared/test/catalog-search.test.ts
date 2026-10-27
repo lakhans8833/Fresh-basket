@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { englishNameFor, expandSearchTerms, packGrams, unitPriceLabel } from "../src/catalog-search";
+import { englishNameFor, expandSearchTerms, looseMatch, packGrams, singular, unitPriceLabel } from "../src/catalog-search";
 
 describe("expandSearchTerms", () => {
   it("maps Hindi names to English", () => {
@@ -46,5 +46,25 @@ describe("expandSearchTerms — English names and Devanagari", () => {
   });
   it("keeps Devanagari text", () => {
     expect(expandSearchTerms("टमाटर tomato")[0]).toBe("टमाटर tomato");
+  });
+});
+
+describe("looseMatch (fallback search)", () => {
+  const hay = (name: string, cat = "Daily Vegetables") => [name, cat];
+  it("plurals, extra words and one-letter typos", () => {
+    expect(singular("tomatoes")).toBe("tomato");
+    expect(looseMatch("tomatoes", hay("Tomato (Tamatar)"))).toBe(true);
+    expect(looseMatch("potatoes", hay("Potato (Aloo)"))).toBe(true);
+    expect(looseMatch("carrots", hay("Carrot (Gajar)"))).toBe(true);
+    expect(looseMatch("cucumbers", hay("Cucumber (Kheera)"))).toBe(true);
+    expect(looseMatch("green capsicum", hay("Capsicum (Shimla Mirch)"))).toBe(true);
+    expect(looseMatch("brocoli", hay("Broccoli", "Exotic"))).toBe(true);
+    expect(looseMatch("carot", hay("Carrot (Gajar)"))).toBe(true);
+  });
+  it("stays relevant", () => {
+    expect(looseMatch("tomatoes", hay("Potato (Aloo)"))).toBe(false);
+    expect(looseMatch("green capsicum", hay("Green Chilli (Hari Mirch)"))).toBe(false);
+    expect(looseMatch("apple", hay("Pineapple", "Fresh Fruits"))).toBe(false);
+    expect(looseMatch("pea", hay("Pear", "Fresh Fruits"))).toBe(true); // prefix: acceptable
   });
 });

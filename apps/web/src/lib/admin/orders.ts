@@ -1,5 +1,5 @@
 import "server-only";
-import { canAdminTransition, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
+import { canAdminTransition, NO_SLOT_LABEL, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
 import { pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, ORDER_COLUMNS, releaseExpired, type OrderRow } from "../orders";
@@ -94,16 +94,26 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
       await c.query("select cancel_order($1, $2, $3)", [id, `admin:${actorId}`, note || "Cancelled by store"]);
       return;
     }
-    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold. An order WITHOUT a slot
-    // (time agreed on WhatsApp) confirmed after its day has passed gets today's date, so it isn't
-    // "overdue" the moment it's confirmed.
+    // Confirming a WhatsApp order ends its "confirm within 24 hours" hold. If its booked delivery window
+    // is already over (or it has no slot and its day has passed), it becomes "time agreed on WhatsApp",
+    // today — so it isn't "overdue" the moment it's confirmed and no past slot is promised.
+    if (from === "pending_confirmation" && to === "placed") {
+      await c.query(
+        `update orders o set
+                slot_id = null, slot_label = $2,
+                delivery_date = greatest(o.delivery_date, (now() at time zone 'Asia/Kolkata')::date)
+           from (select o2.id, s.end_time from orders o2 left join delivery_slots s on s.id = o2.slot_id where o2.id = $1) x
+          where o.id = x.id
+            and (o.delivery_date < (now() at time zone 'Asia/Kolkata')::date
+                 or (x.end_time is not null and now() >= ((o.delivery_date + x.end_time) at time zone 'Asia/Kolkata')))`,
+        [id, NO_SLOT_LABEL],
+      );
+    }
     await c.query(
       `update orders set status = $2,
-              reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end,
-              delivery_date = case when $3 = 'pending_confirmation' and slot_id is null
-                                   then greatest(delivery_date, (now() at time zone 'Asia/Kolkata')::date) else delivery_date end
+              reservation_expires_at = case when $2 = 'placed' then null else reservation_expires_at end
         where id = $1`,
-      [id, to, from],
+      [id, to],
     );
     await c.query("insert into order_events (order_id, status, note, actor) values ($1,$2,$3,$4)", [id, to, note ?? null, `admin:${actorId}`]);
   });
@@ -147,7 +157,9 @@ export async function adminStats() {
   const [counts, recentRows, lowStock] = await Promise.all([
     query<Record<string, number>>(
       `select
-         (select count(*)::int from orders where created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
+         -- Same rule as Analytics: cancelled orders and unpaid online orders aren't counted.
+         (select count(*)::int from orders where status not in ('cancelled', 'pending_payment')
+            and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
          (select coalesce(sum(total),0)::int from orders where status not in ('cancelled', 'pending_confirmation') and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",

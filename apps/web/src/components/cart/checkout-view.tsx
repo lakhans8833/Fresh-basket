@@ -184,6 +184,18 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       if (isDefiniteRejection(err)) idemKey.current = newIdempotencyKey();
       const messages = (err.details as { messages?: Record<string, string> } | undefined)?.messages;
       setPlaceError({ message: err.message, messages });
+      // The chosen slot closed or filled while the customer was here: show today's slots again and
+      // move to the next open one, so the next tap doesn't hit the same closed slot.
+      if (messages?._slot) {
+        api<{ slots: SlotOption[] }>("/api/delivery/slots")
+          .then((s) => {
+            setSlots(s.slots);
+            const next = s.slots.find((x) => x.date === date && x.available) ?? s.slots.find((x) => x.available);
+            setDate(next?.date ?? s.slots[0]?.date ?? date);
+            setSlotId(next?.slotId ?? null);
+          })
+          .catch(() => undefined);
+      }
       placingRef.current = false;
       setPlacing(false);
       if (err.status === 401) router.push("/login?next=/checkout");
@@ -346,7 +358,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
               {data?.messages._cart && pincode ? <Notice tone="warning">{data.messages._cart}</Notice> : null}
               {placeError ? (
                 <Notice tone="error" title={placeError.message}>
-                  {placeError.messages ? <ul className="list-disc pl-4">{Object.entries(placeError.messages).map(([k, m]) => <li key={k}>{lines.find((l) => l.variantId === k)?.productName ? `${lines.find((l) => l.variantId === k)!.productName}: ` : ""}{m}</li>)}</ul> : null}
+                  {placeError.messages && Object.values(placeError.messages).some((m) => m !== placeError.message) ? <ul className="list-disc pl-4">{Object.entries(placeError.messages).filter(([, m]) => m !== placeError.message).map(([k, m]) => <li key={k}>{lines.find((l) => l.variantId === k)?.productName ? `${lines.find((l) => l.variantId === k)!.productName}: ` : ""}{m}</li>)}</ul> : null}
                 </Notice>
               ) : null}
               <Button size="lg" variant="dark" className="w-full" loading={placing} disabled={placing || !quote || Boolean(blockingIssue && pincode) || !slotId || !method} onClick={placeOrder}>

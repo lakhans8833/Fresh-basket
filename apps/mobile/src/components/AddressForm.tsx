@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { addressInputSchema, type AddressInput } from "@shared/schemas";
-import { isValidPincode } from "@shared/pincode";
+import { isValidPincode, stateForPincode } from "@shared/pincode";
 import type { Address } from "@shared/types";
 import { colors, fonts, HIT } from "@/theme";
 import { Chip } from "./Chip";
@@ -86,7 +86,10 @@ export function AddressForm({
         if (cancelled) return;
         if (r.serviceable && r.area) {
           setPinHint({ text: `We deliver to ${r.area.areaName}, ${r.area.city}`, tone: "success" });
-          if (!values.city.trim()) onChange({ ...values, city: r.area.city });
+          // Fill what the PIN tells us, like the website (only empty fields).
+          const state = values.state.trim() ? values.state : (stateForPincode(values.pincode) ?? values.state);
+          const city = values.city.trim() ? values.city : r.area.city;
+          if (state !== values.state || city !== values.city) onChange({ ...values, city, state });
         } else setPinHint({ text: "Sorry, we don't deliver to this PIN code yet.", tone: "danger" });
       })
       .catch(() => !cancelled && setPinHint(null));

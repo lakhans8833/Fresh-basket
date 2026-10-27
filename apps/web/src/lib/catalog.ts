@@ -1,6 +1,6 @@
 import "server-only";
 import type { Category, ProductDetail, ProductSummary, Variant } from "@freshbasket/shared";
-import { expandSearchTerms } from "@freshbasket/shared";
+import { expandSearchTerms, looseMatch } from "@freshbasket/shared";
 import { query } from "./db";
 import { CACHE_TAGS, cached } from "./cache";
 import { defaultVariant } from "@/components/product/default-variant";
@@ -122,10 +122,10 @@ export async function listProducts(f: ProductFilters = {}): Promise<ProductSumma
     // "tamatar" also searches "tomato" (Hindi/Hinglish names, see packages/shared/src/catalog-search.ts)
     const terms = expandSearchTerms(f.q);
     const list = (terms.length ? terms : [f.q.trim()]).map((t) => t.toLowerCase());
-    rows = rows.filter((r) => {
-      const hay = [r.name.toLowerCase(), r.category_name.toLowerCase(), r.slug.replace(/-/g, " ")];
-      return list.some((t) => hay.some((h) => h.includes(t)));
-    });
+    const hayOf = (r: ProductRow) => [r.name.toLowerCase(), r.category_name.toLowerCase(), r.slug.replace(/-/g, " ")];
+    const exact = rows.filter((r) => list.some((t) => hayOf(r).some((h) => h.includes(t))));
+    // Nothing found: forgive plurals, extra words and one-letter typos ("tomatoes", "green capsicum", "brocoli").
+    rows = exact.length ? exact : rows.filter((r) => looseMatch(f.q!, hayOf(r)));
   }
   if (f.category) rows = rows.filter((r) => r.category_slug === f.category);
   if (f.ids) {

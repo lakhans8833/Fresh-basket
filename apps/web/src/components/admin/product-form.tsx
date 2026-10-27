@@ -164,6 +164,15 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   // must not switch a weight product back to per-pack stock (that would clear its shared total).
   const activeVariants = variants.filter((v) => v.active);
   const byWeight = activeVariants.length > 0 && activeVariants.every((v) => packGrams(v.label) !== null);
+  // Leaving "total stock in kg": each pack's number was only its share of the SAME kilos, so the
+  // boxes are emptied and the owner enters real per-pack counts (otherwise the kilos would sell twice).
+  const switchingToPerPack = initial?.stockGrams != null && !byWeight;
+  const [clearedForPerPack, setClearedForPerPack] = useState(false);
+  if (switchingToPerPack && !clearedForPerPack) {
+    // Adjusting state while rendering (React's pattern for "reset when X changes"), once.
+    setClearedForPerPack(true);
+    setVariants((vs) => vs.map((v) => (v.id ? { ...v, stock: "" } : v)));
+  }
   // Only send the total when it was edited here (or the stock mode changes), so saving a description
   // never overwrites sales that happened since this page was opened.
   const [stockTouched, setStockTouched] = useState(false);
@@ -508,6 +517,11 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
             />
             <div className="p-5 sm:p-6">
               {err("variants") ? <Notice tone="error" className="mb-4">{err("variants")}</Notice> : null}
+              {switchingToPerPack ? (
+                <Notice tone="warning" className="mb-4" title="Stock is now counted per pack">
+                  Not every option is a weight any more, so the shared {initial!.stockGrams! / 1000} kg total no longer applies. Enter how many of each pack you have.
+                </Notice>
+              ) : null}
               {byWeight ? (
                 <div className="mb-5 max-w-xs">
                   <Field
