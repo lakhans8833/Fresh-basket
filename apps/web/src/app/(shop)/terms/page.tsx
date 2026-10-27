@@ -23,7 +23,7 @@ export default async function TermsPage() {
 
         <h2>2. Your account</h2>
         <ul>
-          <li>You need an account to place an order. Please give accurate details, including a reachable mobile number for delivery.</li>
+          <li>Ordering on the website or app needs an account; ordering on WhatsApp doesn&apos;t (we confirm those orders with you on WhatsApp). Either way, please give accurate details, including a reachable mobile number for delivery.</li>
           <li>You&apos;re responsible for keeping your sign-in details secure and for orders placed from your account.</li>
           <li>We may suspend accounts that are used fraudulently or in breach of these terms.</li>
         </ul>

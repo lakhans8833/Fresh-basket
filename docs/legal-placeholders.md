@@ -1,13 +1,21 @@
 # Legal pages: details the owner must supply
 
-The Privacy, Terms and Returns pages are templates (they show a "Template — review with a legal adviser"
-notice). These placeholders are still visible to customers and must be replaced with the owner's real,
-approved details — they are deliberately NOT filled in by the developers:
+The Privacy, Terms and Returns pages no longer contain `[bracketed]` template text or a "Template"
+banner. Business details come from **Admin → Settings → Legal & policies** and each page shows only
+what has been filled in — nothing is invented by the developers:
 
-| Page | File | Placeholders |
-| --- | --- | --- |
-| Privacy | `apps/web/src/app/(shop)/privacy/page.tsx` | `[date]`, `[registered business name]`, `[registered address]`, `[privacy contact email]`, `[Describe how to unsubscribe.]`, `[If you add analytics or marketing tools…]`, `[list providers, e.g. hosting and Supabase]`, `[period]` (×2), data-protection rights / grievance officer details |
-| Terms | `apps/web/src/app/(shop)/terms/page.tsx` | `[date]`, `[registered business name]`, `[registration details]`, `[registered address]`, `[state whether inclusive of applicable taxes]`, `[Describe what happens if nobody is available.]`, `[Limitation of liability wording…]`, `[jurisdiction]`, `[city/state]`, `[Add grievance officer details if required.]` |
-| Returns | `apps/web/src/app/(shop)/returns/page.tsx` | `[date]`, `[registered business name]`, `[24 hours]`, `[the tolerance stated on the product]`, `[store credit if you choose to offer it]`, `[5–7 working days]`, refund method, grievance officer details |
+| Setting | Shown on |
+| --- | --- |
+| Registered business name, registration numbers (GSTIN / FSSAI), registered address | Privacy §1, Terms §1, Returns §1 |
+| Grievance officer name + email | Privacy §7, Terms §11, Returns §6 (and privacy contact email) |
+| Courts for disputes (city, state) | Terms §10 ("governed by the laws of India" is always shown) |
+| Policies last updated | "Last updated" line on all three pages (hidden while empty) |
 
-When the approved text is ready, replace the bracketed text and remove `template` from the `<InfoPage>`.
+While any of these are empty, the admin dashboard shows "Business details missing on your policy pages".
+
+Business decisions that are still written without numbers (owner to decide, then edit the page text):
+- how soon after delivery a problem must be reported (Returns §2 says "as soon as possible");
+- how cash-on-delivery refunds are paid (Returns §5 says "we'll contact you to arrange");
+- whether prices include tax (Terms §3 states only that nothing is added after checkout, which is what the code does).
+
+Have the final text reviewed by a legal adviser before launch.
