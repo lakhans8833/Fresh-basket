@@ -1,5 +1,6 @@
 import { isValidPincode, normalizePincode } from "@freshbasket/shared";
 import { badRequest, json, route } from "@/lib/http";
+import { releaseExpiredSoon } from "@/lib/orders";
 import { getArea, getSlotOptions } from "@/lib/delivery";
 import { getSettings } from "@/lib/settings";
 
@@ -11,6 +12,7 @@ import { getSettings } from "@/lib/settings";
 export const GET = route(async (req) => {
   const pin = normalizePincode(new URL(req.url).searchParams.get("pincode") ?? "");
   if (!isValidPincode(pin)) throw badRequest("Enter a valid 6-digit PIN code.");
+  await releaseExpiredSoon(); // abandoned unpaid orders give their stock / slot places back
   const area = await getArea(pin);
   if (!area) return json({ pincode: pin, serviceable: false, area: null, nextSlots: [] });
   const s = await getSettings();

@@ -72,6 +72,11 @@ export async function adminGetProduct(id: string) {
 export async function adminSaveProduct(id: string | null, d: AdminProductInput) {
   return tx(async (c) => {
     let productId = id;
+    // Stock pool before this save (null = stock counted per pack), locked so a sale can't slip in between.
+    const before = id
+      ? (await c.query<{ g: string | null }>("select stock_grams::text as g from products where id = $1 for update", [id])).rows[0]?.g ?? null
+      : null;
+    const switchingToPerPack = before !== null && d.stockGrams === null;
     const fields = [d.name, d.slug, d.categoryId, d.description ?? null, d.highlights, d.seasonal, d.featured, d.active];
     if (productId) {
       const r = await c.query(
@@ -113,7 +118,9 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
                   stock = case when $9::int is null then $4 else greatest(0, stock + ($4 - $9::int)) end,
                   sort_order=$5, active=$6, note=$10
             where id=$7 and product_id=$8`,
-          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, v.stockLoaded ?? null, v.note ?? null],
+          // Switching to per-pack stock: the numbers typed are the new stock as is (the old pack counts were
+          // only derived from the shared kilos, so "change since loaded" means nothing here).
+          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, switchingToPerPack ? null : (v.stockLoaded ?? null), v.note ?? null],
         );
         if (r.rowCount === 1) {
           keep.push(v.id);
@@ -133,6 +140,16 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
       [productId, keep],
     );
     await c.query("update product_variants set active = false where product_id = $1 and not (id = any($2::uuid[]))", [productId, keep]);
+    if (switchingToPerPack) {
+      // The same kilos must not be sold several times: packs of a weight together may hold at most the
+      // kilos that were in stock (each pack was showing its share of the SAME total).
+      const grams = d.variants.reduce((sum, v) => sum + (v.active !== false ? (packGrams(v.label) ?? 0) * v.stock : 0), 0);
+      if (grams > Number(before)) {
+        throw badRequest(
+          `Stock is now counted per pack. Enter how many of each pack you have — together they can't be more than the ${Number(before) / 1000} kg in stock. (Got new stock? Save this first, then add it.)`,
+        );
+      }
+    }
     if (d.stockGrams != null) {
       // Only sizes on sale matter: a hidden size without a weight is kept for old orders, not sold.
       if (d.variants.some((v) => v.active !== false && packGrams(v.label) === null)) {

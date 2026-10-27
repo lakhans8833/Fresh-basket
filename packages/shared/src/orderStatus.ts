@@ -69,7 +69,7 @@ const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending_confirmation: ["placed", "cancelled"], // staff confirm after checking the customer's WhatsApp message
   placed: ["packed", "cancelled"],
   packed: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered"],
+  out_for_delivery: ["delivered", "cancelled"], // cancelled: refused / nobody home — the goods come back
   delivered: [],
   cancelled: [],
 };

@@ -100,7 +100,8 @@ export default function CartScreen() {
                     </Pressable>
                   </View>
                   <Text style={type.small}>
-                    {l.variantLabel} · {formatINR(l.priceHint)} each
+                    {/* Today's price from the server quote (the one charged); the price seen when added only until it loads. */}
+                    {l.variantLabel} · {formatINR(quote?.lines.find((x) => x.variantId === l.variantId)?.unitPrice ?? l.priceHint)} each
                   </Text>
                   <View style={styles.lineBottom}>
                     <QuantityStepper
