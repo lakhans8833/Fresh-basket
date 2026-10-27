@@ -13,8 +13,8 @@ information we don't have), **NOT RUN** (not executed, with the reason).
 
 - The store's critical paths — server-side prices, stock reservation, duplicate-order protection, payments, order
   ownership and admin permissions — are implemented on the server/database and are covered by automated tests
-  that were **run and passed** (223 unit/integration tests; 18 browser test suites; responsive + accessibility sweep at
-  9 screen widths with 0 issues).
+  that were **run and passed** in the final run on 28 Oct (268 unit/integration tests — web 216, shared 52; 17 browser
+  test suites incl. the phone app; responsive + accessibility sweep at 9 screen widths with 0 issues).
 - Five rounds of audits between 21 and 28 Oct found and fixed **63 confirmed bugs** (see `BUG_REPORT.md`); none of
   them is open in the code today. Highest ones fixed: stock that could be sold 4× after an admin edit, unpaid
   orders blocking stock, an account pre-takeover path in the phone app's sign-up, coupons reusable after account
@@ -24,8 +24,9 @@ information we don't have), **NOT RUN** (not executed, with the reason).
   code and is limited to ~2 emails/hour, legal identity is empty, 16 products use development sample photos whose
   licence is unverified, and delivery-area data has errors. See `FIX_PLAN.md`.
 - Live catalogue (55 products, 189 pack sizes) is internally consistent: every shown price, MRP, "% OFF" and ₹/kg
-  matches the data (55/55 cards checked on the live shop page); 1 price needs the owner's confirmation
-  (Organic Potato cheaper than regular Potato). See `PRICE_CATALOG_AUDIT.csv`.
+  matches the data (all 55 product cards checked on the live shop page, each showing its default pack; the other
+  packs' discount and ₹/kg values in the CSV are computed with the same shared function). 1 price needs the
+  owner's confirmation (Organic Potato cheaper than regular Potato). See `PRICE_CATALOG_AUDIT.csv`.
 
 ## 2. Architecture (discovered from the repository)
 
