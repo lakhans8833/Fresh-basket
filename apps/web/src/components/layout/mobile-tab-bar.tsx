@@ -22,7 +22,7 @@ export function MobileTabBar() {
   if (pathname.startsWith("/checkout") || pathname.startsWith("/pay")) return null;
   const n = hydrated ? count : 0;
   return (
-    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-40 print:hidden border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       <ul className="grid grid-cols-4">
         {TABS.map((tab) => {
           // Signed out, the account tab is a "Sign in" tab (visible label and accessible name agree).

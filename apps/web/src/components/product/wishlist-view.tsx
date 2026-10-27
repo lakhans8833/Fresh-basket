@@ -26,12 +26,15 @@ export function WishlistView() {
   const wanted = ids !== null && ids.length > 0;
   // Fetch exactly the saved products (not the first 200 of the catalogue), newest 200 saves.
   const idsKey = ids ? ids.slice(-200).join(",") : "";
+  // Fetch again when a product saved since (e.g. in another tab) isn't in what we have.
+  const missing = !!ids && ids.slice(-200).some((id) => !catalog?.some((p) => p.id === id));
   useEffect(() => {
-    if (!wanted || catalog) return;
+    if (!wanted || (catalog && !missing)) return;
     api<{ products: ProductSummary[] }>(`/api/products?limit=200&ids=${encodeURIComponent(idsKey)}`)
       .then((r) => setCatalog(r.products))
       .catch(() => setError(true));
-  }, [wanted, catalog, idsKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the saved list changes
+  }, [wanted, idsKey]);
 
   if (ids === null || (wanted && !catalog && !error)) {
     return <div className={grid} aria-busy="true">{Array.from({ length: 4 }, (_, i) => <ProductCardSkeleton key={i} />)}</div>;

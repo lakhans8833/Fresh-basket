@@ -6,7 +6,7 @@ import { profileUpdateSchema, type Profile } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { useSession } from "./session-context";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/form";
+import { Field, Input, focusFirstInvalid } from "../ui/form";
 import { Notice } from "../ui/feedback";
 
 export function ProfileForm({ profile }: { profile: Profile }) {
@@ -32,6 +32,7 @@ export function ProfileForm({ profile }: { profile: Profile }) {
         out[k] ??= k === "fullName" ? "Enter your name (at least 2 characters)" : i.message;
       }
       setErrors(out);
+      focusFirstInvalid();
       return;
     }
     setErrors({});

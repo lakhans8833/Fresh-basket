@@ -23,7 +23,14 @@ export function Field({ label, hint, error, children, htmlFor, className }: { la
 }
 
 export function Input({ className, invalid, ...rest }: ComponentProps<"input"> & { invalid?: boolean }) {
-  return <input className={cn(inputClass, className)} aria-invalid={invalid || undefined} {...rest} />;
+  // Screen readers read the field's error with it: <Field> renders it as `${id}-error`.
+  const describedBy = rest["aria-describedby"] ?? (invalid && rest.id ? `${rest.id}-error` : undefined);
+  return <input className={cn(inputClass, className)} aria-invalid={invalid || undefined} {...rest} aria-describedby={describedBy} />;
+}
+
+/** After a failed submit: move focus to the first field marked invalid, once React has drawn it. */
+export function focusFirstInvalid(root: ParentNode = document) {
+  requestAnimationFrame(() => root.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
 }
 
 export function Textarea({ className, ...rest }: ComponentProps<"textarea">) {

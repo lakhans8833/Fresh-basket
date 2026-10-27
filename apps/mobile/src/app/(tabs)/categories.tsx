@@ -22,7 +22,7 @@ const SORTS: { key: Sort; label: string }[] = [
 
 export default function Categories() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ q?: string; category?: string; seasonal?: string }>();
+  const params = useLocalSearchParams<{ q?: string; category?: string; seasonal?: string; t?: string }>();
   const [q, setQ] = useState(params.q ?? "");
   const [debouncedQ, setDebouncedQ] = useState(q);
   const [category, setCategory] = useState(params.category ?? "");
@@ -38,7 +38,8 @@ export default function Categories() {
     }
     if (params.category !== undefined) setCategory(params.category);
     if (params.seasonal !== undefined) setSeasonal(params.seasonal === "1");
-  }, [params.q, params.category, params.seasonal]);
+    // `t` changes on every tap from Home, so the same category / search applies again after changes here.
+  }, [params.q, params.category, params.seasonal, params.t]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q.trim()), 300);

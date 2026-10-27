@@ -14,7 +14,8 @@ export const cancelOrder = (id: string) => api<{ order: Order }>(`/api/orders/${
  */
 export const reorder = (id: string, cart: { variantId: string; quantity: number }[]) =>
   api<{
-    items: { variantId: string; quantity: number; productSlug: string; price: number }[];
+    /** quantity: how many to add now; requested: in the old order; inCart: already in the basket. */
+    items: { variantId: string; quantity: number; productSlug: string; price: number; oldPrice: number; requested: number; inCart: number }[];
     skipped: { productName: string; variantLabel: string; reason: "unavailable" | "out_of_stock" }[];
   }>(`/api/orders/${encodeURIComponent(id)}/reorder`, { method: "POST", body: { cart } });
 

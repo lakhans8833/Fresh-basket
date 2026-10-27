@@ -140,7 +140,7 @@ export function InstallBanner({ storeName }: { storeName: string }) {
   }
 
   return (
-    <aside aria-label="Install app" className="container-page pt-3 md:hidden">
+    <aside aria-label="Install app" className="container-page pt-3 md:hidden print:hidden">
       <div className="rounded-[var(--radius-card)] border border-line bg-white p-3 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-3">
           <Image src="/icons/icon-192.png" alt="" width={44} height={44} className="size-11 shrink-0 rounded-xl" />

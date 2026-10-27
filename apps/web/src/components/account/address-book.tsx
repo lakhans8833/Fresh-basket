@@ -51,7 +51,8 @@ export function AddressBook({ initial }: { initial: Address[] }) {
     const errs = validateAddress(editing.draft);
     setErrors(errs);
     if (Object.keys(errs).length) {
-      formRef.current?.querySelector<HTMLInputElement>("[aria-invalid=true]")?.focus();
+      // After React has drawn the error markers (focusing straight away found none).
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLInputElement>("[aria-invalid=true]")?.focus());
       return;
     }
     setSaving(true);

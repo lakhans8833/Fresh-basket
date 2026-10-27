@@ -238,7 +238,9 @@ export function OrderDetail({
             </dl>
             <p className="mt-3 text-sm text-muted">{order.paymentMethod === "cod"
                 ? order.paymentStatus === "cod_pending"
-                  ? `Cash on delivery · pay ${formatINR(order.total)} when it arrives`
+                  ? order.status === "delivered"
+                    ? `Cash on delivery · ${formatINR(order.total)}`
+                    : `Cash on delivery · pay ${formatINR(order.total)} when it arrives`
                   : `Cash on delivery · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`
                 : `${PAYMENT_METHOD_LABEL[order.paymentMethod]} · ${PAYMENT_STATUS_LABEL[order.paymentStatus]}`}</p>
           </section>
