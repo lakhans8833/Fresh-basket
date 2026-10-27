@@ -242,7 +242,9 @@ export default function OrderDetail() {
             {order.discount > 0 ? <PriceRow label={`Discount${order.couponCode ? ` (${order.couponCode})` : ""}`} value={order.discount} tone="discount" /> : null}
             <PriceRow label="Delivery" value={order.deliveryFee} valueText={order.deliveryFee === 0 ? "Free" : undefined} tone={order.deliveryFee === 0 ? "free" : undefined} />
             <PriceRow label="Total" value={order.total} emphasis />
-            <Text style={[type.small, { marginTop: 6 }]}>Paid via {METHOD_LABEL[order.paymentMethod]}</Text>
+            <Text style={[type.small, { marginTop: 6 }]}>
+              {order.paymentStatus === "paid" || order.paymentStatus === "cod_collected" ? "Paid via" : "Payment:"} {METHOD_LABEL[order.paymentMethod]}
+            </Text>
           </View>
         </Card>
 

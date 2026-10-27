@@ -7,7 +7,7 @@ import { useCart } from "./cart-context";
 
 /** Fetches server-computed totals whenever the basket, coupon or PIN code changes. */
 export function useQuote(pincode: string | null | undefined) {
-  const { lines, couponCode, hydrated } = useCart();
+  const { lines, couponCode, hydrated, syncPrices } = useCart();
   const [data, setData] = useState<QuoteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +34,7 @@ export function useQuote(pincode: string | null | undefined) {
         if (id === seq.current) {
           setData(r);
           setError(null);
+          syncPrices(r.quote.lines.map((l) => ({ variantId: l.variantId, unitPrice: l.unitPrice })));
         }
       } catch (e) {
         if (id === seq.current) setError((e as Error).message);
