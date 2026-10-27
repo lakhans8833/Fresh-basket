@@ -193,7 +193,7 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
 
 ## Known limitations
 
-- Rate limiting is in-memory per server instance (use a shared store, e.g. Upstash, at scale).
+- Rate limits are counted in Postgres (`public.rate_limits`), shared by every server instance, with a per-instance memory fallback if the database is briefly unreachable. A dedicated store (e.g. Upstash Redis) would take that load off the database at high traffic.
 - Admin inventory "set stock" overwrites the value (no stock movement ledger); admin lists show the latest 200 orders.
 - Supabase-mode sign-in and live Razorpay calls are implemented to the documented APIs but couldn't be exercised here
   without credentials; everything else was run end-to-end (browser, local Postgres with the real migrations and RLS).

@@ -7,7 +7,7 @@ The steps marked **Owner** need the store owner's own Google / Expo accounts, pa
 
 | # | What | Who | Status |
 |---|---|---|---|
-| 1 | Merge PR #2 so the live API (https://fresh-basket-brown.vercel.app) has the app's endpoints, the 4 new migrations and **account deletion** | Owner | open |
+| 1 | Merge PR #2 so the live API (https://fresh-basket-veg.vercel.app) has the app's endpoints, the 4 new migrations and **account deletion** | Owner | open |
 | 2 | Replace the template text on `/privacy`, `/terms`, `/returns` (they show "[date]", "Template") — Play needs a real **privacy policy URL** | Owner (legal text) | open |
 | 3 | Supabase: SMTP + `{{ .Token }}` in the *Confirm signup* / *Magic link* templates, Site URL = the live site (sign-up emails must work in the app) | Owner | open |
 | 4 | Fill support phone / email in Admin → Settings (shown in the app and needed for the store listing "Contact details") | Owner | open |
@@ -28,7 +28,7 @@ npx eas-cli login                    # your Expo account
 npx eas-cli build -p android --profile production
 ```
 
-* `eas.json` → profile `production` builds an **.aab** and points the app at `https://fresh-basket-brown.vercel.app`.
+* `eas.json` → profile `production` builds an **.aab** and points the app at `https://fresh-basket-veg.vercel.app`.
 * App id: **`com.ramavatar.freshbasket`** (can never change after the first upload). Name: **Rams Fresh Basket**.
 * Let EAS create and keep the upload key ("Generate a new keystore" → yes). Back it up from expo.dev → Credentials.
 * For a quick test on a phone first: `npx eas-cli build -p android --profile preview` (installable .apk).
@@ -41,13 +41,13 @@ npx eas-cli build -p android --profile production
   * Feature graphic: `android/feature-graphic-1024x500.png`
   * Phone screenshots: `android/screenshots/*.png` (2–8 needed; 1080×1920)
 * **App content**:
-  * Privacy policy: `https://fresh-basket-brown.vercel.app/privacy` (after #2 above)
+  * Privacy policy: `https://fresh-basket-veg.vercel.app/privacy` (after #2 above)
   * App access: sign-in needed for checkout → give a **test login** (create one test customer account for Google's reviewers)
   * Ads: **No ads**
   * Content rating questionnaire: shopping app, no violence/user-generated content except product reviews → expect "Everyone"
   * Target audience: 18+ (online ordering & payments)
   * Data safety: answers below
-  * Account deletion: in-app (Profile → Delete account) **and** web link `https://fresh-basket-brown.vercel.app/delete-account`
+  * Account deletion: in-app (Profile → Delete account) **and** web link `https://fresh-basket-veg.vercel.app/delete-account`
   * Government / financial / health features: none
 * **Testing → Closed testing**: create a track, upload the .aab, add ≥12 tester emails, run 14 days (personal accounts).
 * **Production**: after the closed test, "Apply for production", then roll out.

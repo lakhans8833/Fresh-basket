@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://fresh-basket-brown.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://fresh-basket-veg.vercel.app"
       }
     },
     "production": {
@@ -19,7 +19,7 @@
       },
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://fresh-basket-brown.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://fresh-basket-veg.vercel.app"
       }
     }
   },
