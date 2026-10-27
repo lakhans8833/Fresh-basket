@@ -54,7 +54,8 @@ export function DeleteAccount() {
         <form onSubmit={submit} className="mt-4 space-y-3">
           {error ? <Notice tone="error">{error}</Notice> : null}
           <Field label='Type DELETE to confirm' htmlFor="delete-confirm">
-            <Input id="delete-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoCapitalize="characters" />
+            {/* The button that opened this form is gone: focus moves here instead of to the page body. */}
+            <Input id="delete-confirm" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" autoCapitalize="characters" />
           </Field>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="danger" loading={busy} disabled={typed.trim().toUpperCase() !== "DELETE" || busy}>

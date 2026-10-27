@@ -73,6 +73,12 @@ function CartDrawer({ onClose, whatsappEnabled }: { onClose: () => void; whatsap
   const router = useRouter();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  // The latest onClose, read by the keyboard handler — so the focus setup below runs once per opening
+  // (re-running it on every render moved focus back to "Close" whenever the cart changed).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
@@ -80,7 +86,7 @@ function CartDrawer({ onClose, whatsappEnabled }: { onClose: () => void; whatsap
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
       // Keep Tab inside the drawer while it is open.
       if (e.key === "Tab" && panelRef.current) {
         const f = panelRef.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled])");
@@ -96,7 +102,7 @@ function CartDrawer({ onClose, whatsappEnabled }: { onClose: () => void; whatsap
       document.body.style.overflow = prevOverflow;
       before?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   const quote = data?.quote ?? null;
   const priced = new Map(quote?.lines.map((l) => [l.variantId, l]));

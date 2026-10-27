@@ -23,9 +23,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
     env.payments.online === "mock" && "test payments (no real money)",
   ].filter(Boolean);
   return (
-    <div className="flex min-h-dvh flex-col bg-ivory pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+    <div className="flex min-h-dvh flex-col bg-ivory pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 print:bg-white print:pb-0">
       {devNotes.length ? (
-        <div className="bg-[#fdf6e7] px-4 py-1 text-center text-xs font-medium text-[#7a5212]">
+        <div className="bg-[#fdf6e7] px-4 py-1 text-center text-xs font-medium text-[#7a5212] print:hidden">
           Development mode: {devNotes.join(" · ")} · sample catalogue data
         </div>
       ) : null}

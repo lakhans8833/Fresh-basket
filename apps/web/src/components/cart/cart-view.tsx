@@ -69,7 +69,7 @@ export function CartView({ whatsappEnabled }: { whatsappEnabled: boolean }) {
   return (
     <div className="container-page pt-4 md:pt-6">
       {buyAgainNotice ? (
-        <Notice tone={buyAgainNotice.skipped.length || buyAgainNotice.changed.length || buyAgainNotice.reduced.length ? "warning" : "success"} className="mb-5" title={`Added ${buyAgainNotice.added} item${buyAgainNotice.added === 1 ? "" : "s"} from order ${buyAgainNotice.orderNumber} at today's prices`}>
+        <Notice tone={buyAgainNotice.skipped.length || buyAgainNotice.changed.length || buyAgainNotice.reduced.length ? "warning" : "success"} className="mb-5" title={buyAgainNotice.added ? `Added ${buyAgainNotice.added} item${buyAgainNotice.added === 1 ? "" : "s"} from order ${buyAgainNotice.orderNumber} at today's prices` : `The items from order ${buyAgainNotice.orderNumber} are already in your cart`}>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
             {buyAgainNotice.changed.map((c) => (
               <li key={`p-${c.name}`}>{c.name}: price {c.price > c.oldPrice ? "went up" : "went down"} from {formatINR(c.oldPrice)} to <b>{formatINR(c.price)}</b></li>

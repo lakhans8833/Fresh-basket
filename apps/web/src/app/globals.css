@@ -162,3 +162,12 @@ input[type="search"]::-webkit-search-decoration {
   from { width: 0; }
   to { width: 100%; }
 }
+
+/* Printing an order: keep coloured status icons/badges (browsers drop backgrounds by default). The site
+   header, footer and bottom bars are hidden with print:hidden in their components. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,5 +1,5 @@
 /*
- * Ram Avatar Fresh Basket — service worker.
+ * Rams Fresh Basket — service worker.
  * What it does (and doesn't):
  *  - Caches the app's static files (/_next/static, images, icons) so repeat visits load faster.
  *  - When the phone is offline, page navigations show /offline.html instead of the browser error.
@@ -7,7 +7,7 @@
  *    the network, so customers never see stale prices or someone else's data.
  * Bump VERSION when this file changes.
  */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `rafb-static-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png"];
@@ -46,8 +46,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (isStaticAsset(url) && !url.pathname.startsWith("/_next/static/")) {
+    // Site images / icons can be replaced under the same name: show the saved copy at once, and
+    // refresh it in the background so the next visit gets the new one (stale-while-revalidate).
+    event.respondWith(
+      caches.open(STATIC_CACHE).then((c) =>
+        c.match(req).then((hit) => {
+          const fresh = fetch(req)
+            .then((res) => {
+              if (res.ok && res.type === "basic") c.put(req, res.clone());
+              return res;
+            })
+            .catch(() => hit);
+          if (hit) event.waitUntil(fresh.then(() => undefined));
+          return hit || fresh;
+        }),
+      ),
+    );
+    return;
+  }
+
   if (isStaticAsset(url)) {
-    // Cache first: these files are versioned/immutable.
+    // Cache first: /_next/static files have a content hash in their name, so they never change.
     event.respondWith(
       caches.match(req).then(
         (hit) =>

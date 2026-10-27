@@ -62,6 +62,21 @@ export default function Orders() {
         setReorderMsg("None of the items from this order are available right now.");
         return;
       }
+      // Tell the customer what differs from the old order (like the website does), instead of quietly
+      // adding less: fewer in stock, items no longer sold, prices changed.
+      const nameOf = (id: string) => {
+        const src = o.items.find((x) => x.variantId === id);
+        return src ? `${src.productName} (${src.variantLabel})` : "An item";
+      };
+      const notes = [
+        ...res.items.filter((i) => i.inCart + i.quantity < i.requested).map((i) => `${nameOf(i.variantId)}: only ${i.inCart + i.quantity} of ${i.requested} available.`),
+        ...res.skipped.map((s) => `${s.productName} (${s.variantLabel}): ${s.reason === "out_of_stock" ? "out of stock" : "no longer sold"}.`),
+        ...res.items.filter((i) => i.oldPrice !== undefined && i.price !== i.oldPrice).map((i) => `${nameOf(i.variantId)}: now ${formatINR(i.price)} (was ${formatINR(i.oldPrice)}).`),
+      ];
+      if (notes.length) {
+        setReorderMsg(`Added to your basket at today's prices. ${notes.join(" ")}`);
+        return;
+      }
       router.push("/cart");
     } catch (e) {
       setReorderMsg(errorMessage(e));

@@ -50,7 +50,7 @@ export function SiteFooter({
   const linkCls = "rounded hover:text-white hover:underline underline-offset-4";
 
   return (
-    <footer className="mt-16 md:mt-20">
+    <footer className="mt-16 md:mt-20 print:hidden">
       <div className="bg-forest-800 text-white">
         <div className="container-page grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr]">
           <div>

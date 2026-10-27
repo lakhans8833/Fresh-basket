@@ -104,7 +104,12 @@ export async function ShopView({ filters: f, categories, whatsapp }: { filters: 
       <summary className={cn("flex h-9 cursor-pointer list-none items-center gap-1 rounded-lg border px-3 text-sm font-medium [&::-webkit-details-marker]:hidden", n ? "border-leaf-600 bg-lime-50 text-forest-800" : "border-line bg-white text-ink-soft")}>
         {label}{n ? ` (${n})` : ""} <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden />
       </summary>
-      <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-xl border border-line bg-white p-1.5 shadow-[var(--shadow-lift)]">{body}</div>
+      {/* On phones the filter row scrolls sideways (overflow-x-auto), which would clip a dropdown under
+          the chip — there it opens as a sheet fixed above the bottom bars instead. */}
+      <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-xl border border-line bg-white p-1.5 shadow-[var(--shadow-lift)] max-sm:fixed max-sm:inset-x-4 max-sm:bottom-[calc(5.5rem+env(safe-area-inset-bottom))] max-sm:top-auto max-sm:z-50 max-sm:mt-0 max-sm:w-auto max-sm:p-2">
+        <p className="px-2 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted sm:hidden">{label}</p>
+        {body}
+      </div>
     </details>
   );
 

@@ -25,7 +25,7 @@ export const BUY_AGAIN_NOTICE_KEY = "fb_buy_again_notice";
 
 /**
  * Adds a past order's items to the cart at TODAY's prices (re-checked on the server) and remembers
- * what changed for the cart page. Returns the number of items added.
+ * what changed for the cart page. Returns how many of the order's items are still available.
  */
 export async function buyAgain(
   order: { id: string; orderNumber: string },
@@ -35,12 +35,15 @@ export async function buyAgain(
     method: "POST",
     json: { cart: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) },
   });
+  // `available`: items of the order still on sale (what the caller checks); `added`: items actually
+  // put in the cart now (0 when they're all already there, e.g. a second tap).
   let added = 0;
+  const available = r.items.length;
   for (const it of r.items) {
     if (it.quantity > 0) {
       cart.add({ variantId: it.variantId, productName: it.productName, productSlug: it.productSlug, variantLabel: it.variantLabel, imageUrl: it.imageUrl, priceHint: it.price }, it.quantity);
+      added++;
     }
-    added++;
   }
   const notice: BuyAgainNotice = {
     orderNumber: order.orderNumber,
@@ -54,7 +57,7 @@ export async function buyAgain(
   } catch {
     /* storage unavailable: the cart still has the items */
   }
-  return added;
+  return available;
 }
 
 export function takeBuyAgainNotice(): BuyAgainNotice | null {

@@ -5,7 +5,7 @@ import { Pencil, Plus, TicketPercent, Trash2 } from "lucide-react";
 import { adminCouponSchema, formatINR } from "@freshbasket/shared";
 import { api, ApiError } from "@/lib/client/api";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/form";
+import { Field, Input, focusFirstInvalid } from "../ui/form";
 import { EmptyState, Notice } from "../ui/feedback";
 import { useToast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -232,7 +232,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
     });
     if (!r.success) for (const i of r.error.issues) errs[String(i.path[0])] ??= i.message;
     setErrors(errs);
-    if (!r.success || Object.keys(errs).length) return;
+    if (!r.success || Object.keys(errs).length) return focusFirstInvalid(); // the bad field may be scrolled out of sight (phones)
     setSaving(true);
     try {
       await api(initial ? `/api/admin/coupons/${initial.id}` : "/api/admin/coupons", { method: initial ? "PUT" : "POST", json: r.data });
@@ -242,6 +242,7 @@ function CouponForm({ initial, onCancel, onSaved }: { initial: Coupon | null; on
       if (err instanceof ApiError && err.code === "DUPLICATE") fe.code = "A coupon with this code already exists.";
       setErrors(fe);
       setFormError(errorMessage(err));
+      focusFirstInvalid();
     } finally {
       setSaving(false);
     }

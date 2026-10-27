@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   LayoutDashboard, ClipboardList, Package, FolderTree, Boxes, Truck, TicketPercent, MessageSquare, Settings, ExternalLink, LogOut, Menu, X, GalleryHorizontalEnd, UsersRound, Star } from "lucide-react";
 import { LEAVE_HELD_EVENT, requestLeave } from "./unsaved-guard";
@@ -68,11 +68,20 @@ export function AdminShell({
     window.addEventListener(LEAVE_HELD_EVENT, close);
     return () => window.removeEventListener(LEAVE_HELD_EVENT, close);
   }, [open]);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // While the menu is open the page behind doesn't scroll; on close, focus returns to the menu button.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const button = menuButtonRef.current;
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      button?.focus();
+    };
   }, [open]);
 
   function signOut() {
@@ -160,6 +169,7 @@ export function AdminShell({
           <div className="flex items-center gap-2">
             {devNotes.length ? <DevBadge>Dev</DevBadge> : null}
             <button
+              ref={menuButtonRef}
               type="button"
               onClick={() => setOpen(true)}
               aria-expanded={open}

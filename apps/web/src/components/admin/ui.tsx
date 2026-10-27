@@ -102,7 +102,8 @@ export function MoneyInput({ className, invalid, ...rest }: Omit<ComponentProps<
   return (
     <div className="relative">
       <span aria-hidden className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[0.9375rem] text-muted">₹</span>
-      <input type="text" inputMode="decimal" autoComplete="off" className={cn(inputClass, "pl-7 tabular-nums", className)} aria-invalid={invalid || undefined} {...rest} />
+      <input type="text" inputMode="decimal" autoComplete="off" className={cn(inputClass, "pl-7 tabular-nums", className)} aria-invalid={invalid || undefined} {...rest}
+        aria-describedby={rest["aria-describedby"] ?? (invalid && rest.id ? `${rest.id}-error` : undefined)} />
     </div>
   );
 }

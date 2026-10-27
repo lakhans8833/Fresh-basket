@@ -52,6 +52,11 @@ export function LocationDialog({ open, onClose }: { open: boolean; onClose: () =
       d.showModal();
     }
     if (!open && d.open) d.close();
+    // The page behind the dialog doesn't scroll while it's open (phones scroll it otherwise).
+    document.documentElement.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.documentElement.style.overflow = "";
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the dialog opens/closes, not on every location change
   }, [open]);
 

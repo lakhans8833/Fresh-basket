@@ -66,8 +66,12 @@ export default function Home() {
   );
   const seasonalCount = products.filter((p) => p.seasonal).length;
 
-  const goCategory = (slug?: string) => router.push({ pathname: "/categories", params: slug ? { category: slug } : { category: "" } });
-  const submitSearch = () => router.push({ pathname: "/categories", params: { q: query.trim() } });
+  // Every trip to Categories says exactly what to show (category, search, season) plus a fresh `t`, so
+  // a tap applies even when the same category was opened before and the shopper changed it there.
+  const openCategories = (p: { category?: string; q?: string; seasonal?: boolean }) =>
+    router.push({ pathname: "/categories", params: { category: p.category ?? "", q: p.q ?? "", seasonal: p.seasonal ? "1" : "0", t: String(Date.now()) } });
+  const goCategory = (slug?: string) => openCategories({ category: slug });
+  const submitSearch = () => openCategories({ q: query.trim() });
   // 4 tiles per row with 10 px gaps inside 16 px side padding.
   const tileW = Math.floor((Math.min(width, 520) - 32 - 30) / 4);
 
@@ -167,7 +171,7 @@ export default function Home() {
                 : [
                     ...cats.map((c) => ({ key: c.id, name: c.name, image: c.imageUrl, onPress: () => goCategory(c.slug) })),
                     ...(seasonalCount
-                      ? [{ key: "seasonal", name: "In Season Now", image: "/images/site/tile-seasonal.webp", onPress: () => router.push({ pathname: "/categories", params: { seasonal: "1" } }) }]
+                      ? [{ key: "seasonal", name: "In Season Now", image: "/images/site/tile-seasonal.webp", onPress: () => openCategories({ seasonal: true }) }]
                       : []),
                   ].map((t) => (
                     <Pressable key={t.key} onPress={t.onPress} accessibilityRole="button" accessibilityLabel={t.name} style={({ pressed }) => [{ width: tileW }, pressed && { opacity: 0.7 }]}>
@@ -193,7 +197,7 @@ export default function Home() {
         ) : (
           <>
             {rows.map((r) =>
-              rail(r.id, r.title, r.products, () => (r.seasonal ? router.push({ pathname: "/categories", params: { seasonal: "1" } }) : goCategory(r.category))),
+              rail(r.id, r.title, r.products, () => (r.seasonal ? openCategories({ seasonal: true }) : goCategory(r.category))),
             )}
           </>
         )}

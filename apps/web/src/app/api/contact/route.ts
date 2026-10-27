@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 
 export const POST = route(async (req) => {
   await rateLimit(`contact:${clientIp(req)}`, 5, 10 * 60_000);
+  await rateLimit("contact:shop-day", 300, 24 * 60 * 60_000); // keeps the inbox usable even if someone rotates networks
   const d = await parseBody(req, contactSchema);
   const s = await getSession();
   await query(

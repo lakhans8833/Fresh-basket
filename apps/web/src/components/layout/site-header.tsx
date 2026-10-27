@@ -31,7 +31,7 @@ export function TopBar({ announcement, serviceArea }: { announcement: string | n
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   return (
-    <div className="bg-forest-800 text-white">
+    <div className="bg-forest-800 text-white print:hidden">
       <div className="container-page flex h-9 items-center justify-between gap-3 text-[0.8125rem]">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:hidden">
           <NextSlot className="flex shrink-0 items-center gap-1.5" />
@@ -125,7 +125,7 @@ export function SiteHeader({ settings, serviceArea, whatsappEnabled }: { setting
   }, []);
 
   return (
-    <header ref={headerRef} className="sticky top-0 z-40 border-b border-line bg-white/95 shadow-[0_1px_0_rgb(11_102_35/0.04),0_6px_20px_-16px_rgb(11_102_35/0.35)] backdrop-blur supports-[backdrop-filter]:bg-white/90">
+    <header ref={headerRef} className="sticky top-0 z-40 print:hidden [@media(max-height:500px)]:static border-b border-line bg-white/95 shadow-[0_1px_0_rgb(11_102_35/0.04),0_6px_20px_-16px_rgb(11_102_35/0.35)] backdrop-blur supports-[backdrop-filter]:bg-white/90">
       <div className="container-page flex h-[4.25rem] items-center gap-3 sm:h-[5.25rem] lg:gap-5">
         <Logo name={settings.storeName} logoUrl={settings.logoUrl} tagline={settings.tagline} className="min-w-0" />
         <span aria-hidden className="hidden h-12 w-px shrink-0 bg-line lg:block" />

@@ -21,7 +21,7 @@ export function CartBar() {
     <>
     {/* Room at the end of the page so the bar never covers the footer. */}
     <div aria-hidden className="h-16 md:hidden" />
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 px-3 pb-2 md:hidden">
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 px-3 pb-2 md:hidden print:hidden">
       <Link
         href="/cart"
         className="flex items-center gap-3 rounded-2xl bg-forest-800 px-4 py-2.5 text-white shadow-[0_10px_24px_-12px_rgb(11_102_35/0.8)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime-200"
