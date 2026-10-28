@@ -42,8 +42,9 @@ with sync_playwright() as p:
     page.locator("#wa-phone").fill(PHONE)
     page.locator("#wa-address").fill("H.No 12, Sector 7, near the park")
     page.locator("#wa-area").fill("Sector 7")
-    # A PIN code we don't deliver to: no order can be placed, customer can ask on WhatsApp instead.
-    page.locator("#wa-pincode").fill("121006")
+    # A PIN code we don't deliver to (Port Blair — never a delivery area here; 121006 used to be, but stores
+    # in Faridabad add it): no order can be placed, customer can ask on WhatsApp instead.
+    page.locator("#wa-pincode").fill("744101")
     expect(page.get_by_text("We don't deliver to this PIN code yet")).to_be_visible(timeout=10000)
     page.get_by_role("button", name="Review order").click()
     expect(page.get_by_text("We don't deliver to this PIN code yet. Message us")).to_be_visible()

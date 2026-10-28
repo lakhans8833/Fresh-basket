@@ -12,15 +12,17 @@ const supabaseHost = publicSupabaseUrl ? new URL(publicSupabaseUrl).hostname : n
 // limited to this site + Razorpay Checkout; 'unsafe-inline' is needed for Next.js's inline bootstrap scripts
 // and the product JSON-LD (no nonces, so pages can stay statically cached). Connections: this site, the
 // Supabase project (auth), Razorpay, and the free reverse-geocoding API used by "Use my location".
-const supabaseOrigin = supabaseHost ? `https://${supabaseHost}` : "https://*.supabase.co";
-const supabaseWs = supabaseHost ? `wss://${supabaseHost}` : "wss://*.supabase.co";
+// The project's real origin — scheme and port included (a self-hosted or local Supabase may be
+// http://host:54321; building "https://host" from the hostname alone blocked every sign-in request).
+const supabaseOrigin = publicSupabaseUrl ? new URL(publicSupabaseUrl).origin : "https://*.supabase.co";
+const supabaseWs = supabaseOrigin.replace(/^http/, "ws");
 // Vercel preview deployments load the Vercel toolbar (feedback/comments) from vercel.live.
 const previewToolbar = process.env.VERCEL_ENV === "preview" ? " https://vercel.live" : "";
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com${previewToolbar}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  `img-src 'self' data: blob: https: ${supabaseOrigin}`, // + the project origin when it isn't https (self-hosted)
   "font-src 'self' data:",
   `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://*.razorpay.com https://api.bigdatacloud.net${previewToolbar}`,
   `frame-src 'self' https://*.razorpay.com${previewToolbar}`,
