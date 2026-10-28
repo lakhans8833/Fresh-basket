@@ -32,6 +32,13 @@ test name where a repository test exists.
 | BUG-062 | P3 | `README.md`, `docs/legal-placeholders.md` | Docs said rate limiting is in-memory only and that policy pages contain `[placeholders]` — both out of date | Docs rewritten to match the code | review |
 | BUG-063 | P2 (security) | `apps/mobile/package-lock.json` | 10 known-vulnerable dependency versions in the app's build tooling | `npm audit fix` (no breaking changes): 10 → 6; app type-check, web export, smoke 13/13 and auth 13/13 PASS | see `SECURITY_REPORT.md` S-11 |
 
+## B2. Found in the login → order deep check (29 Oct)
+
+| ID | Sev | Route / file | Problem | Fix | Verified |
+| --- | --- | --- | --- | --- | --- |
+| BUG-064 | P2 | `apps/web/next.config.ts` (CSP) | The CSP allowed `https://<host>` built from the Supabase hostname, dropping the scheme and port: with a self-hosted/local Supabase (`http://host:54321`) **every sign-in request was blocked**. Hosted Supabase (live) was not affected | CSP uses the project's real origin (scheme + port) for `connect-src`/`img-src` | email code 20/20, sign-up code 7/7, password + forgot password 28/28, admin session refresh OK, unconfirmed account OK — all against a Supabase-mode build with fake GoTrue servers |
+| BUG-065 | P3 (test) | `e2e/whatsapp.py`, `e2e/resend_confirmation.py` | Tests out of date: used PIN 121006 as "not served" (it is served in Faridabad); expected an old unconfirmed-account message | Tests updated; both PASS; WhatsApp order test added to the regression | WHATSAPP E2E OK, RESEND CONFIRMATION E2E OK |
+
 ## C. Fixed and deployed (PR #19 – #23, 26–28 Oct)
 
 | ID | Sev | Route / file | Problem → fix | Regression test | PR |
