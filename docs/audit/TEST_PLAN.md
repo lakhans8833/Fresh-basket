@@ -39,6 +39,17 @@ Status: **PASS** ran and passed · **FAIL** ran and failed · **BLOCKED** needs 
 | `apps/mobile/e2e/auth_mock.py` | app email code, sign-up code, password reset of earlier sign-up, Google button | PASS 13/13 |
 | `npm audit` | web production deps 0; app 6 (Expo tooling) | PASS (web) / see `SECURITY_REPORT.md` S-11 |
 
+## 2b. Sign-in suites against a Supabase-mode build (fake GoTrue servers, 29 Oct)
+
+| Suite | Result |
+| --- | --- |
+| `e2e/email_otp.py` (send, resend, wrong/expired/used code, double tap, network failure, new account) | PASS 20/20 |
+| `e2e/signup_code.py` (password sign-up → code → signed in) | PASS 7/7 |
+| `e2e/login_recovery.py` (password sign-in, forgot password, reset link, staff vs customer) | PASS 28/28 |
+| `e2e/session_refresh.py 3` (admin stays signed in across 3 token expiries, parallel API calls) | PASS |
+| `e2e/resend_confirmation.py` (unconfirmed account → confirm step → new code) | PASS |
+| `e2e/whatsapp.py` (guest WhatsApp order: validation, unserved PIN, saved order, message, tracking) | PASS |
+
 ## 3. Manual / live test cases
 
 | ID | Case | Expected | Result |
