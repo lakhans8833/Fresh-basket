@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Banknote, CreditCard, Landmark, Mail, MapPin, Phone, Clock, MessageCircle, FlaskConical } from "lucide-react";
+import { Banknote, CreditCard, Landmark, Mail, MapPin, Phone, Clock, FlaskConical, Headset } from "lucide-react";
+import { WhatsAppIcon } from "../ui/whatsapp-icon";
 import type { Category, StoreSettings } from "@freshbasket/shared";
 import { Logo } from "./logo";
 import { NewsletterForm } from "./newsletter-form";
@@ -53,15 +54,51 @@ export function SiteFooter({
 }: { settings: StoreSettings; categories: Category[]; paymentMethods: string[]; serviceArea: string }) {
   const socials = (Object.keys(settings.social) as (keyof StoreSettings["social"])[]).filter((k) => settings.social[k]);
   const hasContact = settings.supportPhone || settings.supportEmail || settings.address || settings.whatsapp;
+  const waLink = settings.whatsapp ? `https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}` : null;
+  const telLink = settings.supportPhone ? `tel:${settings.supportPhone.replace(/\s/g, "")}` : null;
   const year = new Date().getFullYear();
-  const linkCls = "rounded hover:text-white hover:underline underline-offset-4";
+  const linkCls = "rounded transition-colors hover:text-white hover:underline underline-offset-4";
+  const headCls = "flex items-center gap-2 font-sans text-[0.8125rem] font-bold uppercase tracking-[0.14em] text-lime-200 before:h-3.5 before:w-1 before:rounded-full before:bg-lime-300";
+  const iconWrap = "grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-lime-300";
 
   return (
     <footer className="mt-16 md:mt-20 print:hidden">
-      <div className="bg-forest-800 text-white">
-        <div className="container-page grid grid-cols-2 gap-x-6 gap-y-10 py-12 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr] lg:gap-10">
+      <div className="relative overflow-hidden bg-forest-900 text-white">
+        {/* soft light in the corner so the green isn't one flat block */}
+        <div aria-hidden className="pointer-events-none absolute -right-40 -top-40 size-[28rem] rounded-full bg-lime-300/10 blur-3xl" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-32 size-[24rem] rounded-full bg-forest-600/30 blur-3xl" />
+
+        {/* Help strip: the fastest way to reach the store */}
+        <div className="container-page relative pt-10 md:pt-12">
+          <div className="flex flex-col gap-5 rounded-2xl bg-white/[0.07] p-5 ring-1 ring-white/10 md:flex-row md:items-center md:justify-between md:p-6">
+            <div className="flex items-center gap-4">
+              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-lime-300 text-forest-900"><Headset className="size-6" aria-hidden /></span>
+              <div>
+                <p className="font-display text-lg font-bold leading-tight md:text-xl">Need help with your order?</p>
+                <p className="mt-0.5 text-sm text-white/75">{settings.supportHours ? `We're here to help · ${settings.supportHours}` : "We're here to help."}</p>
+              </div>
+            </div>
+            <div className="grid gap-2.5 sm:flex sm:flex-wrap [&>a]:justify-center">
+              {telLink ? (
+                <a href={telLink} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-forest-900 transition-colors hover:bg-lime-100">
+                  <Phone className="size-4" aria-hidden /> Call {settings.supportPhone}
+                </a>
+              ) : null}
+              {waLink ? (
+                <a href={waLink} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-whatsapp px-5 text-sm font-semibold text-forest-950 transition-colors hover:bg-lime-300">
+                  <WhatsAppIcon className="size-5" /> Chat on WhatsApp
+                </a>
+              ) : null}
+              {!telLink && !waLink ? (
+                <Link href="/contact" className="inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-forest-900 hover:bg-lime-100">Contact us</Link>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="container-page relative grid grid-cols-2 gap-x-6 gap-y-10 py-12 lg:grid-cols-[1.3fr_0.85fr_0.95fr_1.4fr] lg:gap-10">
           <div className="col-span-2 lg:col-span-1">
-            <div className="inline-flex rounded-2xl bg-white px-3 py-2.5">
+            <div className="inline-flex rounded-2xl bg-white px-3 py-2.5 shadow-lg shadow-black/10">
               <Logo name={settings.storeName} logoUrl={settings.logoUrl} tagline={settings.tagline} size="md" />
             </div>
             <p className="mt-4 max-w-xs text-[0.9375rem] leading-relaxed text-white/80">
@@ -88,7 +125,7 @@ export function SiteFooter({
           </div>
 
           <nav aria-labelledby="f-shop">
-            <h2 id="f-shop" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Shop</h2>
+            <h2 id="f-shop" className={headCls}>Shop</h2>
             <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
               <li><Link className={linkCls} href="/shop">All products</Link></li>
               {categories.slice(0, 5).map((c) => (
@@ -99,7 +136,7 @@ export function SiteFooter({
           </nav>
 
           <nav aria-labelledby="f-help">
-            <h2 id="f-help" className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Help</h2>
+            <h2 id="f-help" className={headCls}>Help</h2>
             <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/80">
               <li><Link className={linkCls} href="/about">About us</Link></li>
               <li><Link className={linkCls} href="/contact">Contact</Link></li>
@@ -111,25 +148,25 @@ export function SiteFooter({
             </ul>
           </nav>
 
-          <div className="col-span-2 space-y-6 lg:col-span-1">
+          <div className="col-span-2 space-y-8 lg:col-span-1">
             <div>
-              <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Get in touch</h2>
+              <h2 className={headCls}>Get in touch</h2>
               {hasContact ? (
-                <ul className="mt-4 space-y-3 text-[0.9375rem] text-white/85">
-                  {settings.supportPhone ? (
-                    <li className="flex gap-3"><Phone className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a></li>
+                <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/85">
+                  {telLink ? (
+                    <li className="flex items-center gap-3"><span className={iconWrap}><Phone className="size-4" aria-hidden /></span><a className={linkCls} href={telLink}>{settings.supportPhone}</a></li>
                   ) : null}
-                  {settings.whatsapp ? (
-                    <li className="flex gap-3"><MessageCircle className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}`} target="_blank" rel="noopener noreferrer">WhatsApp {displayIndianNumber(settings.whatsapp)}</a></li>
+                  {waLink ? (
+                    <li className="flex items-center gap-3"><span className={iconWrap}><WhatsAppIcon className="size-4" /></span><a className={linkCls} href={waLink} target="_blank" rel="noopener noreferrer">WhatsApp {displayIndianNumber(settings.whatsapp!)}</a></li>
                   ) : null}
                   {settings.supportEmail ? (
-                    <li className="flex gap-3"><Mail className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={`${linkCls} break-all`} href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
+                    <li className="flex items-center gap-3"><span className={iconWrap}><Mail className="size-4" aria-hidden /></span><a className={`${linkCls} break-all`} href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
                   ) : null}
                   {settings.address ? (
-                    <li className="flex gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span className="whitespace-pre-line">{settings.address}</span></li>
+                    <li className="flex items-start gap-3"><span className={iconWrap}><MapPin className="size-4" aria-hidden /></span><span className="whitespace-pre-line pt-1.5">{settings.address}</span></li>
                   ) : null}
                   {settings.supportHours ? (
-                    <li className="flex gap-3"><Clock className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><span>{settings.supportHours}</span></li>
+                    <li className="flex items-center gap-3"><span className={iconWrap}><Clock className="size-4" aria-hidden /></span><span>{settings.supportHours}</span></li>
                   ) : null}
                 </ul>
               ) : (
@@ -139,13 +176,14 @@ export function SiteFooter({
               )}
             </div>
             <div>
-              <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Fresh picks in your inbox</h2>
+              <h2 className={headCls}>Fresh picks in your inbox</h2>
+              <p className="mt-2 text-sm text-white/70">Seasonal arrivals and offers, now and then.</p>
               <div className="mt-3"><NewsletterForm /></div>
             </div>
           </div>
         </div>
 
-        <div className="border-t border-white/10">
+        <div className="relative bg-forest-950/60">
           <div className="container-page flex flex-col gap-5 pt-6 pb-24 md:pb-6 md:pr-24 lg:flex-row lg:items-center lg:justify-between">
             {paymentMethods.length ? (
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
