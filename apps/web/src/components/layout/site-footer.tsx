@@ -30,6 +30,13 @@ function SocialIcon({ kind }: { kind: "instagram" | "facebook" | "youtube" | "x"
   );
 }
 
+/** "919891244561" / "9891244561" → "+91 98912 44561"; anything else is shown as typed. */
+function displayIndianNumber(raw: string) {
+  const d = raw.replace(/\D/g, "");
+  const local = d.length === 12 && d.startsWith("91") ? d.slice(2) : d.length === 10 ? d : null;
+  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw;
+}
+
 const SOCIAL_LABEL = { instagram: "Instagram", facebook: "Facebook", youtube: "YouTube", x: "X (Twitter)" } as const;
 
 function PaymentChip({ icon, label }: { icon: React.ReactNode; label: string }) {
@@ -52,8 +59,8 @@ export function SiteFooter({
   return (
     <footer className="mt-16 md:mt-20 print:hidden">
       <div className="bg-forest-800 text-white">
-        <div className="container-page grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr]">
-          <div>
+        <div className="container-page grid grid-cols-2 gap-x-6 gap-y-10 py-12 lg:grid-cols-[1.35fr_0.9fr_0.9fr_1.35fr] lg:gap-10">
+          <div className="col-span-2 lg:col-span-1">
             <div className="inline-flex rounded-2xl bg-white px-3 py-2.5">
               <Logo name={settings.storeName} logoUrl={settings.logoUrl} tagline={settings.tagline} size="md" />
             </div>
@@ -104,7 +111,7 @@ export function SiteFooter({
             </ul>
           </nav>
 
-          <div className="space-y-6">
+          <div className="col-span-2 space-y-6 lg:col-span-1">
             <div>
               <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.12em] text-lime-200">Get in touch</h2>
               {hasContact ? (
@@ -113,7 +120,7 @@ export function SiteFooter({
                     <li className="flex gap-3"><Phone className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`tel:${settings.supportPhone.replace(/\s/g, "")}`}>{settings.supportPhone}</a></li>
                   ) : null}
                   {settings.whatsapp ? (
-                    <li className="flex gap-3"><MessageCircle className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}`} target="_blank" rel="noopener noreferrer">WhatsApp {settings.whatsapp}</a></li>
+                    <li className="flex gap-3"><MessageCircle className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={linkCls} href={`https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}`} target="_blank" rel="noopener noreferrer">WhatsApp {displayIndianNumber(settings.whatsapp)}</a></li>
                   ) : null}
                   {settings.supportEmail ? (
                     <li className="flex gap-3"><Mail className="mt-0.5 size-4 shrink-0 text-lime-300" aria-hidden /><a className={`${linkCls} break-all`} href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
@@ -139,7 +146,7 @@ export function SiteFooter({
         </div>
 
         <div className="border-t border-white/10">
-          <div className="container-page flex flex-col gap-5 py-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="container-page flex flex-col gap-5 pt-6 pb-24 md:pb-6 md:pr-24 lg:flex-row lg:items-center lg:justify-between">
             {paymentMethods.length ? (
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/80">We accept</span>
@@ -157,9 +164,10 @@ export function SiteFooter({
               </div>
             ) : <span />}
             <div className="flex flex-col gap-2 text-[0.8125rem] text-white/80 sm:flex-row sm:items-center sm:gap-5">
-              <nav aria-label="Legal" className="flex gap-4">
+              <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1">
                 <Link href="/privacy" className="hover:text-white">Privacy</Link>
                 <Link href="/terms" className="hover:text-white">Terms</Link>
+                <Link href="/returns" className="hover:text-white">Refunds</Link>
               </nav>
               <span>© {year} {settings.storeName}</span>
             </div>
