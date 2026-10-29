@@ -59,7 +59,7 @@ with sync_playwright() as p:
     check("…error URL carries no token", "stale-token" not in page.url and "token_hash" not in page.url, page.url)
     # A opening /reset-password directly is a NORMAL password change for A, clearly labelled.
     page.goto(f"{BASE}/reset-password")
-    check("/reset-password while signed in as A is labelled as A's password", page.get_by_test_id("password-account").inner_text() == A and page.get_by_text(f"You're signed in as {A}").count() > 0)
+    check("/reset-password while signed in as A is labelled as A's password", page.locator("#main").get_by_test_id("password-account").inner_text() == A and page.get_by_text(f"You're signed in as {A}").count() > 0)
     ctx.close()
 
     # 2. Expired recovery link with NO session.
@@ -74,7 +74,7 @@ with sync_playwright() as p:
     # 3. Successful recovery for B and password update (applies to B, not anyone else).
     page.goto(f"{BASE}/auth/callback?token_hash=good-b&type=recovery")
     page.wait_for_url(re.compile(r"/reset-password"), timeout=20000)
-    check("valid recovery link → reset page for B", page.get_by_test_id("password-account").inner_text() == B)
+    check("valid recovery link → reset page for B", page.locator("#main").get_by_test_id("password-account").inner_text() == B)
     check("…in recovery mode (no 'signed in as' warning)", page.get_by_text("You're signed in as").count() == 0)
     page.locator("#new-password").fill("NewSecret456!")
     page.locator("#confirm-password").fill("NewSecret456!")
