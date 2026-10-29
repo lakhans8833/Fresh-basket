@@ -32,7 +32,7 @@ All confirmed code bugs are fixed (see `BUG_REPORT.md`). What remains is ordered
 | 13 | Not-found status 200 (OPEN-09) | Dev | Return 404 for unknown product/category/order pages (move `notFound()` before streaming starts) |
 | 14 | Saved items screen in the app | Dev | The ♥ works but the app has no list screen (website has `/wishlist`) |
 | 15 | Admin 2-step sign-in (S-16) | Owner | Enable Supabase MFA for admin accounts |
-| 16 | Flaky unit test investigation | Dev | One regression run on 28 Oct had 4 failing tests in one file; not reproduced in later reruns; the regression script now records failing test names (see `TEST_PLAN.md` §4) |
+| 16 | ~~Flaky unit test~~ | Dev | Solved 30 Oct: a test picked Tomato at random and emptied its stock for the next tests (see `TEST_PLAN.md` §4) |
 
 ## Regression tests to keep running
 

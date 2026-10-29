@@ -8,7 +8,7 @@ export function DeliveryPill() {
   const slot = useNextSlotLabel();
   if (!slot) return null;
   return (
-    <p className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-sage-100 px-2 py-1 text-xs font-bold text-ink">
+    <p className="inline-flex items-center gap-1.5 rounded-full bg-lime-100 px-3 py-1 text-[0.8125rem] font-semibold text-forest-900">
       <Clock className="size-3.5 text-leaf-600" aria-hidden /> Delivery {slot}
     </p>
   );

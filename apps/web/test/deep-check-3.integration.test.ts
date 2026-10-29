@@ -44,7 +44,9 @@ afterAll(async () => {
 describe("weight product → per-pack stock", () => {
   async function weightProduct(grams: number) {
     const p = (await queryOne<{ id: string }>(
-      `select p.id from products p where p.active and exists (select 1 from product_variants v where v.product_id = p.id and v.active)
+      // Never tomato: the order tests below buy its 500 g pack and would run out after this rewrite
+      // (product ids are random per database reset, so picking it made those tests fail now and then).
+      `select p.id from products p where p.active and p.slug <> 'tomato' and exists (select 1 from product_variants v where v.product_id = p.id and v.active)
          and not exists (select 1 from product_variants v where v.product_id = p.id and v.active and pack_label_grams(v.label) is null)
        order by p.id desc limit 1`,
     ))!;

@@ -79,7 +79,11 @@ Status: **PASS** ran and passed · **FAIL** ran and failed · **BLOCKED** needs 
 
 ## 4. Notes
 
-- **Flaky run:** an earlier regression run on 28 Oct (≈02:05 IST) reported 4 failing tests in one web test file.
-  It was not reproduced in 4 later full runs (all 216/216). The failing file was not recorded at the time; the
-  regression script now saves the full unit output and prints failing test names, so a repeat can be diagnosed.
+- **Flaky run (solved 30 Oct):** an earlier regression run on 28 Oct reported 4 failing tests in one file. It
+  happened again on 30 Oct and was traced to `test/deep-check-3.integration.test.ts`: one test picks "the last
+  product sold by weight" by its random id and rewrites its stock; when that product was Tomato, the later tests
+  that buy 4 × Tomato 500 g ran out of stock ("Some items in your basket need attention"). Forcing that pick
+  reproduced exactly the same 4 failures. The test now never picks Tomato — a test-only problem, not a store bug.
+- `e2e/login_recovery.py` reads the account name inside the page's main area (a second hidden copy during page
+  load made the check fail once in 6 runs; 5 later runs passed 28/28).
 - Local test data is reset by the test setup; the browser suites use the throwaway `fb_ui` database.

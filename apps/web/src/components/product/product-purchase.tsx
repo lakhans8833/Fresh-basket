@@ -53,18 +53,22 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
 
   return (
     <div className="mt-5">
-      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="font-display text-[1.75rem] font-bold tabular-nums text-ink">{formatINR(variant.price)}</span>
-        <span className="text-muted">/ {variant.label}{variant.note ? ` (${variant.note})` : ""}</span>
-        {unitPriceLabel(variant.price, variant.label) ? <span className="text-sm font-medium tabular-nums text-ink-soft">· {unitPriceLabel(variant.price, variant.label)}</span> : null}
-        {variant.mrp && variant.mrp > variant.price ? <s className="text-muted">MRP {formatINR(variant.mrp)}</s> : null}
-        <DiscountBadge price={variant.price} mrp={variant.mrp} className="self-center" />
-      </p>
-      {variant.mrp && variant.mrp > variant.price ? (
-        <p className="mt-1 text-sm font-medium text-leaf-600">You save {formatINR(variant.mrp - variant.price)} on this pack</p>
-      ) : null}
+      <div className="border-y border-line py-4">
+        <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <span className="font-display text-[2rem] font-bold leading-none tabular-nums text-ink">{formatINR(variant.price)}</span>
+          {variant.mrp && variant.mrp > variant.price ? <s className="text-base text-muted">MRP {formatINR(variant.mrp)}</s> : null}
+          <DiscountBadge price={variant.price} mrp={variant.mrp} />
+        </p>
+        <p className="mt-2 text-sm text-ink-soft">
+          <span className="font-medium text-ink">{variant.label}{variant.note ? ` (${variant.note})` : ""}</span>
+          {unitPriceLabel(variant.price, variant.label) ? <span className="tabular-nums"> · {unitPriceLabel(variant.price, variant.label)}</span> : null}
+          {variant.mrp && variant.mrp > variant.price ? (
+            <span className="font-semibold text-leaf-600"> · You save {formatINR(variant.mrp - variant.price)}</span>
+          ) : null}
+        </p>
+      </div>
 
-      <fieldset className="mt-6">
+      <fieldset className="mt-5">
         <legend className="text-base font-bold text-ink">Select unit</legend>
         {/* 4 sizes sit in one row (2×2 on phones) instead of 3 + a lonely 4th. */}
         <div className={cn("mt-2.5 grid grid-cols-2 gap-2.5", product.variants.length === 4 ? "sm:grid-cols-4" : product.variants.length === 2 ? "" : "sm:grid-cols-3")}>
@@ -74,7 +78,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
               <label
                 key={v.id}
                 className={cn(
-                  "relative flex cursor-pointer flex-col items-center overflow-hidden rounded-xl border px-3 pb-2.5 pt-3.5 text-center transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200",
+                  "relative flex cursor-pointer flex-col items-center justify-center rounded-xl border px-3 py-3 text-center transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-lime-200",
                   on ? "border-leaf-600 bg-lime-50 ring-1 ring-leaf-600" : "border-line bg-white hover:border-forest-700/30",
                   v.stock <= 0 && "opacity-60",
                 )}
@@ -93,14 +97,20 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
                     v.stock <= 0 ? "out of stock" : null,
                   ].filter(Boolean).join(", ")}
                 />
-                <span className="mt-1 text-sm font-semibold text-ink">{v.label}</span>
-                <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
-                {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
-                {percentOff(v.price, v.mrp) ? <span className="absolute inset-x-0 top-0 bg-offer py-px text-[0.625rem] font-bold uppercase tracking-wide text-white">{percentOff(v.price, v.mrp)}% off</span> : null}
+                <span className="text-[0.9375rem] font-bold text-ink">{v.label}</span>
+                <span className="mt-0.5 flex items-baseline gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums text-ink">{formatINR(v.price)}</span>
+                  {v.mrp && v.mrp > v.price ? <s className="text-xs tabular-nums text-muted">{formatINR(v.mrp)}</s> : null}
+                </span>
+                {percentOff(v.price, v.mrp) ? <span className="mt-1 rounded-full bg-offer/10 px-2 py-px text-[0.6875rem] font-bold text-[#9a3412]">{percentOff(v.price, v.mrp)}% off</span> : null}
                 {unitPriceLabel(v.price, v.label) ? <span className="mt-0.5 text-[0.6875rem] tabular-nums text-muted">{unitPriceLabel(v.price, v.label)}</span> : null}
                 {v.note ? <span className="mt-0.5 text-[0.6875rem] leading-tight text-ink-soft">{v.note}</span> : null}
                 {v.stock <= 0 ? <span className="text-[0.6875rem] font-medium text-danger">Out of stock</span> : null}
-                {on ? <Check className="absolute right-2 top-2 size-4 text-leaf-600" aria-hidden /> : null}
+                {on ? (
+                  <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-leaf-600 text-white ring-2 ring-white" aria-hidden>
+                    <Check className="size-3" strokeWidth={3} />
+                  </span>
+                ) : null}
               </label>
             );
           })}
@@ -113,7 +123,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
         ) : variant.stock <= 5 ? (
           <span className="font-medium text-amber">Only {variant.stock} left</span>
         ) : (
-          <span className="font-medium text-leaf-600">In stock</span>
+          <span className="inline-flex items-center gap-1.5 font-medium text-leaf-600"><span className="size-2 rounded-full bg-leaf-600" aria-hidden />In stock</span>
         )}
         {inCart > 0 ? <span className="text-muted"> · {inCart} already in your cart</span> : null}
         {!out && maxAddable === 0 && otherSizesInCart ? (
@@ -121,12 +131,12 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
         ) : null}
       </p>
 
-      <div ref={buyRow} className="mt-5 flex flex-wrap items-center gap-3">
+      <div ref={buyRow} className="mt-4 flex flex-wrap items-center gap-3">
         {!out && maxAddable > 0 ? <QuantityStepper value={qty} onChange={(n) => setQty(Math.max(1, n))} max={maxAddable} label={product.name} tone="outline" /> : null}
         <Button
           variant="dark"
           size="lg"
-          className="min-w-56 flex-1 sm:flex-none"
+          className="min-w-48 flex-1"
           disabled={out || maxAddable === 0}
           onClick={addToCart}
         >
@@ -153,7 +163,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
             if (n > 0) add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
             router.push("/order");
           }}
-          className="mt-3 inline-flex h-12 w-full min-w-56 items-center justify-center gap-2 rounded-full bg-whatsapp-dark px-6 font-semibold text-white transition-colors hover:bg-forest-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime-200 sm:w-auto"
+          className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-whatsapp-dark bg-white px-6 font-semibold text-whatsapp-dark transition-colors hover:bg-whatsapp-dark hover:text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime-200"
         >
           <WhatsAppIcon className="size-5" /> Order on WhatsApp
         </button>
