@@ -69,6 +69,8 @@ const nextConfig: NextConfig = {
         destination: "/category/:cat",
         permanent: true,
       },
+      // Shoppers type /orders (the order pages live at /orders/<id>); the list is under the account.
+      { source: "/orders", destination: "/account/orders", permanent: false },
     ];
   },
   async headers() {
