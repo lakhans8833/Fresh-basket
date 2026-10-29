@@ -84,32 +84,43 @@ export default async function ProductPage({ params }: { params: Params }) {
           <span className="text-ink" aria-current="page">{product.name}</span>
         </nav>
         <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-0 lg:rounded-2xl lg:border lg:border-line lg:bg-white">
-          <div className="relative lg:border-r lg:border-line lg:p-6">
-            <ProductGallery images={product.images} name={product.name} />
-            <FavouriteButton productId={product.id} name={product.name} className="absolute right-4 top-4 size-11" />
+          <div className="lg:border-r lg:border-line lg:p-6">
+            {/* Desktop: the photo stays in view while the buyer reads sizes and prices on the right. */}
+            <div className="relative lg:sticky lg:top-28">
+              <ProductGallery images={product.images} name={product.name} />
+              <FavouriteButton productId={product.id} name={product.name} className="absolute right-4 top-4 size-11" />
+            </div>
           </div>
           <div className="lg:p-8">
-            {product.seasonal ? <p className="eyebrow text-leaf-600">In season now</p> : null}
-            <h1 className="mt-1 text-2xl font-bold leading-tight text-ink md:text-[1.75rem]">{product.name}</h1>
-            <DeliveryPill />
-            <Link href={`/category/${product.categorySlug}`} className="mt-2 inline-flex items-center gap-0.5 text-sm font-semibold text-leaf-600 hover:underline">
-              View all {product.categoryName} <ChevronRight className="size-4" aria-hidden />
-            </Link>
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Link
+                href={`/category/${product.categorySlug}`}
+                className="-my-2 inline-flex items-center gap-0.5 py-2 text-[0.8125rem] font-semibold uppercase tracking-[0.08em] text-leaf-600 hover:underline"
+                aria-label={`View all ${product.categoryName}`}
+              >
+                {product.categoryName} <ChevronRight className="size-3.5" aria-hidden />
+              </Link>
+              {product.seasonal ? <span className="rounded-full bg-lime-100 px-2.5 py-0.5 text-xs font-bold text-forest-800">In season now</span> : null}
+            </p>
+            <h1 className="mt-1.5 text-2xl font-bold leading-tight text-ink md:text-[2rem]">{product.name}</h1>
             {reviews.count > 0 && reviews.average !== null ? (
-              <a href="#reviews" className="mt-1 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-forest-800">
+              <a href="#reviews" className="mt-1.5 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-forest-800">
                 <Stars value={reviews.average} />
                 <span><b className="text-ink">{reviews.average.toFixed(1)}</b> · {reviews.count} {reviews.count === 1 ? "review" : "reviews"}</span>
               </a>
             ) : null}
-            {notes.length ? (
-              <ul className="mt-3 flex flex-wrap gap-2" aria-label="Product notes">
-                {notes.map((h) => (
-                  <li key={h} className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 px-3 py-1 text-[0.8125rem] text-ink-soft">
-                    <Tag className="size-3.5 text-leaf-600" aria-hidden /> {h}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <DeliveryPill />
+              {notes.length ? (
+                <ul className="flex flex-wrap gap-2" aria-label="Product notes">
+                  {notes.map((h) => (
+                    <li key={h} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-[0.8125rem] text-ink-soft">
+                      <Tag className="size-3.5 text-leaf-600" aria-hidden /> {h}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
             <ProductPurchase product={product} whatsappEnabled={Boolean(resolveWhatsAppNumber(settings.whatsapp))} />
             <WhyShop codEnabled={settings.codEnabled} />
           </div>
