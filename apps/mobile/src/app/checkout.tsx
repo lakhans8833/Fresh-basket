@@ -50,7 +50,7 @@ export default function Checkout() {
   const cart = useCart();
   const { paymentMethods, settings, error: settingsError, reload: reloadSettings } = useSettings();
 
-  const addresses = useFetch<{ addresses: Address[] }>(auth.signedIn ? "/api/me/addresses" : null, [auth.signedIn]);
+  const addresses = useFetch<{ addresses: Address[] }>(auth.signedIn ? "/api/me/addresses" : null, [auth.profile?.id]);
   const slots = useFetch<{ slots: SlotOption[] }>("/api/delivery/slots");
 
   const [addressId, setAddressId] = useState<string | null>(null);
@@ -97,12 +97,18 @@ export default function Checkout() {
 
   useEffect(() => {
     if (dates.length === 0) return;
-    if (!date || !dates.some((d) => d.date === date)) {
+    const day = dates.find((d) => d.date === date);
+    // No date yet, the date went away, or the chosen slot has since closed / filled up (e.g. after the
+    // store refused the order for it): move to the next open slot, as the website does.
+    const chosenOpen = day?.slots.some((s) => s.slotId === slotId && s.available);
+    if (!day || (slotId && !chosenOpen)) {
+      const sameDay = day?.slots.find((s) => s.available);
+      if (day && sameDay) return setSlotId(sameDay.slotId);
       const first = dates.find((d) => d.slots.some((s) => s.available)) ?? dates[0]!;
       setDate(first.date);
       setSlotId(first.slots.find((s) => s.available)?.slotId ?? null);
     }
-  }, [dates, date]);
+  }, [dates, date, slotId]);
 
   useEffect(() => {
     if (!payment && paymentMethods.length > 0) setPayment(paymentMethods.includes("cod") && paymentMethods.length === 1 ? "cod" : paymentMethods[0]!);
@@ -181,7 +187,9 @@ export default function Checkout() {
         ? "We don't deliver to this PIN code yet"
         : q.issues.some((i) => i.code === "BELOW_MIN_ORDER")
           ? "Your order is below the minimum order value"
-          : "Some items in your basket need attention",
+          : q.issues.every((i) => i.code === "COUPON_INVALID")
+            ? "This coupon can't be used — remove it to continue"
+            : "Some items in your basket need attention",
     );
   }
 
@@ -450,6 +458,12 @@ export default function Checkout() {
             <View style={{ opacity: quoteLoading ? 0.55 : 1 }}>
               <PriceRow label="Subtotal" value={q.subtotal} />
               {q.discount > 0 ? <PriceRow label={`Discount (${q.couponCode})`} value={q.discount} tone="discount" /> : null}
+              {cart.couponCode && q.issues.some((i) => i.code === "COUPON_INVALID") ? (
+                <View style={{ marginVertical: 6, gap: 6 }}>
+                  <InlineMessage tone="warning">{quote?.messages._coupon ?? `Coupon ${cart.couponCode} can't be used on this order.`}</InlineMessage>
+                  <Button label={`Remove coupon ${cart.couponCode}`} size="sm" variant="outline" onPress={() => cart.setCoupon(null)} />
+                </View>
+              ) : null}
               <PriceRow
                 label="Delivery"
                 value={q.deliveryFee}
@@ -457,7 +471,7 @@ export default function Checkout() {
                 tone={pincode && q.deliveryFee === 0 ? "free" : undefined}
               />
               <PriceRow label="Total" value={q.total} emphasis />
-              {Object.entries(quote?.messages ?? {}).map(([k, m]) => (
+              {Object.entries(quote?.messages ?? {}).filter(([k]) => k !== "_coupon" || !cart.couponCode).map(([k, m]) => (
                 <View key={k} style={{ marginTop: 8 }}>
                   <InlineMessage tone="warning">{k.startsWith("_") ? m : `${nameOf(k) ?? "Item"}: ${m}`}</InlineMessage>
                 </View>

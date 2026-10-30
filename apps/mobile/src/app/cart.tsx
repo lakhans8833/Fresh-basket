@@ -53,7 +53,10 @@ export default function CartScreen() {
   const lineTotal = (variantId: string) => quote?.lines.find((l) => l.variantId === variantId)?.lineTotal;
   const cartLevelMessages = Object.entries(messages).filter(([k]) => k === "_cart" || k === "_slot");
   const couponMessage = messages._coupon;
-  const canCheckout = !!quote && quote.ok && !quoteLoading && !quoteError;
+  // Without a PIN code the server can't apply an area's minimum, so check the store-wide one here
+  // (as the website does) instead of letting checkout refuse it later.
+  const shortBy = !cart.location && quote && q?.minOrder ? q.minOrder - (quote.subtotal - quote.discount) : 0;
+  const canCheckout = !!quote && quote.ok && !quoteLoading && !quoteError && shortBy <= 0;
 
   const applyCoupon = () => {
     const c = code.trim();
@@ -201,6 +204,7 @@ export default function CartScreen() {
               <PriceRow label="Total" value={quote.total} emphasis />
             </View>
           )}
+          {shortBy > 0 ? <InlineMessage tone="warning">{`Minimum order is ${formatINR(q!.minOrder!)}. Add ${formatINR(shortBy)} more.`}</InlineMessage> : null}
           {cartLevelMessages.map(([k, m]) => (
             <View key={k} style={{ marginTop: 10 }}>
               <InlineMessage tone="warning">{m}</InlineMessage>

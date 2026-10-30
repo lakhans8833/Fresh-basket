@@ -22,6 +22,7 @@ test name where a repository test exists.
 | OPEN-08 | P3 | SEO | Two live domains each declare themselves canonical (duplicate content) | live `<link rel=canonical>` on both | Owner: set `NEXT_PUBLIC_APP_URL=https://fresh-basket-veg.vercel.app` on the `fresh-basket` project, redeploy |
 | OPEN-09 | P3 | Not-found pages | Unknown product/category/order URLs show "Page not found" but with HTTP 200 (pages are `noindex`) — caused by streaming with `loading.tsx` | `curl -I` locally → 200 | Known, deferred (low impact) |
 | OPEN-10 | P3 | Catalogue | Capsicum out of stock (all packs 0); Spinach 1 kg pack 0 | `PRICE_CATALOG_AUDIT.csv` | Info — restock in Admin → Inventory |
+| OPEN-11 | P3 | Guest WhatsApp orders | One guest order can hold up to 50 lines × 20 packs for 12 h; fake orders can tie up stock (now capped at 12 guest orders per network per day) | audit round 6 | Owner: choose a maximum guest order (e.g. ₹3,000 or 30 packs) and/or a shorter hold |
 
 ## B. Fixed in this audit (branch `audit/report-and-deps`, not yet deployed)
 
@@ -38,6 +39,40 @@ test name where a repository test exists.
 | --- | --- | --- | --- | --- | --- |
 | BUG-064 | P2 | `apps/web/next.config.ts` (CSP) | The CSP allowed `https://<host>` built from the Supabase hostname, dropping the scheme and port: with a self-hosted/local Supabase (`http://host:54321`) **every sign-in request was blocked**. Hosted Supabase (live) was not affected | CSP uses the project's real origin (scheme + port) for `connect-src`/`img-src` | email code 20/20, sign-up code 7/7, password + forgot password 28/28, admin session refresh OK, unconfirmed account OK — all against a Supabase-mode build with fake GoTrue servers |
 | BUG-065 | P3 (test) | `e2e/whatsapp.py`, `e2e/resend_confirmation.py` | Tests out of date: used PIN 121006 as "not served" (it is served in Faridabad); expected an old unconfirmed-account message | Tests updated; both PASS; WhatsApp order test added to the regression | WHATSAPP E2E OK, RESEND CONFIRMATION E2E OK |
+
+## B3. Audit round 6 (31 Oct) — three independent reviews (orders/payments/database, sign-in/security, app + website screens)
+
+No P0/P1 was found. Fixed (branch `fix/audit-round6`):
+
+| ID | Sev | Where | Problem | Fix | Verified |
+| --- | --- | --- | --- | --- | --- |
+| BUG-066 | P2 | `release_expired_reservations()` (migration `20261031000001`), `lib/orders.ts` | Releasing several expired unpaid orders locked their products order by order; a checkout locking the same products in id order could **deadlock** → checkout 500 (reproduced: `deadlock detected`) | Release locks all affected products, packs and coupons in id order first; checkout ignores a failed release and retries once on a deadlock | `test/deep-check-5`: fails with the old function (`deadlock detected`), passes now |
+| BUG-067 | P2 (security) | `api/auth/email` | Anyone could use up an address's 15 codes/hour from other networks and **lock its owner out** of sign-in codes | Past the hourly limit, each wider network (IPv6 /48, IPv4 address) still gets 2 codes an hour for the address | `test/auth-email` (new case) |
+| BUG-068 | P2 | `api/whatsapp-orders` | Guests (unverified) could place WhatsApp orders all day from one network, each holding stock for 12 h | Daily cap of 12 guest WhatsApp orders per network (signed-in customers unaffected); per-order size cap left as an owner decision (OPEN-11) | review + regression `whatsapp.py` |
+| BUG-069 | P3 | `orders.order_number` default | `lpad(n, 5)` cut numbers above 99 999 → repeated order numbers, failed checkouts | `next_order_number()` keeps every digit | `test/deep-check-5` (99999 → 100000 → 100001) |
+| BUG-070 | P3 | `lib/notify/whatsapp.ts` | A failed WhatsApp update was retried hours later even if the order had been **cancelled** or had moved on ("out for delivery" for a cancelled order) | Retries skip cancelled orders and steps the order has passed (logged as skipped) | `test/deep-check-5` |
+| BUG-071 | P3 | `api/admin/orders/[id]`, order page | Staff (not admin) could mark a refund as completed | Closing a refund is admin-only (button hidden for staff); staff can still record cash collected | `test/deep-check-5` (staff 403, admin 200) |
+| BUG-072 | P3 | `api/payments/razorpay/verify` | An authorised payment was captured even for an order the customer had cancelled → money taken, manual refund | Captured only while the order waits for it (or was released for late payment, which revives it) | review |
+| BUG-073 | P3 | `lib/http.ts` | Rate-limit memory never shrank; UPI-reference limit per order id (unbounded keys); `x-real-ip` trusted on any host | Old windows pruned; limit per network; `x-real-ip` only on Vercel, else the proxy's address | unit tests |
+| BUG-074 | P2 | Website checkout | A coupon that can't be used didn't stop checkout — the whole form was filled, then the order was refused | Place-order disabled with "This coupon can't be used… remove it" | lint/tsc, browser suites |
+| BUG-075 | P3 | Website checkout / pay page | No "Try again" when checkout failed to load; refund/manual-check message vanished after 0.9 s | Retry button; the payment message stays with a "View order" button | review |
+| BUG-076 | P2 | App sign-in state | Opening the app offline (or during a server error) showed a signed-in customer as **signed out** until restart | Last profile kept on the phone, refreshed when the app comes back; 401 still signs out | tsc, app smoke/auth |
+| BUG-077 | P2 | App lists (orders, addresses, buy again) | After switching accounts the previous account's orders showed (and "Reorder" worked) until the new list loaded; a load error could hide behind old data | Lists forget the old result when the account/request changes | tsc, app smoke |
+| BUG-078 | P3 | App checkout | A slot refused as full/closed stayed selected; invalid coupon gave "items need attention" with no way to remove it | Moves to the next open slot; coupon message + "Remove coupon" | tsc |
+| BUG-079 | P3 | App basket | Without a PIN code the store-wide minimum wasn't checked until checkout | "Minimum order is ₹X. Add ₹Y more." in the basket | tsc |
+| BUG-080 | P3 | App address form | Typing while the PIN was being checked was overwritten; a state left from an earlier PIN wasn't replaced | Result applied to the current form; mismatching state replaced | tsc |
+| BUG-081 | P3 | App | "Next delivery slot" label cached for the whole session; basket bar used prices from when items were added; order times in the phone's time zone | Label refreshed every 3 min; bar uses the server quote's prices; times shown in IST | tsc, app smoke |
+
+**New feature (owner request, 31 Oct): refunds and replacements after delivery.** The returns policy promised a
+refund or replacement for missing/damaged/wrong items, but there was no way to record one. Admin → order → "Problems
+after delivery": choose items and quantities, refund amount (admin only; at most the items' value and what was paid)
+or a replacement, and the reason; then "Mark refund sent" / "Mark delivered". The customer sees it on the website and
+app order pages. Migration `20261031000002_order_adjustments.sql`; tests `test/after-delivery`, `e2e/after_delivery.py`.
+
+Reported and **not changed** (decisions/hardening, see `SECURITY_REPORT.md`): sign-in links open without a
+confirmation step (login CSRF, P3), sign-up says when an address already has an account (P3), the database
+connection doesn't pin Supabase's certificate (P3), the app keeps its Supabase session in AsyncStorage rather than
+the secure store (P3), possible double order screen after paying on Android (needs a device test).
 
 ## C. Fixed and deployed (PR #19 – #23, 26–28 Oct)
 
@@ -104,5 +139,5 @@ undone by "set kilos" (BUG-052, P1), impossible delivery dates / out-of-range co
 cart drawer trapped under the header blur (BUG-058, P2), and logo/top-bar layout on small phones (BUG-059, P3). Each
 has a regression test (`test/deep-check-fixes`, `e2e/admin_charts.py`, `e2e/shopper_features.py`, `e2e/flow.py`).
 
-**Totals:** 63 bugs fixed (59 deployed + 4 in this audit branch) · 10 open items, all needing owner data,
-configuration or a decision.
+**Totals:** 81 bugs fixed (65 deployed by 30 Oct + 16 in audit round 6) · open items need owner data,
+configuration or a decision (section A, plus OPEN-11: maximum size of a guest WhatsApp order).

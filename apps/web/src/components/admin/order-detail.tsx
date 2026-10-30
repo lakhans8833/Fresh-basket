@@ -31,6 +31,166 @@ interface AdminOrder extends Order {
   notificationSetup?: { configured: boolean; allEventsReady: boolean; missing: string[] };
 }
 
+/**
+ * After delivery: something arrived missing, damaged, spoiled or wrong → record a refund (admin) or a
+ * replacement (staff), per the returns policy. The customer sees these on their order page.
+ */
+function AfterDeliveryCard({ order, onDone }: { order: AdminOrder; onDone: (o: AdminOrder) => void }) {
+  const { role } = useAdmin();
+  const toast = useToast();
+  const uid = useId();
+  const isAdmin = role === "admin";
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<"refund" | "replacement">(isAdmin ? "refund" : "replacement");
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // How many of each line are still open to claim (earlier refunds/replacements count).
+  const claimed = new Map<string, number>();
+  for (const a of order.adjustments) for (const it of a.items) claimed.set(it.itemId, (claimed.get(it.itemId) ?? 0) + it.quantity);
+  const left = (id: string, q: number) => Math.max(0, q - (claimed.get(id) ?? 0));
+  const chosen = order.items.filter((it) => (qty[it.id] ?? 0) > 0);
+  const chosenValue = chosen.reduce((s, it) => s + it.unitPrice * (qty[it.id] ?? 0), 0);
+  const canRefund = order.paymentStatus === "paid" || order.paymentStatus === "cod_collected";
+
+  async function save() {
+    setErr(null);
+    const paise = Math.round(Number(amount || "0") * 100);
+    if (chosen.length === 0) return setErr("Choose the items that were missing, damaged or wrong.");
+    if (kind === "refund" && !(paise > 0)) return setErr("Enter the amount to refund.");
+    if (reason.trim().length < 3) return setErr("Say briefly what was wrong.");
+    setBusy("save");
+    try {
+      const r = await api<{ order: AdminOrder }>(`/api/admin/orders/${order.id}/adjustments`, {
+        method: "POST",
+        json: { kind, items: chosen.map((it) => ({ itemId: it.id, quantity: qty[it.id] })), amount: kind === "refund" ? paise : 0, reason: reason.trim() },
+      });
+      onDone(r.order);
+      toast(kind === "refund" ? "Refund recorded — send the money, then mark it sent" : "Replacement recorded");
+      setOpen(false);
+      setQty({});
+      setAmount("");
+      setReason("");
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function complete(id: string, k: string) {
+    setBusy(id);
+    try {
+      const r = await api<{ order: AdminOrder }>(`/api/admin/orders/${order.id}/adjustments/${id}`, { method: "PATCH", json: { status: "done" } });
+      onDone(r.order);
+      toast(k === "refund" ? "Refund marked as sent" : "Replacement marked as delivered");
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card aria-labelledby={`${uid}-h`}>
+      <CardHeader id={`${uid}-h`} title="Problems after delivery" />
+      <div className="space-y-4 px-5 py-4 sm:px-6">
+        {order.adjustments.length ? (
+          <ul className="divide-y divide-line rounded-xl border border-line">
+            {order.adjustments.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-semibold text-ink">
+                    {a.kind === "refund" ? `Refund ${formatINR(a.amount)}` : "Replacement"} ·{" "}
+                    <span className={a.status === "done" ? "text-leaf-600" : "text-amber"}>
+                      {a.status === "done" ? (a.kind === "refund" ? "sent" : "delivered") : a.kind === "refund" ? "to send" : "to deliver"}
+                    </span>
+                  </p>
+                  <p className="text-ink-soft">{a.items.map((it) => `${it.quantity} × ${it.name} (${it.label})`).join(", ")}</p>
+                  <p className="text-muted">{a.reason} · {formatDateTime(a.createdAt)}</p>
+                </div>
+                {a.status === "pending" && (a.kind === "replacement" || isAdmin) ? (
+                  <Button size="sm" variant="outline" loading={busy === a.id} onClick={() => complete(a.id, a.kind)}>
+                    {a.kind === "refund" ? "Mark refund sent" : "Mark delivered"}
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">Something missing, damaged, spoiled or wrong? Record a refund or a replacement here — the customer sees it on their order page.</p>
+        )}
+
+        {order.status === "delivered" && !open ? (
+          <Button variant="outline" onClick={() => setOpen(true)}><RotateCcw className="size-4" aria-hidden /> Record a refund or replacement</Button>
+        ) : null}
+
+        {open ? (
+          <div className="space-y-4 rounded-xl border border-line bg-sage-50/50 p-4">
+            <fieldset>
+              <legend className="text-sm font-semibold text-ink">What will you do?</legend>
+              <div className="mt-2 flex flex-wrap gap-4 text-sm">
+                <label className="inline-flex items-center gap-2">
+                  <input type="radio" name={`${uid}-kind`} checked={kind === "refund"} disabled={!isAdmin || !canRefund} onChange={() => setKind("refund")} /> Refund
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input type="radio" name={`${uid}-kind`} checked={kind === "replacement"} onChange={() => setKind("replacement")} /> Replacement (send again)
+                </label>
+              </div>
+              {!isAdmin ? <p className="mt-1 text-xs text-muted">Only an admin can record a refund.</p> : !canRefund ? <p className="mt-1 text-xs text-muted">A refund needs the payment first: record the cash as collected.</p> : null}
+            </fieldset>
+            <fieldset>
+              <legend className="text-sm font-semibold text-ink">Which items, how many?</legend>
+              <ul className="mt-2 space-y-2">
+                {order.items.map((it) => {
+                  const max = left(it.id, it.quantity);
+                  return (
+                    <li key={it.id} className="flex items-center gap-3 text-sm">
+                      <label htmlFor={`${uid}-q-${it.id}`} className="min-w-0 flex-1">
+                        <span className="font-medium text-ink">{it.productName}</span> <span className="text-muted">({it.variantLabel}) · {formatINR(it.unitPrice)} each · {max} of {it.quantity} open</span>
+                      </label>
+                      <div className="w-20 shrink-0">
+                      <Input
+                        id={`${uid}-q-${it.id}`}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={max}
+                        disabled={max === 0}
+                        value={qty[it.id] ?? 0}
+                        onChange={(e) => setQty((q) => ({ ...q, [it.id]: Math.max(0, Math.min(max, Math.floor(Number(e.target.value) || 0))) }))}
+                      />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </fieldset>
+            {kind === "refund" ? (
+              <div>
+                <label htmlFor={`${uid}-amt`} className="text-sm font-semibold text-ink">Refund amount (₹)</label>
+                <div className="mt-1 w-40"><Input id={`${uid}-amt`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder={chosenValue ? String(chosenValue / 100) : "0"} /></div>
+                <p className="mt-1 text-xs text-muted">Value of the chosen items: {formatINR(chosenValue)} (the most you can refund for them).</p>
+              </div>
+            ) : null}
+            <div>
+              <label htmlFor={`${uid}-why`} className="text-sm font-semibold text-ink">What was wrong?</label>
+              <Textarea id={`${uid}-why`} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={2} placeholder="e.g. 2 tomatoes squashed, photo on WhatsApp" className="mt-1" />
+            </div>
+            {err ? <Notice tone="error">{err}</Notice> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="dark" loading={busy === "save"} onClick={save}>Save</Button>
+              <Button variant="ghost" onClick={() => { setOpen(false); setErr(null); }}>Cancel</Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
 const NOTIFY_LABEL: Record<string, string> = { confirmed: "Order confirmed", packed: "Packed", out_for_delivery: "Out for delivery", delivered: "Delivered" };
 
 /** Admin confirms a UPI payment after checking the bank / UPI business app. Never automatic. */
@@ -92,7 +252,7 @@ type Pending = { kind: "status"; to: OrderStatus } | { kind: "payment"; to: "cod
 
 export function AdminOrderDetail({ id }: { id: string }) {
   const toast = useToast();
-  const { storeName } = useAdmin();
+  const { storeName, role } = useAdmin();
   const { data, setData, error, reload } = useAdminData<{ order: AdminOrder }>(`/api/admin/orders/${id}`);
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState("");
@@ -122,7 +282,7 @@ export function AdminOrderDetail({ id }: { id: string }) {
   const forward = transitions.filter((t) => t !== "cancelled");
   const canCancel = transitions.includes("cancelled");
   const canCollect = o.paymentStatus === "cod_pending" && o.status === "delivered";
-  const canRefund = o.paymentStatus === "refund_pending";
+  const canRefund = o.paymentStatus === "refund_pending" && role === "admin"; // closing a refund is admin-only
 
   function open(p: Pending) {
     setPending(p);
@@ -250,6 +410,8 @@ export function AdminOrderDetail({ id }: { id: string }) {
                 <Row label="Total" value={formatINR(o.total)} className="pt-1.5 text-base font-semibold text-forest-900" />
               </dl>
             </Card>
+
+            {o.status === "delivered" || o.adjustments.length ? <AfterDeliveryCard order={o} onDone={(n) => setData({ order: n })} /> : null}
 
             <Card aria-labelledby="timeline-h">
               <CardHeader id="timeline-h" title="Timeline" />

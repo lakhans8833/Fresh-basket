@@ -213,6 +213,22 @@ export default function OrderDetail() {
           )}
         </Card>
 
+        {order.adjustments?.length ? (
+          <Card title="Refunds & replacements">
+            {order.adjustments.map((a) => (
+              <View key={a.id} style={{ paddingVertical: 6, gap: 2 }}>
+                <Text style={styles.stepTitle}>
+                  {a.kind === "refund"
+                    ? `Refund of ${formatINR(a.amount)} — ${a.status === "done" ? "sent" : "being processed"}`
+                    : `Replacement — ${a.status === "done" ? "delivered" : "on its way"}`}
+                </Text>
+                <Text style={type.small}>{a.items.map((it) => `${it.quantity} × ${it.name} (${it.label})`).join(", ")}</Text>
+                <Text style={type.small}>{a.reason}</Text>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         <Card title="Delivery">
           <View style={[styles.rowBetween, { marginBottom: 10, justifyContent: "flex-start", gap: 8 }]}>
             <Clock size={16} color={colors.leaf600} />

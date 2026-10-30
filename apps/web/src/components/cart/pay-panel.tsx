@@ -42,6 +42,7 @@ export function PayPanel({ order, payment, token, returnToApp, storeName }: Prop
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<"paid" | "pending" | null>(null);
+  const [attention, setAttention] = useState<string | null>(null);
   const left = useCountdown(order.expiresAt);
   const q = token ? `?t=${encodeURIComponent(token)}` : "";
 
@@ -76,18 +77,19 @@ export function PayPanel({ order, payment, token, returnToApp, storeName }: Prop
           if (["paid", "paid_late", "already_processed"].includes(r.status)) finish("paid");
           else if (r.status === "pending_confirmation") finish("pending");
           else {
-            // refund_required / amount_mismatch: never show "Payment confirmed" for these.
-            setError(
+            // refund_required / amount_mismatch: never show "Payment confirmed" for these — and stay on
+            // this screen so the customer can read what happens next.
+            setBusy(null);
+            setAttention(
               r.status === "refund_required"
                 ? "We received your payment, but this order can no longer be completed. Your refund will be processed — see the order page."
                 : "We couldn't confirm this payment automatically. Our team will check it — see the order page.",
             );
-            finish("pending");
           }
         } catch (e) {
-          // The webhook will still confirm a genuine payment; send the customer to the order page.
-          setError((e as Error).message);
-          finish("pending");
+          // The webhook will still confirm a genuine payment; point the customer to the order page.
+          setBusy(null);
+          setAttention(`${(e as Error).message} If money was taken, your order page will update shortly.`);
         }
       },
     });
@@ -121,7 +123,14 @@ export function PayPanel({ order, payment, token, returnToApp, storeName }: Prop
     <div className="container-page grid min-h-[60vh] place-items-center py-10">
       {payment?.provider === "razorpay" ? <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" /> : null}
       <div className="w-full max-w-md rounded-[1.75rem] border border-line bg-white p-6 text-center shadow-[var(--shadow-card)] sm:p-8">
-        {done ? (
+        {attention ? (
+          <div className="py-6" role="alert">
+            <XCircle className="mx-auto size-14 text-amber" aria-hidden />
+            <h1 className="mt-4 text-2xl font-semibold text-forest-900">About your payment</h1>
+            <p className="mt-3 text-ink-soft">{attention}</p>
+            <ButtonLink href={returnToApp ? `freshbasket://orders/${order.id}` : `/orders/${order.id}`} variant="dark" className="mt-6">View order</ButtonLink>
+          </div>
+        ) : done ? (
           <div className="py-6" role="status">
             <CheckCircle2 className="mx-auto size-14 text-leaf-500" aria-hidden />
             <h1 className="mt-4 text-2xl font-semibold text-forest-900">{done === "paid" ? "Payment confirmed" : "Confirming your payment…"}</h1>

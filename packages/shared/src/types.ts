@@ -166,6 +166,8 @@ export interface Profile {
 }
 
 export interface OrderItem {
+  /** order line id */
+  id: string;
   variantId: string | null;
   productId: string | null;
   productName: string;
@@ -180,6 +182,20 @@ export interface OrderEvent {
   status: OrderStatus;
   note: string | null;
   createdAt: string;
+}
+
+/** A problem after delivery, put right by a refund or a replacement (see the returns policy). */
+export interface OrderAdjustment {
+  id: string;
+  kind: "refund" | "replacement";
+  items: { itemId: string; name: string; label: string; quantity: number }[];
+  /** refund: paise given back; replacement: 0 */
+  amount: Paise;
+  reason: string;
+  /** refund: "pending" until the money is sent; replacement: until it's delivered */
+  status: "pending" | "done";
+  createdAt: string;
+  doneAt: string | null;
 }
 
 export interface Order {
@@ -211,6 +227,8 @@ export interface Order {
   paymentLinkUrl: string | null;
   /** Customer agreed to WhatsApp order updates. */
   whatsappUpdates: boolean;
+  /** Refunds / replacements recorded after delivery. */
+  adjustments: OrderAdjustment[];
 }
 
 export interface QuoteResponse {

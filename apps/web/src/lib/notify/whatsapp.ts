@@ -21,6 +21,8 @@ import { trackUrlFor } from "../payments/start";
  */
 
 export type NotifyEvent = "confirmed" | "packed" | "out_for_delivery" | "delivered";
+const STEP: Record<string, number> = { placed: 1, packed: 2, out_for_delivery: 3, delivered: 4 };
+const STEP_OF_EVENT: Record<NotifyEvent, number> = { confirmed: 1, packed: 2, out_for_delivery: 3, delivered: 4 };
 export type NotifyResult = "sent" | "failed" | "skipped" | "duplicate" | "disabled";
 
 export interface WhatsAppCloudConfig {
@@ -51,17 +53,27 @@ async function log(orderId: string, event: NotifyEvent, status: "skipped", error
 export async function notifyOrderEvent(
   orderId: string,
   event: NotifyEvent,
-  deps: { config?: WhatsAppCloudConfig; fetchImpl?: typeof fetch } = {},
+  deps: { config?: WhatsAppCloudConfig; fetchImpl?: typeof fetch; retry?: boolean } = {},
 ): Promise<NotifyResult> {
   const cfg = deps.config ?? env.whatsappCloud;
   const template = cfg.templates[event];
   if (!whatsappNotificationsEnabled(cfg) || !template) return "disabled";
   try {
-    const o = await queryOne<{ order_number: string; whatsapp_updates: boolean; phone: string | null; full_name: string | null }>(
-      "select order_number, whatsapp_updates, address->>'phone' as phone, address->>'fullName' as full_name from orders where id = $1",
+    const o = await queryOne<{ order_number: string; status: string; whatsapp_updates: boolean; phone: string | null; full_name: string | null }>(
+      "select order_number, status, whatsapp_updates, address->>'phone' as phone, address->>'fullName' as full_name from orders where id = $1",
       [orderId],
     );
     if (!o) return "skipped";
+    // A message about an order that was cancelled since — or, on a later retry, about a step the order
+    // has already moved past — would only confuse the customer.
+    if (o.status === "cancelled" || (deps.retry && (STEP[o.status] ?? 0) > STEP_OF_EVENT[event])) {
+      await query(
+        `update order_notifications set status = 'skipped', error = $3, updated_at = now()
+          where order_id = $1 and channel = 'whatsapp' and event = $2 and status in ('failed', 'sending')`,
+        [orderId, event, o.status === "cancelled" ? "Order was cancelled" : "Order has moved on to a later step"],
+      );
+      return "skipped";
+    }
     if (!o.whatsapp_updates) {
       await log(orderId, event, "skipped", "Customer did not opt in to WhatsApp updates");
       return "skipped";
@@ -168,7 +180,7 @@ export async function retryFailedNotifications(): Promise<number> {
         order by updated_at limit 10`,
     );
     for (const r of rows) {
-      if (env.whatsappCloud.templates[r.event]) await notifyOrderEvent(r.order_id, r.event);
+      if (env.whatsappCloud.templates[r.event]) await notifyOrderEvent(r.order_id, r.event, { retry: true });
     }
     return rows.length;
   } catch (e) {

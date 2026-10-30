@@ -54,13 +54,26 @@ made (no sign-in, no orders, no form submissions). No secrets or customer data w
 | S-10 | P1 | Stock multiplication through an admin edit (oversell) | PR #22 (BUG-013) |
 | S-11 | P2 | Phone app build tooling: 10 vulnerable dependency versions (4 high) | this branch: `npm audit fix` → 6 remain (see below) |
 
+## 3b. Audit round 6 (31 Oct) — fixed
+
+| ID | Sev | Finding | Fix |
+| --- | --- | --- | --- |
+| S-17 | P2 | Email sign-in codes: an address's hourly limit could be used up from other networks, locking its owner out | Past the limit each wider network still gets 2 an hour (BUG-067) |
+| S-18 | P2 | Unverified guests could place WhatsApp orders all day from one network (stock held 12 h each) | 12 per network per day (BUG-068); order-size cap = owner decision (OPEN-11) |
+| S-19 | P3 | Staff could close refunds | Admin only (BUG-071) |
+| S-20 | P3 | Rate limiter: unbounded memory, per-order-id keys, `x-real-ip` trusted off Vercel | BUG-073 |
+
 ## 4. Open risks
 
 | ID | Sev | Risk | Evidence | Action |
 | --- | --- | --- | --- | --- |
-| S-11 (rest) | P2 | 6 advisories remain in the **phone app's build tooling** (`@expo/cli`, `expo`, `expo-router`, `zod@3` inside `@expo/cli`, `query-string`, `decode-uri-component`). The app itself uses `zod@4.6.7` (not affected). Fixes need an Expo major upgrade (npm suggests SDK 54/58 lines) | `npm audit` in `apps/mobile` | Plan an Expo SDK upgrade and re-test the app; low runtime exposure (tooling) |
+| S-11 (rest) | P2 | 11 advisories (31 Oct; new: `deepmerge` via `@expo/config`) remain in the **phone app's build tooling** (`@expo/cli`, `expo`, `expo-router`, `zod@3` inside `@expo/cli`, `query-string`, `decode-uri-component`). The app itself uses `zod@4.6.7` (not affected). Fixes need an Expo major upgrade (npm suggests SDK 54/58 lines) | `npm audit` in `apps/mobile` | Plan an Expo SDK upgrade and re-test the app; low runtime exposure (tooling) |
 | S-12 | P1 (config) | Sign-up/sign-in emails depend on Supabase's built-in mailer (≈2/hour, link instead of code) until custom SMTP + templates are set | owner screenshot; Supabase dashboard | Owner: SMTP + `{{ .Token }}` templates; or set `SMTP_*` env (store sends codes) |
 | S-13 | P2 (config) | `CRON_SECRET` unset → cron 401 (safe: cron refuses without it) | live 401 | Owner sets it in Vercel |
 | S-14 | P3 | Not-found pages return HTTP 200 (with `noindex`) | local `curl -I` | Deferred |
 | S-15 | Info | Live database policies not inspected directly (project not in our Supabase access); they come from the same migrations the build applies | — | Owner can grant read access or run `get_advisors` in Supabase |
 | S-16 | Info | Admin accounts: no second factor in the app (Supabase supports MFA) | source review | Optional: enable Supabase MFA for admin accounts |
+| S-21 | P3 | Login CSRF: a sign-in/recovery link (`/auth/callback?token_hash=…`) signs the browser in at once, so someone could send their own link and have a victim use the attacker's account | review (round 6) | Add a "Continue as …?" confirmation (POST) before verifying — one extra tap on every email link; decide with the owner |
+| S-22 | P3 | Sign-up answers "account already exists" (409), so addresses can be checked | review / existing test | Supabase behaves the same; could send the owner an email instead — product decision |
+| S-23 | P3 | Database TLS: `rejectUnauthorized: false` for the Supabase pooler | `lib/db.ts` | Pin Supabase's CA certificate (download from Supabase → Database settings) and test on a preview first |
+| S-24 | P3 | Phone app keeps the Supabase session (refresh token) in AsyncStorage, not the secure store (risk on rooted phones; backups are off) | `apps/mobile/src/lib/auth.tsx` | Chunked SecureStore adapter (sessions exceed SecureStore's 2 KB per value) — test on a device |

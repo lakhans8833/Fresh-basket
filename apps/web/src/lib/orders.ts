@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, PREPAID_METHODS, stateMatchesPincode,
-  type Order, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE } from "@freshbasket/shared";
+  type Order, type OrderAdjustment, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE } from "@freshbasket/shared";
 import { asUser, pool, query, tx } from "./db";
 import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
@@ -35,15 +35,19 @@ export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   // Both lookups at once (on a pool they run in parallel; on one client they simply queue).
-  const [{ rows: items }, { rows: events }] = await Promise.all([
+  const [{ rows: items }, { rows: events }, { rows: adjustments }] = await Promise.all([
     db.query<{
-      order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
+      id: string; order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
       unit_price: number; quantity: number; line_total: number; image_url: string | null;
     }>("select * from order_items where order_id = any($1::uuid[]) order by product_name", [ids]),
     db.query<{ order_id: string; status: OrderStatus; note: string | null; created_at: Date }>(
       "select order_id, status, note, created_at from order_events where order_id = any($1::uuid[]) order by created_at, id",
       [ids],
     ),
+    db.query<{
+      id: string; order_id: string; kind: "refund" | "replacement"; items: OrderAdjustment["items"]; amount: number; reason: string;
+      status: "pending" | "done"; created_at: Date; done_at: Date | null;
+    }>("select id, order_id, kind, items, amount, reason, status, created_at, done_at from order_adjustments where order_id = any($1::uuid[]) order by created_at", [ids]),
   ]);
   return rows.map((r) => ({
     id: r.id,
@@ -71,12 +75,18 @@ export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
     items: items
       .filter((i) => i.order_id === r.id)
       .map((i) => ({
-        variantId: i.variant_id, productId: i.product_id, productName: i.product_name, variantLabel: i.variant_label,
+        id: i.id, variantId: i.variant_id, productId: i.product_id, productName: i.product_name, variantLabel: i.variant_label,
         unitPrice: i.unit_price, quantity: i.quantity, lineTotal: i.line_total, imageUrl: i.image_url,
       })),
     events: events
       .filter((e) => e.order_id === r.id)
       .map((e) => ({ status: e.status, note: e.note, createdAt: e.created_at.toISOString() })),
+    adjustments: adjustments
+      .filter((a) => a.order_id === r.id)
+      .map((a) => ({
+        id: a.id, kind: a.kind, items: a.items, amount: a.amount, reason: a.reason, status: a.status,
+        createdAt: a.created_at.toISOString(), doneAt: a.done_at ? a.done_at.toISOString() : null,
+      })),
   }));
 }
 
@@ -119,6 +129,23 @@ type AddressSnapshot = Order["address"];
 export class OrderRejected extends HttpError {
   constructor(message: string, public messages: Record<string, string>) {
     super(409, message, "ORDER_REJECTED", { messages });
+  }
+}
+
+/** Before a checkout: give abandoned holds back, but never fail the shopper's order because of it. */
+async function releaseExpiredQuietly(): Promise<void> {
+  await releaseExpired().catch((e) => console.error("[orders] releasing expired holds failed", e instanceof Error ? e.message : e));
+}
+
+/** Postgres aborted the transaction to break a lock cycle (40P01) — safe to run it once more. */
+const isDeadlock = (e: unknown) => typeof e === "object" && e !== null && (e as { code?: string }).code === "40P01";
+async function retryOnDeadlock<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!isDeadlock(e)) throw e;
+    await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+    return fn();
   }
 }
 
@@ -303,7 +330,7 @@ function rejectIfCancelled(r: { order: Order; created: boolean }) {
 }
 
 export async function placeOrder(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
-  return rejectIfCancelled(await placeOrderOnce(userId, input));
+  return rejectIfCancelled(await retryOnDeadlock(() => placeOrderOnce(userId, input)));
 }
 
 async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
@@ -318,7 +345,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
   const lastDay = addDays(today, settings.slotDaysAhead - 1);
   if (input.deliveryDate < today || input.deliveryDate > lastDay) throw badRequest("Please choose a delivery date shown at checkout.");
 
-  await releaseExpired();
+  await releaseExpiredQuietly();
 
   const existing = await query<{ id: string }>("select id from orders where user_id = $1 and idempotency_key = $2", [userId, input.idempotencyKey]);
   if (existing[0]) return { order: (await getOrderById(existing[0].id))!, created: false };
@@ -418,7 +445,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
  * Coupons need an account (per-customer limits can't be checked for guests).
  */
 export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
-  return rejectIfCancelled(await placeWhatsAppOrderOnce(userId, input));
+  return rejectIfCancelled(await retryOnDeadlock(() => placeWhatsAppOrderOnce(userId, input)));
 }
 
 async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
@@ -433,7 +460,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
   if (slotId && (deliveryDate < today || deliveryDate > addDays(today, settings.slotDaysAhead - 1))) {
     throw new OrderRejected("That delivery date is no longer available. Please choose a date and time again.", { _slot: "Choose a delivery date and time again." });
   }
-  await releaseExpired();
+  await releaseExpiredQuietly();
 
   const cu = input.customer;
   const address: AddressSnapshot = {

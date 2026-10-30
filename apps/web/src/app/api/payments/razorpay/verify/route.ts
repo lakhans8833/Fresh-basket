@@ -6,6 +6,7 @@ import { getOrderById } from "@/lib/orders";
 import { payToken } from "@/lib/tokens";
 import { capturePayment, fetchPayment, verifyCheckoutSignature } from "@/lib/payments/razorpay";
 import { markPaidFromVerifiedPayment } from "@/lib/payments/process";
+import { queryOne } from "@/lib/db";
 
 /**
  * Called by the checkout page after Razorpay's handler fires. The client callback alone
@@ -28,7 +29,12 @@ export const POST = route(async (req) => {
   }
 
   let payment = await fetchPayment(body.razorpay_payment_id).catch(() => null);
-  if (payment?.status === "authorized") payment = await capturePayment(payment.id, order.total).catch(() => payment);
+  // Capture only while the order can still use this payment: waiting for it, or released because the
+  // payment window ran out (a late payment revives it). For an order the customer or store cancelled, an
+  // uncaptured authorisation is voided by Razorpay on its own — capturing it would take money that then
+  // has to be refunded by hand.
+  const usable = order.status === "pending_payment" || (order.status === "cancelled" && (await expiredUnpaid(order.id)));
+  if (payment?.status === "authorized" && usable) payment = await capturePayment(payment.id, order.total).catch(() => payment);
   if (!payment || payment.status !== "captured" || payment.order_id !== body.razorpay_order_id) {
     // Not confirmed yet — the webhook will finalise it. The order page polls for status.
     return json({ status: "pending_confirmation" }, { status: 202 });
@@ -38,3 +44,11 @@ export const POST = route(async (req) => {
   });
   return json({ status: result });
 });
+
+async function expiredUnpaid(orderId: string): Promise<boolean> {
+  const r = await queryOne<{ ok: boolean }>(
+    "select cancelled_reason = 'Payment was not completed in time' as ok from orders where id = $1",
+    [orderId],
+  );
+  return Boolean(r?.ok);
+}

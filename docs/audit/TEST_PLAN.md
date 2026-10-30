@@ -1,5 +1,11 @@
 # Test Plan & Execution Status
 
+**Latest full run:** 31 Oct 2026 (audit round 6, branch `fix/audit-round6`): web unit/integration **237/237**, shared 52/52,
+QA plan 89/0, store 37/37, flow, checkout retry, customer/admin sweeps, cards 70/0, responsive + axe 333, keyboard 12,
+shopper 19/19, admin 5/5 + 17/17, WhatsApp order, race/API matrix, policy 35/35, deep_check_4 6/6, after delivery 14/14;
+Supabase-mode sign-in: email code 20/20, sign-up 7/7, password + recovery 28/28, session refresh OK, unconfirmed OK;
+app smoke 13/13, app auth 13/13. The table below is the 28 Oct baseline.
+
 **Final run:** 28 Oct 2026, 03:26 IST, branch `audit/report-and-deps` (= `main` PR #23 + audit fixes), local
 production build with the real migrations on a throwaway Postgres database; live checks read-only.
 Status: **PASS** ran and passed · **FAIL** ran and failed · **BLOCKED** needs access/data · **NOT RUN** (reason given).
@@ -37,6 +43,9 @@ Status: **PASS** ran and passed · **FAIL** ran and failed · **BLOCKED** needs 
 | `e2e/deep_check_4.py` | phone filter menus, drawer focus, toast vs cart bar, print, short screens | PASS 6/6 |
 | `apps/mobile/e2e/smoke.py` | app home, cards, stepper, basket bar, categories, product, buy again, orders | PASS 13/13 |
 | `apps/mobile/e2e/auth_mock.py` | app email code, sign-up code, password reset of earlier sign-up, Google button | PASS 13/13 |
+| `test/order-lifecycle` (31 Oct) | book → pack → out for delivery → deliver → cash; cancel by customer / store (incl. out for delivery); stock and coupon returned; UPI paid → refund pending → refunded; unpaid → failed; expiry; WhatsApp confirm / decline; other customer can't cancel | PASS 10/10 |
+| `test/after-delivery` + `e2e/after_delivery.py` (31 Oct) | refund / replacement after delivery: limits per item, value and amount paid; admin-only refunds; customers can't write them; admin records → marks sent; customer sees it (1280 / 390 px, axe 0) | PASS 4/4, 14/14 |
+| `test/deep-check-5` (31 Oct) | release vs checkout deadlock (fails with the old function), order numbers past 99 999, stale WhatsApp retries, refunds admin-only | PASS 6/6 |
 | `npm audit` | web production deps 0; app 6 (Expo tooling) | PASS (web) / see `SECURITY_REPORT.md` S-11 |
 
 ## 2b. Sign-in suites against a Supabase-mode build (fake GoTrue servers, 29 Oct)

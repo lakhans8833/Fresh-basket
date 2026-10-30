@@ -22,7 +22,11 @@ export const PATCH = route<{ params: Promise<{ id: string }> }>(async (req, { pa
   const id = (await params).id;
   const body = await parseBody(req, patchSchema);
   if ("status" in body) return json({ order: await adminUpdateOrderStatus(id, body.status, s.userId, body.note) });
-  if ("paymentStatus" in body) return json({ order: await adminUpdatePaymentStatus(id, body.paymentStatus, s.userId) });
+  if ("paymentStatus" in body) {
+    // Staff may record cash collected on delivery; closing a refund is money leaving the shop — admin only.
+    if (body.paymentStatus === "refunded" && s.profile.role !== "admin") throw forbidden("Only an admin can mark a refund as completed.");
+    return json({ order: await adminUpdatePaymentStatus(id, body.paymentStatus, s.userId) });
+  }
   if ("confirmUpi" in body) {
     // Marking money as received is an admin decision (staff can see orders but not confirm payments).
     if (s.profile.role !== "admin") throw forbidden("Only an admin can confirm UPI payments.");
