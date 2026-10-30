@@ -197,6 +197,33 @@ export function OrderDetail({
             )}
           </section>
 
+          {order.adjustments?.length ? (
+            <section aria-labelledby="fixes" className="rounded-[var(--radius-card)] border border-line bg-white p-5 sm:p-6">
+              <h3 id="fixes" className="text-xl font-semibold text-forest-900">Refunds &amp; replacements</h3>
+              <ul className="mt-3 space-y-3">
+                {order.adjustments.map((a) => (
+                  <li key={a.id} className="flex gap-3 rounded-2xl bg-sage-50 p-4 text-sm">
+                    <RotateCcw className="mt-0.5 size-5 shrink-0 text-leaf-600" aria-hidden />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">
+                        {a.kind === "refund"
+                          ? `Refund of ${formatINR(a.amount)} — ${a.status === "done" ? "sent" : "being processed"}`
+                          : `Replacement — ${a.status === "done" ? "delivered" : "on its way"}`}
+                      </p>
+                      <p className="text-ink-soft">{a.items.map((it) => `${it.quantity} × ${it.name} (${it.label})`).join(", ")}</p>
+                      <p className="text-muted">{a.reason}</p>
+                      {a.kind === "refund" && a.status === "done" ? (
+                        <p className="mt-1 text-muted">
+                          {order.paymentMethod === "razorpay" || order.paymentMethod === "razorpay_link" ? "Sent to your original payment method — your bank may take a few working days to show it." : "Paid back by the store as agreed with you."}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <section aria-labelledby="items" className="rounded-[var(--radius-card)] border border-line bg-white">
             <h3 id="items" className="px-5 pt-5 text-xl font-semibold text-forest-900 sm:px-6">Items</h3>
             <ul className="mt-3 divide-y divide-line">

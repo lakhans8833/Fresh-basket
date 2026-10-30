@@ -210,6 +210,21 @@ export const adminOrderStatusSchema = z.object({
   note: trimmed(300).optional().nullable(),
 });
 
+/** Admin: record a refund or replacement for items that arrived missing / damaged / wrong. */
+export const adminAdjustmentSchema = z
+  .object({
+    kind: z.enum(["refund", "replacement"]),
+    items: z.array(z.object({ itemId: z.string().uuid(), quantity: z.number().int().min(1).max(MAX_QTY_PER_LINE) })).min(1).max(50),
+    /** paise; refunds only */
+    amount: z.number().int().min(0).max(10_000_000),
+    reason: trimmed(300).min(3, "Say briefly what was wrong"),
+  })
+  .superRefine((a, ctx) => {
+    if (a.kind === "refund" && a.amount <= 0) ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter the amount to refund" });
+    if (a.kind === "replacement" && a.amount !== 0) ctx.addIssue({ code: "custom", path: ["amount"], message: "A replacement has no amount" });
+  });
+export type AdminAdjustmentInput = z.infer<typeof adminAdjustmentSchema>;
+
 export const adminDeliveryAreaSchema = z.object({
   pincode: pincodeSchema,
   areaName: trimmed(80).min(2),
