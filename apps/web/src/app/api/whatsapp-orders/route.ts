@@ -24,6 +24,9 @@ export const POST = route(async (req) => {
   if (!number) throw new HttpError(503, "WhatsApp ordering isn't set up yet. Please use the website checkout.");
 
   const session = await getSession().catch(() => null);
+  // Guests aren't verified: a daily cap per network stops one person filling the shop's stock with
+  // fake WhatsApp orders (each one holds stock until staff confirm or it expires).
+  if (!session) await rateLimit(`wa-order-day:${clientIp(req)}`, 12, 24 * 60 * 60_000);
   const { order, created } = await placeWhatsAppOrder(session?.userId ?? null, input);
   // (A retry matching an order cancelled meanwhile gets ORDER_CANCELLED from placeWhatsAppOrder.)
   const payLink = await ensurePaymentLink(order);

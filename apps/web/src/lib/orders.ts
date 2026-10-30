@@ -122,6 +122,23 @@ export class OrderRejected extends HttpError {
   }
 }
 
+/** Before a checkout: give abandoned holds back, but never fail the shopper's order because of it. */
+async function releaseExpiredQuietly(): Promise<void> {
+  await releaseExpired().catch((e) => console.error("[orders] releasing expired holds failed", e instanceof Error ? e.message : e));
+}
+
+/** Postgres aborted the transaction to break a lock cycle (40P01) — safe to run it once more. */
+const isDeadlock = (e: unknown) => typeof e === "object" && e !== null && (e as { code?: string }).code === "40P01";
+async function retryOnDeadlock<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!isDeadlock(e)) throw e;
+    await new Promise((r) => setTimeout(r, 50 + Math.random() * 150));
+    return fn();
+  }
+}
+
 export async function releaseExpired(): Promise<number> {
   const rows = await query<{ n: number }>("select release_expired_reservations() as n");
   const n = rows[0]?.n ?? 0;
@@ -303,7 +320,7 @@ function rejectIfCancelled(r: { order: Order; created: boolean }) {
 }
 
 export async function placeOrder(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
-  return rejectIfCancelled(await placeOrderOnce(userId, input));
+  return rejectIfCancelled(await retryOnDeadlock(() => placeOrderOnce(userId, input)));
 }
 
 async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{ order: Order; created: boolean }> {
@@ -318,7 +335,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
   const lastDay = addDays(today, settings.slotDaysAhead - 1);
   if (input.deliveryDate < today || input.deliveryDate > lastDay) throw badRequest("Please choose a delivery date shown at checkout.");
 
-  await releaseExpired();
+  await releaseExpiredQuietly();
 
   const existing = await query<{ id: string }>("select id from orders where user_id = $1 and idempotency_key = $2", [userId, input.idempotencyKey]);
   if (existing[0]) return { order: (await getOrderById(existing[0].id))!, created: false };
@@ -418,7 +435,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
  * Coupons need an account (per-customer limits can't be checked for guests).
  */
 export async function placeWhatsAppOrder(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
-  return rejectIfCancelled(await placeWhatsAppOrderOnce(userId, input));
+  return rejectIfCancelled(await retryOnDeadlock(() => placeWhatsAppOrderOnce(userId, input)));
 }
 
 async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrderInput): Promise<{ order: Order; created: boolean }> {
@@ -433,7 +450,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
   if (slotId && (deliveryDate < today || deliveryDate > addDays(today, settings.slotDaysAhead - 1))) {
     throw new OrderRejected("That delivery date is no longer available. Please choose a date and time again.", { _slot: "Choose a delivery date and time again." });
   }
-  await releaseExpired();
+  await releaseExpiredQuietly();
 
   const cu = input.customer;
   const address: AddressSnapshot = {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { addressInputSchema, type AddressInput } from "@shared/schemas";
-import { isValidPincode, stateForPincode } from "@shared/pincode";
+import { isValidPincode, stateForPincode, stateMatchesPincode } from "@shared/pincode";
 import type { Address } from "@shared/types";
 import { colors, fonts, HIT } from "@/theme";
 import { Chip } from "./Chip";
@@ -73,6 +73,10 @@ export function AddressForm({
 }) {
   const set = <K extends keyof AddressFormValues>(k: K, val: AddressFormValues[K]) => onChange({ ...values, [k]: val });
   const [pinHint, setPinHint] = useState<{ text: string; tone: "muted" | "success" | "danger" } | null>(null);
+  // The PIN check is a network round trip: apply its result to what the form holds *then*, not to the
+  // values from when it started (anything typed meanwhile must survive).
+  const latest = useRef({ values, onChange });
+  latest.current = { values, onChange };
 
   useEffect(() => {
     let cancelled = false;
@@ -86,10 +90,14 @@ export function AddressForm({
         if (cancelled) return;
         if (r.serviceable && r.area) {
           setPinHint({ text: `We deliver to ${r.area.areaName}, ${r.area.city}`, tone: "success" });
-          // Fill what the PIN tells us, like the website (only empty fields).
-          const state = values.state.trim() ? values.state : (stateForPincode(values.pincode) ?? values.state);
-          const city = values.city.trim() ? values.city : r.area.city;
-          if (state !== values.state || city !== values.city) onChange({ ...values, city, state });
+          // Fill what the PIN tells us, like the website: empty fields, and a state that doesn't match
+          // this PIN (e.g. left over from an earlier PIN) is replaced.
+          const cur = latest.current.values;
+          if (cur.pincode !== values.pincode) return;
+          const pinState = stateForPincode(cur.pincode);
+          const state = !cur.state.trim() || (pinState && !stateMatchesPincode(cur.state, cur.pincode)) ? (pinState ?? cur.state) : cur.state;
+          const city = cur.city.trim() ? cur.city : r.area.city;
+          if (state !== cur.state || city !== cur.city) latest.current.onChange({ ...cur, city, state });
         } else setPinHint({ text: "Sorry, we don't deliver to this PIN code yet.", tone: "danger" });
       })
       .catch(() => !cancelled && setPinHint(null));

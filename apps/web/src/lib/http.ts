@@ -80,8 +80,14 @@ export function route<C = unknown>(fn: Handler<C>): Handler<C> {
 const buckets = new Map<string, { n: number; reset: number }>();
 const tooMany = () => new HttpError(429, "Too many requests. Please wait a moment.", "RATE_LIMITED");
 
+let lastSweep = 0;
 function memoryHit(key: string, windowMs: number) {
   const now = Date.now();
+  // Drop finished windows now and then, so a long-running instance doesn't keep every key ever seen.
+  if (now - lastSweep > 60_000 || buckets.size > 50_000) {
+    lastSweep = now;
+    for (const [k, b] of buckets) if (b.reset < now) buckets.delete(k);
+  }
   const b = buckets.get(key);
   if (!b || b.reset < now) {
     const fresh = { n: 1, reset: now + windowMs };
@@ -92,7 +98,8 @@ function memoryHit(key: string, windowMs: number) {
   return b;
 }
 
-export async function rateLimit(key: string, limit: number, windowMs: number) {
+/** Counts one hit for `key`; returns the number of hits in the current window (429 above `limit`). */
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<number> {
   const local = memoryHit(key, windowMs);
   if (local.n > limit) throw tooMany();
   try {
@@ -118,6 +125,7 @@ export async function rateLimit(key: string, limit: number, windowMs: number) {
     if (e instanceof HttpError) throw e;
     console.warn("[rate-limit] shared counter unavailable, using this instance's memory only");
   }
+  return local.n;
 }
 
 /**
@@ -126,11 +134,12 @@ export async function rateLimit(key: string, limit: number, windowMs: number) {
  */
 export function clientIp(req: Request) {
   const h = req.headers;
-  const ip =
-    h.get("x-real-ip")?.trim() ||
-    h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    "local";
+  // x-real-ip is only trustworthy where the platform sets it (Vercel). Elsewhere a client could send
+  // its own, so use the address the nearest proxy appended (the last x-forwarded-for entry).
+  const forwarded = h.get("x-forwarded-for")?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+  const ip = process.env.VERCEL
+    ? h.get("x-real-ip")?.trim() || h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || forwarded[0] || "local"
+    : forwarded[forwarded.length - 1] || h.get("x-real-ip")?.trim() || "local";
   // Used for rate limits: one IPv6 connection owns a whole /64, so it counts as one caller.
   return ipLimitKey(ip);
 }

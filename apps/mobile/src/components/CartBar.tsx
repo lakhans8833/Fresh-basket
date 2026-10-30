@@ -12,9 +12,12 @@ import { colors, fonts } from "@/theme";
  */
 export function CartBar() {
   const router = useRouter();
-  const { lines, count, hydrated } = useCart();
+  const { lines, count, hydrated, quote } = useCart();
   if (!hydrated || count === 0) return null;
-  const total = lines.reduce((s, l) => s + l.quantity * (l.priceHint || 0), 0);
+  // Today's price from the server quote when it has the line (prices change); the price seen when the
+  // item was added only until the quote arrives.
+  const unit = new Map((quote?.quote.lines ?? []).map((q) => [q.variantId, q.unitPrice]));
+  const total = lines.reduce((s, l) => s + l.quantity * (unit.get(l.variantId) ?? l.priceHint ?? 0), 0);
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <Pressable

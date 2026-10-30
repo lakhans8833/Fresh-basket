@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "@shared/types";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, setAuthHandlers } from "./api";
+import { AppState } from "react-native";
+import { api, ApiError, setAuthHandlers } from "./api";
 import { secureStorage } from "./storage";
 
 export type AuthMode = "dev" | "supabase" | "unconfigured";
@@ -42,13 +43,23 @@ interface AuthState {
 }
 
 const DEV_TOKEN_KEY = "fb.devToken";
+const PROFILE_CACHE_KEY = "fb.profile";
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AuthMode | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const configErrorRef = useRef<string | null>(null);
+  configErrorRef.current = configError;
   const [ready, setReady] = useState(false);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfileState] = useState<Profile | null>(null);
+  // The last profile we loaded is kept on the phone, so a signed-in customer doesn't look signed out
+  // just because the store couldn't be reached when the app opened.
+  const setProfile = useCallback((p: Profile | null) => {
+    setProfileState(p);
+    void (p ? AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)) : AsyncStorage.removeItem(PROFILE_CACHE_KEY)).catch(() => undefined);
+  }, []);
+  const profileStale = useRef(false);
   const [configAttempt, setConfigAttempt] = useState(0);
   const [googleEnabled, setGoogleEnabled] = useState(false);
 
@@ -80,12 +91,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       const { profile } = await api<{ profile: Profile }>("/api/me");
+      profileStale.current = false;
       setProfile(profile);
       return profile;
-    } catch {
-      return null;
+    } catch (e) {
+      // Signed out on the server (401) → signed out here too (the 401 handler clears it). A network or
+      // server error → keep showing the account we last loaded and try again when the app comes back.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+      const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY).catch(() => null);
+      if (!cached) return null;
+      try {
+        const p = JSON.parse(cached) as Profile;
+        profileStale.current = true;
+        setProfileState(p);
+        return p;
+      } catch {
+        return null;
+      }
     }
-  }, [getToken]);
+  }, [getToken, setProfile]);
+
+  // Back in the app after a failed start (no network): load the account / store settings again.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (st) => {
+      if (st !== "active") return;
+      if (profileStale.current) void refreshProfile();
+      if (configErrorRef.current) setConfigAttempt((n) => n + 1);
+    });
+    return () => sub.remove();
+  }, [refreshProfile]);
 
   useEffect(() => {
     setAuthHandlers(getToken, () => {

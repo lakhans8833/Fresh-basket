@@ -45,7 +45,7 @@ describe("shared rate limit", () => {
     const hash = createHash("sha256").update(key).digest("hex");
     await pool.query("update public.rate_limits set reset_at = now() - interval '1 second' where key_hash = $1", [hash]);
     const b = await freshInstance();
-    await expect(b.rateLimit(key, 1, 60_000)).resolves.toBeUndefined();
+    await expect(b.rateLimit(key, 1, 60_000)).resolves.toBe(1); // first hit of the new window
   });
 
   it("is not reachable through the public API roles", async () => {

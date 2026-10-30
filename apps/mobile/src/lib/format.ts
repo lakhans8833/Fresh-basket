@@ -10,12 +10,12 @@ export function formatDateLabel(ymd: string): string {
   return `${days[dt.getUTCDay()]}, ${dt.getUTCDate()} ${months[dt.getUTCMonth()]}`;
 }
 
-/** ISO timestamp -> "14 Oct, 7:29 PM" in the device's local time */
+/** ISO timestamp -> "14 Oct, 7:29 PM" in India time (the shop's), whatever the phone's time zone. */
 export function formatDateTime(iso: string): string {
-  const dt = new Date(iso);
-  const h = dt.getHours();
-  const mm = String(dt.getMinutes()).padStart(2, "0");
-  return `${dt.getDate()} ${months[dt.getMonth()]}, ${h % 12 === 0 ? 12 : h % 12}:${mm} ${h >= 12 ? "PM" : "AM"}`;
+  const dt = new Date(new Date(iso).getTime() + 330 * 60_000); // IST = UTC+5:30, no daylight saving
+  const h = dt.getUTCHours();
+  const mm = String(dt.getUTCMinutes()).padStart(2, "0");
+  return `${dt.getUTCDate()} ${months[dt.getUTCMonth()]}, ${h % 12 === 0 ? 12 : h % 12}:${mm} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 export function statusTone(s: OrderStatus): "neutral" | "success" | "warning" | "danger" | "info" {

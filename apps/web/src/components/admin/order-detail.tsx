@@ -92,7 +92,7 @@ type Pending = { kind: "status"; to: OrderStatus } | { kind: "payment"; to: "cod
 
 export function AdminOrderDetail({ id }: { id: string }) {
   const toast = useToast();
-  const { storeName } = useAdmin();
+  const { storeName, role } = useAdmin();
   const { data, setData, error, reload } = useAdminData<{ order: AdminOrder }>(`/api/admin/orders/${id}`);
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState("");
@@ -122,7 +122,7 @@ export function AdminOrderDetail({ id }: { id: string }) {
   const forward = transitions.filter((t) => t !== "cancelled");
   const canCancel = transitions.includes("cancelled");
   const canCollect = o.paymentStatus === "cod_pending" && o.status === "delivered";
-  const canRefund = o.paymentStatus === "refund_pending";
+  const canRefund = o.paymentStatus === "refund_pending" && role === "admin"; // closing a refund is admin-only
 
   function open(p: Pending) {
     setPending(p);

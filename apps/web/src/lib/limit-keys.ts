@@ -13,6 +13,16 @@ export function ipLimitKey(ip: string): string {
   return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
 }
 
+/**
+ * The wider IPv6 network (/48) of a key from ipLimitKey; IPv4 keys come back unchanged. Not used as a
+ * limit on its own (a mobile carrier can put many customers in one /48), only to tell "the same
+ * place" apart from "anywhere else" — e.g. someone requesting codes for an address from far away.
+ */
+export function ipNetworkKey(ipKey: string): string {
+  const m = ipKey.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4}):([0-9a-f]{1,4}):[0-9a-f]{1,4}::\/64$/);
+  return m ? `${m[1]}:${m[2]}:${m[3]}::/48` : ipKey;
+}
+
 /** One mailbox = one key: lower-case, "+tag" removed, and Gmail's ignored dots removed. */
 export function emailLimitKey(email: string): string {
   const [local = "", domain = ""] = email.trim().toLowerCase().split("@");

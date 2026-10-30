@@ -58,6 +58,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   const [whatsappUpdates, setWhatsappUpdates] = useState(false);
   const [unavailableItems, setUnavailableItems] = useState<UnavailableItemPreference>("call");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadTry, setLoadTry] = useState(0);
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
   const [placeError, setPlaceError] = useState<{ message: string; messages?: Record<string, string> } | null>(null);
@@ -78,8 +79,8 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
         } else if (s.slots[0]) setDate(s.slots[0].date);
       })
       .catch((e) => setLoadError((e as Error).message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once (again after "Try again")
+  }, [loadTry]);
 
   // A new address starts with the name and mobile from the account, so nobody types them twice.
   const { profile } = useSession();
@@ -116,6 +117,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
     return (
       <div className="container-page py-12">
         <Notice tone="error" title="Checkout couldn't load">{loadError}</Notice>
+        <Button className="mt-4" variant="outline" onClick={() => { setLoadError(null); setLoadTry((n) => n + 1); }}>Try again</Button>
       </div>
     );
   }
@@ -133,6 +135,9 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
   const quote = data?.quote ?? null;
   const areaMissing = Boolean(pincode) && !loading && data && !data.area;
   const blockingIssue = quote?.issues.find((i) => i.code !== "COUPON_INVALID");
+  // The server refuses an order whose coupon can't be used (it never silently drops a discount the
+  // customer expects), so say so here instead of after the whole form is filled in.
+  const couponBlocked = Boolean(quote?.issues.some((i) => i.code === "COUPON_INVALID"));
 
   async function placeOrder() {
     // Synchronous guard: a double click fires twice before React re-renders the disabled button.
@@ -356,12 +361,13 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
               </ul>
               <CouponForm applied={quote?.couponCode ?? null} error={data?.messages._coupon} />
               {data?.messages._cart && pincode ? <Notice tone="warning">{data.messages._cart}</Notice> : null}
+              {couponBlocked ? <Notice tone="warning">This coupon can&apos;t be used on this order. Remove it (✕ above) to place your order.</Notice> : null}
               {placeError ? (
                 <Notice tone="error" title={placeError.message}>
                   {placeError.messages && Object.values(placeError.messages).some((m) => m !== placeError.message) ? <ul className="list-disc pl-4">{Object.entries(placeError.messages).filter(([, m]) => m !== placeError.message).map(([k, m]) => <li key={k}>{lines.find((l) => l.variantId === k)?.productName ? `${lines.find((l) => l.variantId === k)!.productName}: ` : ""}{m}</li>)}</ul> : null}
                 </Notice>
               ) : null}
-              <Button size="lg" variant="dark" className="w-full" loading={placing} disabled={placing || !quote || Boolean(blockingIssue && pincode) || !slotId || !method} onClick={placeOrder}>
+              <Button size="lg" variant="dark" className="w-full" loading={placing} disabled={placing || !quote || Boolean(blockingIssue && pincode) || couponBlocked || !slotId || !method} onClick={placeOrder}>
                 {placing ? "Placing order…" : method === "cod" ? <>Place order · {quote ? formatINR(quote.total) : ""}</> : <>Continue to payment <ArrowRight className="size-5" aria-hidden /></>}
               </Button>
               <p className="text-center text-xs text-muted">
