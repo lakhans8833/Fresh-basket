@@ -151,6 +151,7 @@ function AfterDeliveryCard({ order, onDone }: { order: AdminOrder; onDone: (o: A
                       <label htmlFor={`${uid}-q-${it.id}`} className="min-w-0 flex-1">
                         <span className="font-medium text-ink">{it.productName}</span> <span className="text-muted">({it.variantLabel}) · {formatINR(it.unitPrice)} each · {max} of {it.quantity} open</span>
                       </label>
+                      <div className="w-20 shrink-0">
                       <Input
                         id={`${uid}-q-${it.id}`}
                         type="number"
@@ -160,8 +161,8 @@ function AfterDeliveryCard({ order, onDone }: { order: AdminOrder; onDone: (o: A
                         disabled={max === 0}
                         value={qty[it.id] ?? 0}
                         onChange={(e) => setQty((q) => ({ ...q, [it.id]: Math.max(0, Math.min(max, Math.floor(Number(e.target.value) || 0))) }))}
-                        className="w-20"
                       />
+                      </div>
                     </li>
                   );
                 })}
@@ -170,7 +171,7 @@ function AfterDeliveryCard({ order, onDone }: { order: AdminOrder; onDone: (o: A
             {kind === "refund" ? (
               <div>
                 <label htmlFor={`${uid}-amt`} className="text-sm font-semibold text-ink">Refund amount (₹)</label>
-                <Input id={`${uid}-amt`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder={chosenValue ? String(chosenValue / 100) : "0"} className="mt-1 w-40" />
+                <div className="mt-1 w-40"><Input id={`${uid}-amt`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))} placeholder={chosenValue ? String(chosenValue / 100) : "0"} /></div>
                 <p className="mt-1 text-xs text-muted">Value of the chosen items: {formatINR(chosenValue)} (the most you can refund for them).</p>
               </div>
             ) : null}

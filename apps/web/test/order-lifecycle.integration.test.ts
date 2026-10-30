@@ -115,7 +115,7 @@ describe("prepaid orders and refunds", () => {
     const stock = await available();
     const { order } = await placeOrder(CUSTOMER, input({ paymentMethod: "upi" }));
     expect(order.status).toBe("pending_payment");
-    await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, "412345678901");
+    await adminConfirmUpiPayment(order.id, { id: ADMIN, email: null }, `4${String(Date.now()).slice(-11)}`); // unique UTR (one UTR confirms one order)
     let o = await adminGetOrder(order.id);
     expect([o.status, o.paymentStatus]).toEqual(["placed", "paid"]);
     await customerCancel(CUSTOMER, order.id);

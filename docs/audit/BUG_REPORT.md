@@ -63,6 +63,12 @@ No P0/P1 was found. Fixed (branch `fix/audit-round6`):
 | BUG-080 | P3 | App address form | Typing while the PIN was being checked was overwritten; a state left from an earlier PIN wasn't replaced | Result applied to the current form; mismatching state replaced | tsc |
 | BUG-081 | P3 | App | "Next delivery slot" label cached for the whole session; basket bar used prices from when items were added; order times in the phone's time zone | Label refreshed every 3 min; bar uses the server quote's prices; times shown in IST | tsc, app smoke |
 
+**New feature (owner request, 31 Oct): refunds and replacements after delivery.** The returns policy promised a
+refund or replacement for missing/damaged/wrong items, but there was no way to record one. Admin → order → "Problems
+after delivery": choose items and quantities, refund amount (admin only; at most the items' value and what was paid)
+or a replacement, and the reason; then "Mark refund sent" / "Mark delivered". The customer sees it on the website and
+app order pages. Migration `20261031000002_order_adjustments.sql`; tests `test/after-delivery`, `e2e/after_delivery.py`.
+
 Reported and **not changed** (decisions/hardening, see `SECURITY_REPORT.md`): sign-in links open without a
 confirmation step (login CSRF, P3), sign-up says when an address already has an account (P3), the database
 connection doesn't pin Supabase's certificate (P3), the app keeps its Supabase session in AsyncStorage rather than
