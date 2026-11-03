@@ -89,6 +89,8 @@ export interface WhatsAppOrder {
   payLink?: string | null;
   /** Secret tracking link for this order. */
   trackUrl?: string | null;
+  /** The store's admin page for this order (opens only for signed-in staff): confirm / cancel from the chat. */
+  storeUrl?: string | null;
   /** Chosen delivery day + slot, e.g. "Fri, 16 Oct · Morning, 07:00–10:00". */
   delivery?: string | null;
   /** What to do if an item isn't available, e.g. "Call me about unavailable items". */
@@ -158,6 +160,7 @@ export function buildWhatsAppOrderMessage(o: WhatsAppOrder): string {
     lines.push("");
     lines.push(`Track order: ${o.trackUrl}`);
   }
+  if (o.storeUrl) lines.push(`For the store (confirm / cancel): ${o.storeUrl}`);
   lines.push("");
   lines.push(o.delivery ? "Please confirm my order. Thank you!" : "Please confirm availability and delivery time. Thank you!");
   return lines.join("\n");

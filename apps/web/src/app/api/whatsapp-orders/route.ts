@@ -1,6 +1,7 @@
 import { buildWhatsAppOrderUrl, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, UNAVAILABLE_ITEM_LABEL, whatsappOrderSchema } from "@freshbasket/shared";
 import { clientIp, HttpError, json, parseBody, rateLimit, rateLimitCount, route } from "@/lib/http";
 import { getSession } from "@/lib/auth";
+import { env } from "@/lib/env";
 import { queryOne } from "@/lib/db";
 import { placeWhatsAppOrder } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
@@ -61,6 +62,8 @@ export const POST = route(async (req) => {
     paymentStatus: PAYMENT_STATUS_LABEL[order.paymentStatus],
     payLink,
     trackUrl,
+    // Staff tap this in the chat to open the order in Admin (sign-in required) and confirm or cancel it.
+    storeUrl: `${env.appUrl}/admin/orders/${order.id}`,
     ifUnavailable: order.unavailableItems ? UNAVAILABLE_ITEM_LABEL[order.unavailableItems].title : null,
     delivery: input.slotId ? `${new Date(`${order.deliveryDate}T12:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} · ${order.slotLabel}` : null,
   });
