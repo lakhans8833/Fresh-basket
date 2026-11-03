@@ -181,6 +181,14 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
         [d.stockGrams, productId, d.stockGramsLoaded ?? null],
       );
     }
+    // What the database now holds can differ from the form (values kept from changes made meanwhile):
+    // an MRP below today's price means nothing (same rule as Inventory), and an active product must keep a
+    // pack on sale.
+    await c.query("update product_variants set mrp = null where product_id = $1 and mrp is not null and mrp < price", [productId]);
+    const onSale = await c.query("select 1 from product_variants where product_id = $1 and active limit 1", [productId]);
+    if (d.active && onSale.rowCount === 0) {
+      throw conflict("Every pack size of this product is now switched off (one may have been switched off in Inventory meanwhile). Reload the page and keep at least one on sale.");
+    }
     return { id: productId };
   });
 }
@@ -247,11 +255,13 @@ export async function adminPatchInventory(
     }
     // Every pack of a product switched off here would leave an active product nobody can buy (and a
     // "not found" product page): refuse, as the product form does.
+    // (Only products where this save switched a pack off: a plain restock of a product already in that
+    // state isn't blocked.)
     const empty = await c.query<{ name: string }>(
       `select p.name from products p
         where p.active and p.id in (select product_id from product_variants where id = any($1::uuid[]))
           and not exists (select 1 from product_variants v where v.product_id = p.id and v.active)`,
-      [updates.map((u) => u.variantId)],
+      [updates.filter((u) => u.active === false).map((u) => u.variantId)],
     );
     if (empty.rows[0]) throw conflict(`Keep at least one pack size of ${empty.rows[0].name} on sale — or hide the whole product in Products.`);
     return { updated: updates.length + products.length };

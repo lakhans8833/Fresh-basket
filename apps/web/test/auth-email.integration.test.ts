@@ -136,7 +136,7 @@ describe("with SMTP", () => {
     expect((await post({ action: "signin", email: "victim@example.com" }, "203.0.113.200")).status).toBe(200);
   });
 
-  it("an address's hourly limit used up from elsewhere doesn't lock its owner out, and can't be flooded (hard cap 25)", async () => {
+  it("past an address's hourly limit, a new network still gets one code; the address can't be flooded (hard cap 25)", async () => {
     const { post } = await load(SMTP_ENV);
     // 15 requests for the address from 15 different networks use up its hourly allowance…
     for (let i = 0; i < 15; i++) expect((await post({ action: "signin", email: "owner@example.com" }, `198.51.100.${i + 10}`)).status).toBe(200);

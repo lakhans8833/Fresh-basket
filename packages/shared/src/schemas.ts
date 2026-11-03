@@ -274,7 +274,8 @@ export const adminCouponSchema = z
   .refine((c) => c.kind !== "percent" || c.value <= 100, { message: "Percent must be 1–100", path: ["value"] })
   .refine((c) => !c.startsAt || !c.endsAt || Date.parse(c.endsAt) > Date.parse(c.startsAt), { message: "End must be after the start", path: ["endsAt"] })
   // A flat amount off needs a minimum order above it — otherwise a small basket would cost nothing.
-  .refine((c) => c.kind !== "flat" || c.minOrder > c.value, { message: "Set a minimum order above the discount amount", path: ["minOrder"] })
+  // (Only for active coupons, so an older one can still be switched off as it is.)
+  .refine((c) => !c.active || c.kind !== "flat" || c.minOrder > c.value, { message: "Set a minimum order above the discount amount", path: ["minOrder"] })
   .refine((c) => c.maxDiscount == null || c.maxDiscount >= 100, { message: "Leave empty for no cap, or at least ₹1", path: ["maxDiscount"] });
 
 const optionalUrl = z

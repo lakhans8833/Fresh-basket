@@ -1,6 +1,7 @@
 import { buildWhatsAppOrderUrl, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, UNAVAILABLE_ITEM_LABEL, whatsappOrderSchema } from "@freshbasket/shared";
 import { clientIp, HttpError, json, parseBody, rateLimit, rateLimitCount, route } from "@/lib/http";
 import { getSession } from "@/lib/auth";
+import { queryOne } from "@/lib/db";
 import { placeWhatsAppOrder } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
 import { resolveWhatsAppNumber } from "@/config/store";
@@ -32,7 +33,12 @@ export const POST = route(async (req) => {
   // (a retry of an order already placed gets that order back), and the cap allows for many customers
   // sharing one mobile-carrier address.
   const dayKey = `wa-order-day:${clientIp(req)}`;
-  if (!session && (await rateLimitCount(dayKey)) >= GUEST_WA_ORDERS_PER_DAY) {
+  if (
+    !session &&
+    (await rateLimitCount(dayKey)) >= GUEST_WA_ORDERS_PER_DAY &&
+    // A retry of an order already placed still gets that order back.
+    !(await queryOne("select 1 from orders where user_id is null and address->>'phone' = $1 and idempotency_key = $2", [input.customer.phone, input.idempotencyKey]))
+  ) {
     throw new HttpError(429, "Too many WhatsApp orders from this network today. Please sign in to order, or call the store.", "RATE_LIMITED");
   }
   const { order, created } = await placeWhatsAppOrder(session?.userId ?? null, input);

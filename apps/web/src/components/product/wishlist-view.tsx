@@ -6,7 +6,7 @@ import type { ProductSummary } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { ButtonLink } from "../ui/button";
 import { EmptyState, Notice } from "../ui/feedback";
-import { onFavouritesChange, readFavourites, writeFavourites } from "./favourites";
+import { onFavouritesChange, readFavourites } from "./favourites";
 import { ProductCard, ProductCardSkeleton } from "./product-card";
 
 const grid = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
@@ -31,15 +31,7 @@ export function WishlistView() {
   useEffect(() => {
     if (!wanted || (catalog && !missing)) return;
     api<{ products: ProductSummary[] }>(`/api/products?limit=200&ids=${encodeURIComponent(idsKey)}`)
-      .then((r) => {
-        setCatalog(r.products);
-        // Saved products the shop has since removed: forget them (they can't be shown or bought), so the
-        // ♥ count and "Nothing saved yet" stay true and this request doesn't repeat for them.
-        const found = new Set(r.products.map((p) => p.id));
-        const asked = idsKey.split(",").filter(Boolean);
-        const gone = new Set(asked.filter((id) => !found.has(id)));
-        if (gone.size) writeFavourites(readFavourites().filter((id) => !gone.has(id)));
-      })
+      .then((r) => setCatalog(r.products))
       .catch(() => setError(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the saved list changes
   }, [wanted, idsKey]);
@@ -53,6 +45,14 @@ export function WishlistView() {
   const byId = new Map((catalog ?? []).map((p) => [p.id, p]));
   const products = [...ids].reverse().map((id) => byId.get(id)).filter((p): p is ProductSummary => !!p);
 
+  if (products.length === 0 && wanted) {
+    // Saved items exist but none is on sale right now (switched off for the season, or removed).
+    return (
+      <EmptyState icon={<Heart className="size-7" />} title="Your saved items aren't available right now" action={<ButtonLink href="/shop">Browse products</ButtonLink>}>
+        They&apos;ll show here again when they&apos;re back in the shop.
+      </EmptyState>
+    );
+  }
   if (products.length === 0) {
     return (
       <EmptyState icon={<Heart className="size-7" />} title="Nothing saved yet" action={<ButtonLink href="/shop">Browse products</ButtonLink>}>

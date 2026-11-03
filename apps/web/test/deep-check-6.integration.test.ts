@@ -110,6 +110,47 @@ describe("product form vs. changes made meanwhile", () => {
   });
 });
 
+describe("product form: what the database holds wins for unchanged values", () => {
+  async function formFor(variantId: string) {
+    const pid = (await queryOne<{ id: string }>("select product_id as id from product_variants where id = $1", [variantId]))!.id;
+    const p = (await adminGetProduct(pid)) as unknown as {
+      name: string; slug: string; categoryId: string; description: string | null; highlights: string[]; seasonal: boolean; featured: boolean; active: boolean;
+      images: { url: string; alt: string | null }[]; variants: { id: string; label: string; price: number; mrp: number | null; stock: number; active: boolean; note: string | null }[];
+    };
+    const save = (edit: (x: (typeof p.variants)[number]) => Partial<(typeof p.variants)[number]>) =>
+      adminSaveProduct(pid, adminProductSchema.parse({
+        name: p.name, slug: p.slug, categoryId: p.categoryId, description: p.description, highlights: p.highlights, seasonal: p.seasonal,
+        featured: p.featured, active: p.active, images: p.images.map((i) => ({ url: i.url, alt: i.alt })),
+        variants: p.variants.map((x, i) => ({ id: x.id, label: x.label, price: x.price, mrp: x.mrp, stock: x.stock, stockLoaded: x.stock, sortOrder: i, active: x.active, note: x.note,
+          priceLoaded: x.price, mrpLoaded: x.mrp, activeLoaded: x.active, ...edit(x) })),
+      }));
+    return { pid, p, save };
+  }
+
+  it("a pack switched off meanwhile + the last one switched off in the form → refused, nothing saved", async () => {
+    const { pid, p, save } = await formFor(v["onion:1 kg"]!);
+    const active = p.variants.filter((x) => x.active);
+    expect(active.length).toBeGreaterThan(1);
+    // Meanwhile all but one are switched off in Inventory…
+    await query("update product_variants set active = false where id = any($1::uuid[])", [active.slice(1).map((x) => x.id)]);
+    // …and in the (old) form the admin switches that last one off.
+    await expect(save((x) => (x.id === active[0]!.id ? { active: false } : {}))).rejects.toMatchObject({ status: 409 });
+    expect((await queryOne<{ n: number }>("select count(*)::int as n from product_variants where product_id = $1 and active", [pid]))!.n).toBe(1);
+    await query("update product_variants set active = true where id = any($1::uuid[])", [active.map((x) => x.id)]);
+  });
+
+  it("an MRP typed in the form below a price raised meanwhile is dropped, not saved below the price", async () => {
+    const id = v["onion:1 kg"]!;
+    const { save, p } = await formFor(id);
+    const loaded = p.variants.find((x) => x.id === id)!;
+    await query("update product_variants set price = $2 where id = $1", [id, loaded.price + 3000]);
+    await save((x) => (x.id === id ? { mrp: loaded.price + 1000 } : {}));
+    const r = (await queryOne<{ price: number; mrp: number | null }>("select price, mrp from product_variants where id = $1", [id]))!;
+    expect(r.price).toBe(loaded.price + 3000);
+    expect(r.mrp).toBeNull();
+  });
+});
+
 describe("inventory saves", () => {
   it("staff can't change prices; a retried save isn't applied twice; a price above the MRP clears it", async () => {
     const id = v["onion:1 kg"]!;

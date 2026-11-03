@@ -19,7 +19,7 @@ describe("admin analytics", () => {
       const rows = await query<Row>(
         // Sales value = total less refunds recorded after delivery.
         `select to_char((created_at at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD') as day,
-                total - coalesce((select sum(a.amount) from order_adjustments a where a.order_id = orders.id and a.kind = 'refund'), 0) as total,
+                (total - coalesce((select sum(a.amount) from order_adjustments a where a.order_id = orders.id and a.kind = 'refund'), 0))::int as total,
                 status, payment_status, address->>'pincode' as pincode
            from orders where (created_at at time zone 'Asia/Kolkata')::date > (now() at time zone 'Asia/Kolkata')::date - $1::int`,
         [days],

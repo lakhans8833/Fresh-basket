@@ -36,8 +36,9 @@ export const POST = route(async (req) => {
   const usable = order.status === "pending_payment" || (order.status === "cancelled" && (await expiredUnpaid(order.id)));
   if (payment?.status === "authorized" && usable) payment = await capturePayment(payment.id, order.total).catch(() => payment);
   if (payment?.status === "authorized" && !usable) {
-    // Cancelled meanwhile: nothing is taken; the bank releases the hold by itself.
-    return json({ status: "order_cancelled" });
+    // Not taken; the bank releases the hold by itself. Either the order was cancelled meanwhile, or another
+    // payment (e.g. a second tab) already paid it.
+    return json({ status: order.status === "cancelled" ? "order_cancelled" : "already_paid" });
   }
   if (!payment || payment.status !== "captured" || payment.order_id !== body.razorpay_order_id) {
     // Not confirmed yet — the webhook will finalise it. The order page polls for status.

@@ -21,8 +21,8 @@ const schema = z.object({
  * - per network + address: 1 per 45 s, 5 an hour;
  * - per address from anywhere: 15 an hour (Gmail dots and "+tags" count as the same address) — past
  *   that, a wider network (IPv6 /48 / IPv4 address) asking for the address for the first time this hour
- *   still gets one code, up to 10 more an hour (hard cap 25), so someone hammering YOUR address from
- *   elsewhere can't lock you out, and can't flood it either;
+ *   still gets one code, up to 10 more an hour (hard cap 25). A trade-off: nobody can flood an address,
+ *   and locking its owner out takes more than 10 different networks every hour;
  * - whole shop: 300 an hour (protects the mailbox's sending allowance).
  */
 export const POST = route(async (req) => {
@@ -40,7 +40,7 @@ export const POST = route(async (req) => {
   } catch (e) {
     // The address's hourly limit was used up — possibly by someone else. A network that hasn't asked for
     // this address yet this hour still gets one code (its first request), within a hard cap of 25 an
-    // hour for the address — so a customer can't be locked out from elsewhere, and nobody can flood it.
+    // hour for the address: nobody can flood it, and a lockout needs more than 10 networks an hour.
     if (fromHere > 1) throw e;
     await rateLimit(`auth-email:to-hour-extra:${to}`, 10, 60 * 60_000);
   }
