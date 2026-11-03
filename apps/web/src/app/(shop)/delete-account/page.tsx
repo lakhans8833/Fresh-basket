@@ -26,7 +26,7 @@ export default async function DeleteAccountPage() {
         <h2>What is deleted</h2>
         <ul>
           <li>Your login (email and password), name and mobile number.</li>
-          <li>Your saved delivery addresses, product reviews and coupon history.</li>
+          <li>Your saved delivery addresses and product reviews.</li>
         </ul>
 
         <h2>What is kept</h2>
@@ -36,6 +36,11 @@ export default async function DeleteAccountPage() {
             accounts and tax. They are no longer linked to any account.
           </li>
           <li>Messages you sent through the contact form, without a link to your account.</li>
+          <li>
+            A one-way code made from your email address (not the address itself), with whether you had ordered and how often
+            you used each coupon — so one-time and first-order offers can&apos;t be claimed again by deleting and recreating an
+            account.
+          </li>
         </ul>
         <p>
           Can&apos;t sign in? <Link href="/contact" className={a}>Contact us</Link> from the email address of your account and ask us to delete it.

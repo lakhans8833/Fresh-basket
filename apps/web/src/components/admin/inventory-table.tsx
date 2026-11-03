@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Boxes, RotateCcw, Save, Search } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { Button } from "../ui/button";
@@ -45,6 +45,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
   const [q, setQ] = useState(initialQ);
   const [filter, setFilter] = useState<Filter>((["all", "low", "out", "inactive"] as const).find((f) => f === initialFilter) ?? "all");
   const [saving, setSaving] = useState(false);
+  const pendingSave = useRef<{ sig: string; ids: string[] } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -81,7 +82,7 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       const u: (typeof updates)[number] = { variantId: r.variantId };
       if (e.price !== undefined) {
         const p = inputToPaise(e.price);
-        if (p === null || Number.isNaN(p)) invalid.add(`${r.variantId}:price`);
+        if (p === null || Number.isNaN(p) || p < 100) invalid.add(`${r.variantId}:price`); // at least ₹1
         else if (p !== r.price) u.price = p;
       }
       if (e.stock !== undefined) {
@@ -169,10 +170,15 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     if (!updates.length && !productUpdates.length) return true;
     setSaving(true);
     try {
-      // The API accepts up to 200 rows per request.
-      for (let i = 0; i < Math.max(updates.length, productUpdates.length); i += 200) {
-        await api("/api/admin/inventory", { method: "PATCH", json: { updates: updates.slice(i, i + 200), products: productUpdates.slice(i, i + 200) } });
+      // The API accepts up to 200 rows per request. Each part has a request id that stays the same when the
+      // same changes are saved again after an error, so parts that already went through aren't applied twice.
+      const sig = JSON.stringify([updates, productUpdates]);
+      if (!pendingSave.current || pendingSave.current.sig !== sig) pendingSave.current = { sig, ids: [] };
+      for (let i = 0, part = 0; i < Math.max(updates.length, productUpdates.length); i += 200, part++) {
+        const requestId = (pendingSave.current.ids[part] ??= crypto.randomUUID());
+        await api("/api/admin/inventory", { method: "PATCH", json: { updates: updates.slice(i, i + 200), products: productUpdates.slice(i, i + 200), requestId } });
       }
+      pendingSave.current = null;
       const n = updates.length + productUpdates.length;
       toast(`Saved ${n} change${n === 1 ? "" : "s"}`);
       await reload();
@@ -303,6 +309,8 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
                             inputMode="decimal"
                             value={v.priceText}
                             onChange={(e) => edit(r.variantId, { price: e.target.value })}
+                            readOnly={role !== "admin"}
+                            title={role !== "admin" ? "Only an admin can change prices" : undefined}
                             aria-invalid={priceBad || undefined}
                             className={cn(inputClass, "h-9 rounded-lg pl-6 pr-2 text-sm tabular-nums")}
                           />

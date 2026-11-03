@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { addablePacks, formatINR, MAX_QTY_PER_LINE, unitPriceLabel, type ProductSummary } from "@freshbasket/shared";
-import { useCart } from "../cart/cart-context";
+import { FULL_BASKET, useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "./product-image";
 import { FavouriteButton } from "./favourite-button";
@@ -33,7 +33,7 @@ function useCardState(product: ProductSummary, preferDeal = false, preferVariant
   function addToCart() {
     if (!variant || maxAddable <= 0) return;
     const n = Math.min(qty, maxAddable);
-    add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+    if (!add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n)) return toast(FULL_BASKET);
     toast(`${n} × ${product.name} (${variant.label}) added to cart`);
     setQty(1);
     setJustAdded(true);

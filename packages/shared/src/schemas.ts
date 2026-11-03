@@ -144,9 +144,14 @@ export const adminVariantSchema = z.object({
   // Any run of spaces (incl. non-breaking spaces pasted from websites) becomes one plain space, so the
   // site and the database read "500 g" the same way.
   label: trimmed(30).min(1).transform((s) => s.replace(/\s+/g, " ")),
-  price: z.number().int().min(1, "Price must be more than ₹0").max(10_000_000),
+  price: z.number().int().min(100, "Price must be at least ₹1").max(10_000_000),
   mrp: z.number().int().min(0).max(10_000_000).optional().nullable(),
   stock: z.number().int().min(0).max(1_000_000),
+  /** Price / MRP / on-off as they were when the form was opened. A value the admin didn't change is
+   *  left as it is now in the database (e.g. a price changed meanwhile in Inventory isn't undone). */
+  priceLoaded: z.number().int().min(0).max(10_000_000).optional(),
+  mrpLoaded: z.number().int().min(0).max(10_000_000).nullable().optional(),
+  activeLoaded: z.boolean().optional(),
   /** Stock shown when the form was opened. The server applies only the change (stock - stockLoaded),
    *  so orders placed while the form was open aren't undone. Leave out to set stock as given. */
   stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
@@ -179,6 +184,8 @@ export const adminProductSchema = z.object({
   stockGrams: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
   /** Total grams shown when the form was opened: only the change is applied (sales meanwhile stay counted). */
   stockGramsLoaded: z.number().int().min(0).max(1_000_000_000).optional(),
+  /** Same id when the browser retries the same save (see adminInventoryPatchSchema.requestId). */
+  requestId: uuid.optional(),
 });
 export type AdminProductInput = z.infer<typeof adminProductSchema>;
 
@@ -187,7 +194,7 @@ export const adminInventoryPatchSchema = z
     updates: z
       .array(z.object({
         variantId: uuid,
-        price: z.number().int().min(1, "Price must be more than ₹0").max(10_000_000).optional(),
+        price: z.number().int().min(100, "Price must be at least ₹1").max(10_000_000).optional(),
         stock: z.number().int().min(0).max(1_000_000).optional(),
         /** Stock shown when the table was loaded: the server applies only the change, so sales meanwhile stay counted. */
         stockLoaded: z.number().int().min(0).max(1_000_000).optional(),
@@ -195,6 +202,8 @@ export const adminInventoryPatchSchema = z
       }))
       .max(200)
       .default([]),
+    /** Same id when the browser retries the same save: a save already applied is skipped (no double stock change). */
+    requestId: uuid.optional(),
     /** Stock-by-weight products: new total in grams (each weight pack's stock is derived from it). */
     products: z.array(z.object({
       productId: uuid,
@@ -263,7 +272,11 @@ export const adminCouponSchema = z
     active: z.boolean().default(true),
   })
   .refine((c) => c.kind !== "percent" || c.value <= 100, { message: "Percent must be 1–100", path: ["value"] })
-  .refine((c) => !c.startsAt || !c.endsAt || Date.parse(c.endsAt) > Date.parse(c.startsAt), { message: "End must be after the start", path: ["endsAt"] });
+  .refine((c) => !c.startsAt || !c.endsAt || Date.parse(c.endsAt) > Date.parse(c.startsAt), { message: "End must be after the start", path: ["endsAt"] })
+  // A flat amount off needs a minimum order above it — otherwise a small basket would cost nothing.
+  // (Only for active coupons, so an older one can still be switched off as it is.)
+  .refine((c) => !c.active || c.kind !== "flat" || c.minOrder > c.value, { message: "Set a minimum order above the discount amount", path: ["minOrder"] })
+  .refine((c) => c.maxDiscount == null || c.maxDiscount >= 100, { message: "Leave empty for no cap, or at least ₹1", path: ["maxDiscount"] });
 
 const optionalUrl = z
   .string()

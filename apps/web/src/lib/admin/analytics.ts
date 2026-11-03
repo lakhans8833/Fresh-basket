@@ -8,6 +8,11 @@ export type AnalyticsRange = (typeof ANALYTICS_RANGES)[number];
 const SALE = `o.status not in ('cancelled','pending_confirmation','pending_payment') and o.payment_status in ('paid','cod_pending','cod_collected')`;
 /** Orders that were really placed (not abandoned online payments, not cancelled). */
 const PLACED = `o.status not in ('cancelled','pending_payment')`;
+/** An order's sales value: its total less refunds recorded after delivery (Problems after delivery). */
+const NET = `(o.total - coalesce((select sum(a.amount) from order_adjustments a where a.order_id = o.id and a.kind = 'refund'), 0))`;
+/** Packs of an order line that were refunded after delivery. */
+const REFUNDED_QTY = `coalesce((select sum((e->>'quantity')::int) from order_adjustments a, jsonb_array_elements(a.items) e
+                         where a.order_id = i.order_id and a.kind = 'refund' and e->>'itemId' = i.id::text), 0)`;
 const IST_DAY = `(o.created_at at time zone 'Asia/Kolkata')::date`;
 const IST_TODAY = `(now() at time zone 'Asia/Kolkata')::date`;
 
@@ -29,28 +34,29 @@ export async function adminAnalytics(days: AnalyticsRange): Promise<Analytics> {
   const [daily, totals, previous, statuses, topProducts, areas] = await Promise.all([
     query<{ date: string; sales: number; orders: number }>(
       `select to_char(d, 'YYYY-MM-DD') as date,
-              coalesce(sum(o.total) filter (where ${SALE}), 0)::float8 as sales,
+              coalesce(sum(${NET}) filter (where ${SALE}), 0)::float8 as sales,
               count(o.id) filter (where ${PLACED})::int as orders
          from generate_series(${from}, ${IST_TODAY}, interval '1 day') d
          left join orders o on ${IST_DAY} = d::date
         group by d order by d`,
     ),
     query<{ sales: number; orders: number; items: number }>(
-      `select coalesce(sum(o.total) filter (where ${SALE}), 0)::float8 as sales,
+      `select coalesce(sum(${NET}) filter (where ${SALE}), 0)::float8 as sales,
               count(*) filter (where ${PLACED})::int as orders,
-              coalesce((select sum(i.quantity) from order_items i join orders o2 on o2.id = i.order_id
+              coalesce((select sum(greatest(i.quantity - ${REFUNDED_QTY}, 0)) from order_items i join orders o2 on o2.id = i.order_id
                          where ${SALE.replaceAll("o.", "o2.")} and (o2.created_at at time zone 'Asia/Kolkata')::date between ${from} and ${IST_TODAY}), 0)::float8 as items
          from orders o where ${inRange}`,
     ),
     query<{ sales: number; orders: number }>(
-      `select coalesce(sum(o.total) filter (where ${SALE}), 0)::float8 as sales, count(*) filter (where ${PLACED})::int as orders
+      `select coalesce(sum(${NET}) filter (where ${SALE}), 0)::float8 as sales, count(*) filter (where ${PLACED})::int as orders
          from orders o where ${IST_DAY} between ${from} - ${days} and ${from} - 1`,
     ),
     query<{ status: string; count: number }>(
       `select o.status, count(*)::int as count from orders o where ${inRange} and o.status <> 'pending_payment' group by o.status order by count desc`,
     ),
     query<{ name: string; quantity: number; sales: number }>(
-      `select i.product_name as name, sum(i.quantity)::float8 as quantity, sum(i.line_total)::float8 as sales
+      `select i.product_name as name, sum(greatest(i.quantity - ${REFUNDED_QTY}, 0))::float8 as quantity,
+              sum(i.unit_price * greatest(i.quantity - ${REFUNDED_QTY}, 0))::float8 as sales
          from order_items i join orders o on o.id = i.order_id
         where ${SALE} and ${inRange}
         group by i.product_name order by sales desc, quantity desc limit 6`,
@@ -58,7 +64,7 @@ export async function adminAnalytics(days: AnalyticsRange): Promise<Analytics> {
     query<{ pincode: string; name: string; orders: number; sales: number }>(
       `select coalesce(o.address->>'pincode', '—') as pincode,
               coalesce(max(a.area_name), max(o.address->>'city'), '') as name,
-              count(*)::int as orders, coalesce(sum(o.total) filter (where ${SALE}), 0)::float8 as sales
+              count(*)::int as orders, coalesce(sum(${NET}) filter (where ${SALE}), 0)::float8 as sales
          from orders o left join lateral (select area_name from delivery_areas d where d.pincode = o.address->>'pincode' order by d.active desc limit 1) a on true
         where ${PLACED} and ${inRange}
         group by 1 order by orders desc, sales desc limit 6`,

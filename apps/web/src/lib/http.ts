@@ -128,6 +128,19 @@ export async function rateLimit(key: string, limit: number, windowMs: number): P
   return local.n;
 }
 
+/** Hits so far in `key`'s current window, without counting one (0 if none / the counter can't be read). */
+export async function rateLimitCount(key: string): Promise<number> {
+  const local = buckets.get(key);
+  const mem = local && local.reset >= Date.now() ? local.n : 0;
+  try {
+    const keyHash = createHash("sha256").update(key).digest("hex");
+    const row = await queryOne<{ hits: number }>("select hits from public.rate_limits where key_hash = $1 and reset_at > now()", [keyHash]);
+    return Math.max(mem, row?.hits ?? 0);
+  } catch {
+    return mem;
+  }
+}
+
 /**
  * The caller's IP for rate limits. On Vercel, x-real-ip / x-vercel-forwarded-for are set by the platform
  * (a client can't fake them); x-forwarded-for is only a fallback for other hosts and local runs.

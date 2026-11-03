@@ -17,7 +17,10 @@ describe("admin analytics", () => {
     it(`${days} days: totals, daily rows and status counts match the orders table`, async () => {
       const today = (await query<{ d: string }>("select to_char((now() at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD') as d"))[0]!.d;
       const rows = await query<Row>(
-        `select to_char((created_at at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD') as day, total, status, payment_status, address->>'pincode' as pincode
+        // Sales value = total less refunds recorded after delivery.
+        `select to_char((created_at at time zone 'Asia/Kolkata')::date, 'YYYY-MM-DD') as day,
+                (total - coalesce((select sum(a.amount) from order_adjustments a where a.order_id = orders.id and a.kind = 'refund'), 0))::int as total,
+                status, payment_status, address->>'pincode' as pincode
            from orders where (created_at at time zone 'Asia/Kolkata')::date > (now() at time zone 'Asia/Kolkata')::date - $1::int`,
         [days],
       );

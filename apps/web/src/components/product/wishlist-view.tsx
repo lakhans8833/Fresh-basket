@@ -45,6 +45,14 @@ export function WishlistView() {
   const byId = new Map((catalog ?? []).map((p) => [p.id, p]));
   const products = [...ids].reverse().map((id) => byId.get(id)).filter((p): p is ProductSummary => !!p);
 
+  if (products.length === 0 && wanted) {
+    // Saved items exist but none is on sale right now (switched off for the season, or removed).
+    return (
+      <EmptyState icon={<Heart className="size-7" />} title="Your saved items aren't available right now" action={<ButtonLink href="/shop">Browse products</ButtonLink>}>
+        They&apos;ll show here again when they&apos;re back in the shop.
+      </EmptyState>
+    );
+  }
   if (products.length === 0) {
     return (
       <EmptyState icon={<Heart className="size-7" />} title="Nothing saved yet" action={<ButtonLink href="/shop">Browse products</ButtonLink>}>

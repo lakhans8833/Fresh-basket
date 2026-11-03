@@ -74,6 +74,32 @@ confirmation step (login CSRF, P3), sign-up says when an address already has an 
 connection doesn't pin Supabase's certificate (P3), the app keeps its Supabase session in AsyncStorage rather than
 the secure store (P3), possible double order screen after paying on Android (needs a device test).
 
+## B4. Audit round 7 (3 Nov) — admin & data integrity, shopper journey, newest code + app
+
+No P0/P1. Fixed (branch `fix/audit-round7`):
+
+| ID | Sev | Where | Problem | Fix |
+| --- | --- | --- | --- | --- |
+| BUG-082 | P2 | Analytics, dashboard | Refunds recorded after delivery were still counted as sales (totals, average, top products, revenue today) | Sales = total − refunds; top products/items exclude refunded packs |
+| BUG-083 | P2 | Product form | Saving the form undid a price / on-off change made meanwhile in Inventory or by another admin | Unchanged price / MRP / on-off keep what the database has now |
+| BUG-084 | P2 (security) | Email codes | The round-6 allowance let rotating networks send up to 300 codes/hour to one address | A new network gets one code past the limit, hard cap 25/hour per address |
+| BUG-085 | P2 | App | Opening the app offline still showed a signed-in customer as signed out (BUG-076 incomplete) | Account last used shown from the phone when the store can't be reached or the token can't be refreshed offline |
+| BUG-086 | P3 | Inventory / product form | A retried save (timeout, partly failed) applied the stock change twice | Each save carries a request id; a repeat is skipped (migration `20261103000001`) |
+| BUG-087 | P3 | Replacement after delivery | Didn't take the goods from stock | Takes stock (refuses if not enough) |
+| BUG-088 | P3 | Refund after delivery | Cap ignored the order's coupon discount | Capped at what was paid for the items |
+| BUG-089 | P3 | Inventory | Staff could change prices; a price above the MRP left an invalid MRP (form then refused to save); all packs could be switched off; ₹0.50 prices | Prices admin-only; MRP cleared when below the new price (and cleaned in existing data); last pack can't be switched off; minimum ₹1 |
+| BUG-090 | P3 | Late orders | Editing a slot's hours changed "late" for orders already booked | Late uses the window saved on the order |
+| BUG-091 | P3 | Coupons | A flat coupon above its minimum order (or with none) made small baskets free; max discount ₹0 accepted | Minimum must be above the flat amount; cap ≥ ₹1 |
+| BUG-092 | P3 | Product delete | Could race with a checkout | Product row locked like a checkout |
+| BUG-093 | P3 | Guest WhatsApp cap | Retries of an existing order counted; shared carrier IPs hit it | Only new orders count; 20/day |
+| BUG-094 | P3 | Pay page | Paying for an order cancelled meanwhile showed "Confirming…" | Clear message: no money taken, hold released by the bank |
+| BUG-095 | P3 | Website order page | "Delivered" time moved to the time of a later refund/cash note | First event of each step shown |
+| BUG-096 | P3 | Website | Next-delivery badge stale for hours; header/cart-bar total at old prices; "% off" filter cards showed another pack; 51st item said "added"; archived saved items stuck; sitemap listed products with no pack on sale; "Change password" showed a broken-link warning; hidden reviews re-entered the queue on edit; deletion page said coupon history is deleted | Each fixed |
+| BUG-097 | P3 | App | Signing out offline could leave the session saved (signed back in later); filter/sort blanked the product grid | Saved session removed on sign-out; grid kept while the new list loads |
+
+Not changed (documented): search suggestions put buttons inside list options (screen-reader nuance, needs a redesign of the
+suggestions list); possible double order screen after paying on Android (device test).
+
 ## C. Fixed and deployed (PR #19 – #23, 26–28 Oct)
 
 | ID | Sev | Route / file | Problem → fix | Regression test | PR |
@@ -139,5 +165,5 @@ undone by "set kilos" (BUG-052, P1), impossible delivery dates / out-of-range co
 cart drawer trapped under the header blur (BUG-058, P2), and logo/top-bar layout on small phones (BUG-059, P3). Each
 has a regression test (`test/deep-check-fixes`, `e2e/admin_charts.py`, `e2e/shopper_features.py`, `e2e/flow.py`).
 
-**Totals:** 81 bugs fixed (65 deployed by 30 Oct + 16 in audit round 6) · open items need owner data,
+**Totals:** 97 bugs fixed (81 deployed by 31 Oct + 16 in audit round 7) · open items need owner data,
 configuration or a decision (section A, plus OPEN-11: maximum size of a guest WhatsApp order).
