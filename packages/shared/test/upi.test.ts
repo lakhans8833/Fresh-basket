@@ -36,7 +36,7 @@ describe("WhatsApp order message", () => {
       lines: [{ name: "Tomato", variantLabel: "1 kg", quantity: 2, unitPrice: 6000, lineTotal: 12000 }],
       subtotal: 12000, discount: 0, couponCode: null, deliveryFee: 2500, total: 14500,
       paymentMethod: "UPI (QR / UPI ID)", paymentStatus: "Payment pending",
-      payLink: "https://rzp.io/l/abc", trackUrl: "https://example.test/track/1?k=x",
+      payLink: "https://rzp.io/l/abc", trackUrl: "https://example.test/track/1?k=x", storeUrl: "https://example.test/admin/orders/1",
     });
     expect(msg).toContain("Order ID: FB261017-01001");
     expect(msg).toContain("Delivery: ₹25");
@@ -44,5 +44,6 @@ describe("WhatsApp order message", () => {
     expect(msg).toContain("Payment: UPI (QR / UPI ID) (Payment pending)");
     expect(msg).toContain("Pay online: https://rzp.io/l/abc");
     expect(msg).toContain("Track order: https://example.test/track/1?k=x");
+    expect(msg).toContain("For the store (confirm / cancel): https://example.test/admin/orders/1");
   });
 });

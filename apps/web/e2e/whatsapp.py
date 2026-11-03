@@ -75,6 +75,7 @@ with sync_playwright() as p:
     assert re.search(r"Delivery slot: \w{3}, \d{1,2} \w{3} · ", msg), "slot line missing"
     assert "Notes: Call before coming" in msg
     assert "Track order: " in msg
+    assert re.search(r"For the store \(confirm / cancel\): https?://\S+/admin/orders/[0-9a-f-]{36}", msg), "store link missing"
     items = [int(x.replace(",", "")) for x in re.findall(r"= ₹([\d,]+)", msg)]
     sub = int(re.search(r"Subtotal: ₹([\d,]+)", msg).group(1).replace(",", ""))
     fee = re.search(r"Delivery: (Free|₹([\d,]+))", msg)
