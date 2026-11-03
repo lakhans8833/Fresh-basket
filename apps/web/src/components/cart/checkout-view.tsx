@@ -382,11 +382,16 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       <div className="h-24 lg:hidden" aria-hidden />
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-8px_24px_-16px_rgb(11_102_35/0.35)] backdrop-blur lg:hidden">
         <a href="#checkout-summary" className="mx-auto flex h-14 max-w-xl items-center justify-between gap-3 rounded-lg bg-leaf-600 px-4 text-white hover:bg-forest-700">
-          <span className="leading-tight">
+          <span className="shrink-0 whitespace-nowrap leading-tight">
             <span className="block text-base font-bold tabular-nums">{quote ? formatINR(quote.total) : "…"}</span>
             <span className="text-[0.6875rem] font-semibold uppercase tracking-wide opacity-85">Total{data?.area ? "" : " + delivery"}</span>
           </span>
-          <span className="inline-flex items-center gap-1 font-bold">Review &amp; place order <ArrowRight className="size-4" aria-hidden /></span>
+          {/* Small phones (iPhone SE, 320px): the long label wrapped to two lines and pushed the total out of the bar. */}
+          <span className="inline-flex items-center gap-1 whitespace-nowrap font-bold">
+            <span className="hidden min-[360px]:inline">Review &amp; place order</span>
+            <span className="min-[360px]:hidden">Review order</span>
+            <ArrowRight className="size-4" aria-hidden />
+          </span>
         </a>
       </div>
     </div>

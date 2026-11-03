@@ -171,3 +171,14 @@ input[type="search"]::-webkit-search-decoration {
     print-color-adjust: exact;
   }
 }
+
+/* Phones and tablets: iOS Safari zooms the whole page when a text field under 16px gets focus (and doesn't zoom
+   back). Keep every typing field at 16px on small screens and touch screens (iPad). Unlayered on purpose, so it wins over the
+   text-size utilities (which live in a cascade layer) without !important. */
+@media (max-width: 767.98px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
