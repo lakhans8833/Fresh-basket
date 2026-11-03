@@ -15,7 +15,15 @@ import { serviceAreaMismatches, toArea } from "../delivery";
  * they have their own "to confirm" count and confirmation window.
  * Needs `left join delivery_slots s on s.id = o.slot_id`.
  */
-export const LATE_SQL = `(o.status in ('placed','packed','out_for_delivery') and coalesce(o.delivery_date + s.end_time, o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
+/**
+ * Late = still open after the delivery window the customer was promised. That window is the one saved
+ * on the order ("Afternoon, 12:00–15:00"); the slot's current times only when the label has none —
+ * so editing a slot's hours later doesn't make already-booked orders late (or on time).
+ */
+export const LATE_SQL = `(o.status in ('placed','packed','out_for_delivery') and coalesce(
+    o.delivery_date + (substring(o.slot_label from '[–-]\\s*(\\d{1,2}:\\d{2})\\s*$'))::time,
+    o.delivery_date + s.end_time,
+    o.delivery_date + interval '1 day') at time zone 'Asia/Kolkata' < now())`;
 
 /**
  * Low stock, judged per PRODUCT for stock-by-weight items (their sizes share one total: low when it
@@ -160,7 +168,8 @@ export async function adminStats() {
          -- Same rule as Analytics: cancelled orders and unpaid online orders aren't counted.
          (select count(*)::int from orders where status not in ('cancelled', 'pending_payment')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "ordersToday",
-         (select coalesce(sum(total),0)::int from orders where status not in ('cancelled', 'pending_confirmation') and payment_status in ('paid','cod_pending','cod_collected')
+         (select coalesce(sum(o.total - coalesce((select sum(a.amount) from order_adjustments a where a.order_id = o.id and a.kind = 'refund'), 0)),0)::int
+            from orders o where status not in ('cancelled', 'pending_confirmation') and payment_status in ('paid','cod_pending','cod_collected')
             and created_at >= date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as "revenueToday",
          (select count(*)::int from orders where status in ('placed','packed')) as "toFulfil",
          (select count(*)::int from orders where status = 'placed') as "newOrders",

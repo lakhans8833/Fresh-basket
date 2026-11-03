@@ -27,7 +27,7 @@ export default async function AccountPage() {
         <ProfileForm profile={profile} />
         {env.auth.mode === "supabase" ? (
           <p className="mt-4 text-sm">
-            <Link href="/reset-password" className="font-semibold text-leaf-600 underline underline-offset-4 hover:text-forest-800">Change password</Link>
+            <Link href="/reset-password?from=account" className="font-semibold text-leaf-600 underline underline-offset-4 hover:text-forest-800">Change password</Link>
           </p>
         ) : null}
       </section>

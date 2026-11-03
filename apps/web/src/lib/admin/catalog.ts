@@ -2,6 +2,7 @@ import "server-only";
 import type { z } from "zod";
 import type { adminCategorySchema, AdminProductInput } from "@freshbasket/shared";
 import { query, queryOne, tx } from "../db";
+import type { PoolClient } from "pg";
 import { badRequest, conflict, notFound } from "../http";
 import { packGrams } from "@freshbasket/shared";
 
@@ -69,8 +70,17 @@ export async function adminGetProduct(id: string) {
  * Create or update a product with its images and weight variants in one transaction.
  * Variants referenced by past orders are deactivated rather than deleted.
  */
+/** A save with this request id was already applied (browser retry): true → skip it. Prunes old ids now and then. */
+async function alreadyApplied(c: PoolClient, requestId: string | undefined): Promise<boolean> {
+  if (!requestId) return false;
+  if (Math.random() < 0.02) await c.query("delete from admin_request_log where created_at < now() - interval '1 day'");
+  const r = await c.query("insert into admin_request_log (id) values ($1) on conflict do nothing", [requestId]);
+  return r.rowCount === 0;
+}
+
 export async function adminSaveProduct(id: string | null, d: AdminProductInput) {
   return tx(async (c) => {
+    if (id && (await alreadyApplied(c, d.requestId))) return { id }; // the same save was applied before (retry)
     let productId = id;
     // Stock pool before this save (null = stock counted per pack), locked so a sale can't slip in between.
     const before = id
@@ -114,13 +124,20 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
       if (v.id) {
         const r = await c.query(
           // Stock: apply only what the admin changed, on top of today's stock (sales meanwhile stay counted).
-          `update product_variants set label=$1, price=$2, mrp=$3,
+          // Price / MRP / on-off: a value the admin left as loaded keeps what the database has now, so a
+          // change made meanwhile (Inventory, another admin) isn't silently undone.
+          `update product_variants set label=$1,
+                  price = case when $11::int is not null and $2 = $11::int then price else $2 end,
+                  mrp = case when $12::boolean and $3::int is not distinct from $13::int then mrp else $3::int end,
                   stock = case when $9::int is null then $4 else greatest(0, stock + ($4 - $9::int)) end,
-                  sort_order=$5, active=$6, note=$10
+                  sort_order=$5,
+                  active = case when $14::boolean is not null and $6 = $14::boolean then active else $6 end,
+                  note=$10
             where id=$7 and product_id=$8`,
           // Switching to per-pack stock: the numbers typed are the new stock as is (the old pack counts were
           // only derived from the shared kilos, so "change since loaded" means nothing here).
-          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, switchingToPerPack ? null : (v.stockLoaded ?? null), v.note ?? null],
+          [v.label, v.price, v.mrp ?? null, v.stock, i, v.active, v.id, productId, switchingToPerPack ? null : (v.stockLoaded ?? null), v.note ?? null,
+            v.priceLoaded ?? null, v.mrpLoaded !== undefined, v.mrpLoaded ?? null, v.activeLoaded ?? null],
         );
         if (r.rowCount === 1) {
           keep.push(v.id);
@@ -169,13 +186,18 @@ export async function adminSaveProduct(id: string | null, d: AdminProductInput) 
 }
 
 export async function adminDeleteProduct(id: string) {
-  const r = await queryOne<{ n: number }>("select count(*)::int as n from order_items where product_id = $1", [id]);
-  if ((r?.n ?? 0) > 0) {
-    await query("update products set active = false where id = $1", [id]);
-    return { archived: true };
-  }
-  await query("delete from products where id = $1", [id]);
-  return { archived: false };
+  // Locked like a checkout locks it: an order placed at the same moment either comes first (→ archived,
+  // its lines keep their pack) or finds the product gone — never a deleted pack under a live order.
+  return tx(async (c) => {
+    await c.query("select id from products where id = $1 for update", [id]);
+    const r = await c.query<{ n: number }>("select count(*)::int as n from order_items where product_id = $1", [id]);
+    if ((r.rows[0]?.n ?? 0) > 0) {
+      await c.query("update products set active = false where id = $1", [id]);
+      return { archived: true };
+    }
+    await c.query("delete from products where id = $1", [id]);
+    return { archived: false };
+  });
 }
 
 export async function adminInventory() {
@@ -190,8 +212,10 @@ export async function adminInventory() {
 export async function adminPatchInventory(
   updates: { variantId: string; price?: number; stock?: number; stockLoaded?: number; active?: boolean }[],
   products: { productId: string; stockGrams: number; stockGramsLoaded?: number }[] = [],
+  requestId?: string,
 ) {
   return tx(async (c) => {
+    if (await alreadyApplied(c, requestId)) return { updated: 0, alreadySaved: true }; // browser retry of a save that went through
     // Same lock order as checkout: every affected product row (by id) first, then packs by id —
     // otherwise a save running alongside a checkout could deadlock.
     await c.query(
@@ -213,12 +237,23 @@ export async function adminPatchInventory(
       // stock value sent here is ignored for them (price / active still apply).
       await c.query(
         `update product_variants set price = coalesce($2, price),
+                -- a new price above the MRP: the MRP no longer means anything (the product form would refuse it)
+                mrp = case when $2::int is not null and mrp is not null and mrp < $2::int then null else mrp end,
                 stock = case when $3::int is null then stock when $5::int is null then $3 else greatest(0, stock + ($3 - $5::int)) end,
                 active = coalesce($4, active)
           where id = $1`,
         [u.variantId, u.price ?? null, u.stock ?? null, u.active ?? null, u.stockLoaded ?? null],
       );
     }
+    // Every pack of a product switched off here would leave an active product nobody can buy (and a
+    // "not found" product page): refuse, as the product form does.
+    const empty = await c.query<{ name: string }>(
+      `select p.name from products p
+        where p.active and p.id in (select product_id from product_variants where id = any($1::uuid[]))
+          and not exists (select 1 from product_variants v where v.product_id = p.id and v.active)`,
+      [updates.map((u) => u.variantId)],
+    );
+    if (empty.rows[0]) throw conflict(`Keep at least one pack size of ${empty.rows[0].name} on sale — or hide the whole product in Products.`);
     return { updated: updates.length + products.length };
   });
 }

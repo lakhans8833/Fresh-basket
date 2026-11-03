@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowRight, Loader2, Plus, Search, X } from "lucide-react";
 import { formatINR, type ProductSummary, addablePacks, MAX_QTY_PER_LINE } from "@freshbasket/shared";
-import { useCart } from "../cart/cart-context";
+import { FULL_BASKET, useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { ProductImage } from "../product/product-image";
 import { defaultVariant } from "../product/default-variant";
@@ -202,7 +202,7 @@ function SuggestionRow({ id, product, active, onHover }: { id: string; product: 
           type="button"
           disabled={full}
           onClick={() => {
-            add({ variantId: v.id, productName: product.name, productSlug: product.slug, variantLabel: v.label, imageUrl: product.imageUrl, priceHint: v.price }, 1);
+            if (!add({ variantId: v.id, productName: product.name, productSlug: product.slug, variantLabel: v.label, imageUrl: product.imageUrl, priceHint: v.price }, 1)) return toast(FULL_BASKET);
             toast(`${product.name} (${v.label}) added to cart`);
           }}
           aria-label={`Add ${product.name} ${v.label} to cart`}

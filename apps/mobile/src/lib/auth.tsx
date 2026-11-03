@@ -44,6 +44,17 @@ interface AuthState {
 
 const DEV_TOKEN_KEY = "fb.devToken";
 const PROFILE_CACHE_KEY = "fb.profile";
+/** Supabase keeps the session in AsyncStorage under "sb-<project>-auth-token". */
+const isSupabaseSessionKey = (k: string) => /^sb-.+-auth-token$/.test(k);
+async function savedSupabaseSession(): Promise<boolean> {
+  const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
+  return keys.some(isSupabaseSessionKey);
+}
+async function removeSupabaseSessions() {
+  const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
+  const ours = keys.filter(isSupabaseSessionKey);
+  if (ours.length) await AsyncStorage.multiRemove(ours).catch(() => undefined);
+}
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -83,9 +94,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
   }, []);
 
+  /** Show the account last loaded on this phone (marked to be checked again when the app is back online). */
+  const loadCachedProfile = useCallback(async (): Promise<Profile | null> => {
+    const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY).catch(() => null);
+    if (!cached) return null;
+    try {
+      const p = JSON.parse(cached) as Profile;
+      profileStale.current = true;
+      setProfileState(p);
+      return p;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const refreshProfile = useCallback(async () => {
-    const token = await getToken();
+    const token = await getToken().catch(() => null);
     if (!token) {
+      // No token: signed out — unless a Supabase session is still saved on the phone and only couldn't be
+      // refreshed (offline). Then keep the account and try again later.
+      if (modeRef.current === "supabase" && (await savedSupabaseSession())) return loadCachedProfile();
       setProfile(null);
       return null;
     }
@@ -98,18 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Signed out on the server (401) → signed out here too (the 401 handler clears it). A network or
       // server error → keep showing the account we last loaded and try again when the app comes back.
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
-      const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY).catch(() => null);
-      if (!cached) return null;
-      try {
-        const p = JSON.parse(cached) as Profile;
-        profileStale.current = true;
-        setProfileState(p);
-        return p;
-      } catch {
-        return null;
-      }
+      return loadCachedProfile();
     }
-  }, [getToken, setProfile]);
+  }, [getToken, setProfile, loadCachedProfile]);
 
   // Back in the app after a failed start (no network): load the account / store settings again.
   useEffect(() => {
@@ -162,7 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMode(cfg.mode);
         await refreshProfile();
       } catch (e) {
-        if (!cancelled) setConfigError(e instanceof Error ? e.message : "Could not reach the store.");
+        if (!cancelled) {
+          setConfigError(e instanceof Error ? e.message : "Could not reach the store.");
+          // Offline at start: still show the account last used here; it's checked when the app is back.
+          await loadCachedProfile();
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -171,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [configAttempt, refreshProfile]);
+  }, [configAttempt, refreshProfile, loadCachedProfile]);
 
   const devLogin = useCallback(
     async (email: string, name?: string) => {
@@ -285,6 +308,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (modeRef.current === "supabase" && supabase.current) {
       await supabase.current.auth.signOut().catch(() => undefined);
     }
+    // Offline (or an expired token), Supabase can return before removing its saved session — remove it
+    // here too, so the previous person isn't signed back in next time (shared phones).
+    await removeSupabaseSessions();
     await clearLocal();
   }, [clearLocal]);
 

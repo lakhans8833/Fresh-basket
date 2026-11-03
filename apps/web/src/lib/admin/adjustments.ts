@@ -16,8 +16,8 @@ import { adminGetOrder } from "./orders";
 export async function adminAddAdjustment(orderId: string, input: AdminAdjustmentInput, actorId: string) {
   await tx(async (c) => {
     const o = (
-      await c.query<{ status: string; payment_status: string; total: number }>(
-        "select status, payment_status, total from orders where id = $1 for update",
+      await c.query<{ status: string; payment_status: string; total: number; subtotal: number; discount: number }>(
+        "select status, payment_status, total, subtotal, discount from orders where id = $1 for update",
         [orderId],
       )
     ).rows[0];
@@ -32,8 +32,8 @@ export async function adminAddAdjustment(orderId: string, input: AdminAdjustment
     }
 
     const lines = (
-      await c.query<{ id: string; product_name: string; variant_label: string; unit_price: number; quantity: number }>(
-        "select id, product_name, variant_label, unit_price, quantity from order_items where order_id = $1",
+      await c.query<{ id: string; product_name: string; variant_label: string; unit_price: number; quantity: number; variant_id: string | null }>(
+        "select id, product_name, variant_label, unit_price, quantity, variant_id from order_items where order_id = $1",
         [orderId],
       )
     ).rows;
@@ -67,10 +67,32 @@ export async function adminAddAdjustment(orderId: string, input: AdminAdjustment
     }
 
     if (input.kind === "refund") {
-      if (input.amount > itemsValue) throw conflict(`A refund for these items can be at most ${formatINR(itemsValue)}.`);
+      // What the customer actually paid for these items: their share after the order's coupon discount.
+      const paidForItems = o.subtotal > 0 ? Math.floor((itemsValue * (o.subtotal - o.discount)) / o.subtotal) : itemsValue;
+      if (input.amount > paidForItems) {
+        throw conflict(
+          `A refund for these items can be at most ${formatINR(paidForItems)}${o.discount ? ` (their price less their share of the ${formatINR(o.discount)} discount)` : ""}.`,
+        );
+      }
       const refunded = previous.filter((p) => p.kind === "refund").reduce((s, p) => s + p.amount, 0);
       if (refunded + input.amount > o.total) {
         throw conflict(`Refunds can't add up to more than the ${formatINR(o.total)} paid (${formatINR(refunded)} already recorded).`);
+      }
+    }
+
+    if (input.kind === "replacement") {
+      // A replacement sends the goods again: they leave the shop's stock (same lock order as checkout).
+      const take = snapshot
+        .map((s) => ({ ...s, variantId: byId.get(s.itemId)!.variant_id }))
+        .sort((a, b) => String(a.variantId).localeCompare(String(b.variantId)));
+      if (take.some((t) => !t.variantId)) throw conflict("A pack in this order no longer exists in the catalogue — record a refund instead.");
+      await c.query(
+        `select p.id from products p where p.id in (select product_id from product_variants where id = any($1::uuid[])) order by p.id for update`,
+        [take.map((t) => t.variantId)],
+      );
+      for (const t of take) {
+        const ok = (await c.query<{ ok: boolean }>("select take_stock($1, $2, false, $3) as ok", [t.variantId, t.quantity, t.label])).rows[0]?.ok;
+        if (!ok) throw conflict(`Not enough ${t.name} (${t.label}) in stock for a replacement. Restock it in Inventory first, or record a refund.`);
       }
     }
 

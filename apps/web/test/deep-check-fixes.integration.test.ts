@@ -71,7 +71,7 @@ describe("input limits", () => {
     expect(whatsappOrderSchema.safeParse({ ...wa, deliveryDate: "2026-02-30", slotId: order.slotId }).success).toBe(false);
   });
   it("coupon numbers and dates stay in range", () => {
-    const c = { code: "TEST10", kind: "flat", value: 1000 };
+    const c = { code: "TEST10", kind: "flat", value: 1000, minOrder: 19900 };
     expect(adminCouponSchema.safeParse(c).success).toBe(true);
     expect(adminCouponSchema.safeParse({ ...c, minOrder: 99_999_999_999 }).success).toBe(false);
     expect(adminCouponSchema.safeParse({ ...c, usageLimit: 3_000_000_000 }).success).toBe(false);

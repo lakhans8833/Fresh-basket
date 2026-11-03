@@ -12,8 +12,10 @@ export interface FetchState<T> {
 }
 
 /**
- * GET a JSON endpoint. Pass null as path to skip. Re-runs when the path or deps change — and then
- * forgets the old result first, so e.g. another account's orders never show while the new ones load.
+ * GET a JSON endpoint. Pass null as path to skip. Re-runs when the path or deps change. When the deps
+ * change (they name whose data it is, e.g. the account), the old result is forgotten first, so another
+ * account's orders never show while the new ones load. A path change alone (a filter or sort) keeps the
+ * current list on screen until the new one arrives.
  */
 export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchState<T> {
   const [data, setDataState] = useState<T | null>(null);
@@ -23,6 +25,7 @@ export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchSta
   const seq = useRef(0);
   const shownKey = useRef<string | null>(null);
   const key = JSON.stringify([path, ...deps]);
+  const owner = JSON.stringify(deps);
 
   const run = useCallback(
     async (mode: "load" | "refresh") => {
@@ -35,8 +38,8 @@ export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchSta
         return;
       }
       const id = ++seq.current;
-      if (shownKey.current !== key) {
-        // Different request than what's on screen (other account, other product): don't show stale data.
+      if (shownKey.current !== null && shownKey.current !== owner) {
+        // Data of someone/something else is on screen (another account): don't show it while loading.
         setDataState(null);
         setError(null);
       }
@@ -45,7 +48,7 @@ export function useFetch<T>(path: string | null, deps: unknown[] = []): FetchSta
       try {
         const res = await api<T>(path);
         if (id !== seq.current) return;
-        shownKey.current = key;
+        shownKey.current = owner;
         setDataState(res);
         setError(null);
       } catch (e) {

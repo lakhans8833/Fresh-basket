@@ -1,5 +1,5 @@
 import { buildWhatsAppOrderUrl, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, UNAVAILABLE_ITEM_LABEL, whatsappOrderSchema } from "@freshbasket/shared";
-import { clientIp, HttpError, json, parseBody, rateLimit, route } from "@/lib/http";
+import { clientIp, HttpError, json, parseBody, rateLimit, rateLimitCount, route } from "@/lib/http";
 import { getSession } from "@/lib/auth";
 import { placeWhatsAppOrder } from "@/lib/orders";
 import { getSettings } from "@/lib/settings";
@@ -9,6 +9,9 @@ import { trackUrlFor } from "@/lib/payments/start";
 import { trackToken } from "@/lib/tokens";
 import { upiPaymentInfo } from "@/lib/payments/upi";
 
+
+/** New guest WhatsApp orders allowed per network per day. */
+const GUEST_WA_ORDERS_PER_DAY = 20;
 /**
  * "Order on WhatsApp". The order is created here first — totals and delivery charge computed on the
  * server, stock reserved, idempotent (same key or identical resubmit → same order) — and only then
@@ -25,9 +28,15 @@ export const POST = route(async (req) => {
 
   const session = await getSession().catch(() => null);
   // Guests aren't verified: a daily cap per network stops one person filling the shop's stock with
-  // fake WhatsApp orders (each one holds stock until staff confirm or it expires).
-  if (!session) await rateLimit(`wa-order-day:${clientIp(req)}`, 12, 24 * 60 * 60_000);
+  // fake WhatsApp orders (each one holds stock until staff confirm or it expires). Only NEW orders count
+  // (a retry of an order already placed gets that order back), and the cap allows for many customers
+  // sharing one mobile-carrier address.
+  const dayKey = `wa-order-day:${clientIp(req)}`;
+  if (!session && (await rateLimitCount(dayKey)) >= GUEST_WA_ORDERS_PER_DAY) {
+    throw new HttpError(429, "Too many WhatsApp orders from this network today. Please sign in to order, or call the store.", "RATE_LIMITED");
+  }
   const { order, created } = await placeWhatsAppOrder(session?.userId ?? null, input);
+  if (!session && created) await rateLimit(dayKey, Number.MAX_SAFE_INTEGER, 24 * 60 * 60_000);
   // (A retry matching an order cancelled meanwhile gets ORDER_CANCELLED from placeWhatsAppOrder.)
   const payLink = await ensurePaymentLink(order);
   const trackUrl = trackUrlFor(order.id);

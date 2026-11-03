@@ -81,7 +81,9 @@ export function PayPanel({ order, payment, token, returnToApp, storeName }: Prop
             // this screen so the customer can read what happens next.
             setBusy(null);
             setAttention(
-              r.status === "refund_required"
+              r.status === "order_cancelled"
+                ? "This order was cancelled before your payment went through, so no money was taken. If your bank shows a hold, it is released automatically (usually within a few days)."
+                : r.status === "refund_required"
                 ? "We received your payment, but this order can no longer be completed. Your refund will be processed — see the order page."
                 : "We couldn't confirm this payment automatically. Our team will check it — see the order page.",
             );

@@ -53,7 +53,9 @@ export function OrderDetail({
   }, [order.status, order.paymentMethod, router]);
 
   const currentIdx = TRACKING_STEPS.indexOf(order.status);
-  const eventFor = (s: OrderStatus) => [...order.events].reverse().find((e) => e.status === s);
+  // The first time the order reached a step (later notes on the same step — cash collected, a refund
+  // after delivery — must not move "Delivered" to their time).
+  const eventFor = (s: OrderStatus) => order.events.find((e) => e.status === s);
 
   async function cancel() {
     if (!confirm("Cancel this order? Items will be released.")) return;

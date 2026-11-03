@@ -90,7 +90,8 @@ export async function submitReview(userId: string, productId: string, rating: nu
      values ($1, $2, $3, $4, $5)
      on conflict (product_id, user_id) do update
        set rating = excluded.rating, comment = excluded.comment, order_id = excluded.order_id,
-           status = 'pending', updated_at = now()
+           -- a review the store hid stays hidden when edited (it doesn't re-enter the approval queue)
+           status = case when product_reviews.status = 'hidden' then 'hidden' else 'pending' end, updated_at = now()
      returning id, status`,
     [productId, userId, order.id, rating, comment?.trim() ? comment.trim() : null],
   );

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useId } from "react";
 import { ShoppingBasket, Check } from "lucide-react";
 import { addablePacks, formatINR, formatWeight, MAX_QTY_PER_LINE, sharesWeightStock, unitPriceLabel, type ProductDetail } from "@freshbasket/shared";
-import { useCart } from "../cart/cart-context";
+import { FULL_BASKET, useCart } from "../cart/cart-context";
 import { useToast } from "../ui/toast";
 import { Button, ButtonLink } from "../ui/button";
 import { QuantityStepper } from "./quantity-stepper";
@@ -46,7 +46,7 @@ export function ProductPurchase({ product, whatsappEnabled = false }: { product:
   const addToCart = () => {
     const n = Math.min(qty, maxAddable); // the cart may have changed since the quantity was picked
     if (n <= 0) return;
-    add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n);
+    if (!add({ variantId: variant.id, productName: product.name, productSlug: product.slug, variantLabel: variant.label, imageUrl: product.imageUrl, priceHint: variant.price }, n)) return toast(FULL_BASKET);
     toast(`${n} × ${product.name} (${variant.label}) added to cart`);
     setQty(1);
   };

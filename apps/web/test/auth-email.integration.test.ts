@@ -136,16 +136,17 @@ describe("with SMTP", () => {
     expect((await post({ action: "signin", email: "victim@example.com" }, "203.0.113.200")).status).toBe(200);
   });
 
-  it("an address's hourly limit used up from elsewhere doesn't lock its owner out (2 an hour per network still go through)", async () => {
+  it("an address's hourly limit used up from elsewhere doesn't lock its owner out, and can't be flooded (hard cap 25)", async () => {
     const { post } = await load(SMTP_ENV);
     // 15 requests for the address from 15 different networks use up its hourly allowance…
     for (let i = 0; i < 15; i++) expect((await post({ action: "signin", email: "owner@example.com" }, `198.51.100.${i + 10}`)).status).toBe(200);
-    // …a 16th network (someone else) is refused, but the owner's own network still gets codes.
-    expect((await post({ action: "signin", email: "owner@example.com" }, "198.51.100.99")).status).toBe(200); // its first: allowed
+    // …past that, a network asking for this address for the first time this hour still gets one code:
     expect((await post({ action: "signin", email: "owner@example.com" }, "2001:db8:aa:1::1")).status).toBe(200);
-    // The same /48 again from another /64 (past the 45 s per-network wait): its 2nd is allowed, its 3rd isn't.
-    expect((await post({ action: "signin", email: "owner@example.com" }, "2001:db8:aa:2::1")).status).toBe(200);
-    expect((await post({ action: "signin", email: "owner@example.com" }, "2001:db8:aa:3::1")).status).toBe(429);
+    // …but not a second one from the same wider network (/48), even from another /64:
+    expect((await post({ action: "signin", email: "owner@example.com" }, "2001:db8:aa:2::1")).status).toBe(429);
+    // …and at most 10 such extras an hour: 9 more new networks pass, the next is refused.
+    for (let i = 0; i < 9; i++) expect((await post({ action: "signin", email: "owner@example.com" }, `203.0.113.${i + 1}`)).status).toBe(200);
+    expect((await post({ action: "signin", email: "owner@example.com" }, "203.0.113.200")).status).toBe(429);
   });
 
   it("IPv6 addresses in one /64 count as one network", async () => {

@@ -19,9 +19,10 @@ const schema = z.object({
  * Limits (protect the mailbox's daily allowance and stop anyone using the store to spam an address):
  * - per network (IPv6 grouped by /64 — not wider: mobile carriers put many customers in one /48): 10 per 10 min;
  * - per network + address: 1 per 45 s, 5 an hour;
- * - per address from anywhere: 15 an hour (Gmail dots and "+tags" count as the same address) — but
- *   past that, each wider network (IPv6 /48 / IPv4 address) still gets 2 an hour for the address, so
- *   someone hammering YOUR address from elsewhere can't lock you out of your own codes;
+ * - per address from anywhere: 15 an hour (Gmail dots and "+tags" count as the same address) — past
+ *   that, a wider network (IPv6 /48 / IPv4 address) asking for the address for the first time this hour
+ *   still gets one code, up to 10 more an hour (hard cap 25), so someone hammering YOUR address from
+ *   elsewhere can't lock you out, and can't flood it either;
  * - whole shop: 300 an hour (protects the mailbox's sending allowance).
  */
 export const POST = route(async (req) => {
@@ -37,9 +38,11 @@ export const POST = route(async (req) => {
   try {
     await rateLimit(`auth-email:to-hour:${to}`, 15, 60 * 60_000);
   } catch (e) {
-    // The address's hourly limit was used up — possibly by someone else. Its owner's network still
-    // gets 2 an hour, so nobody can lock a customer out of their own codes from elsewhere.
-    if (fromHere > 2) throw e;
+    // The address's hourly limit was used up — possibly by someone else. A network that hasn't asked for
+    // this address yet this hour still gets one code (its first request), within a hard cap of 25 an
+    // hour for the address — so a customer can't be locked out from elsewhere, and nobody can flood it.
+    if (fromHere > 1) throw e;
+    await rateLimit(`auth-email:to-hour-extra:${to}`, 10, 60 * 60_000);
   }
   await rateLimit("auth-email:shop-hour", 300, 60 * 60_000);
   const send = () => sendAuthEmail(body.action, body.email, { name: body.name, password: body.action === "signup" ? body.password : null });

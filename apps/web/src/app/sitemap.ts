@@ -25,7 +25,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const cats = await query<{ slug: string }>("select slug from categories where active order by sort_order");
     const products = await query<{ slug: string; updated_at: Date; image: string | null }>(
       `select p.slug, p.updated_at, (select url from product_images i where i.product_id = p.id order by sort_order limit 1) as image
-         from products p join categories c on c.id = p.category_id where p.active and c.active order by p.name`,
+         from products p join categories c on c.id = p.category_id
+        where p.active and c.active and exists (select 1 from product_variants v where v.product_id = p.id and v.active)
+        order by p.name`,
     );
     for (const c of cats) out.push({ url: `${base}/category/${c.slug}`, changeFrequency: "daily", priority: 0.8 });
     for (const p of products) {

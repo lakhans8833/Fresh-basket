@@ -5,8 +5,19 @@ import { Clock } from "lucide-react";
 import { formatSlotTime, istDateString, addDays, type SlotOption } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 
+// Shared by every badge on the page, but only for a few minutes: slots close as the day goes on and a
+// tab (or the installed app) can stay open for hours.
+const MAX_AGE_MS = 3 * 60_000;
 let cached: Promise<SlotOption[]> | null = null;
-const loadSlots = () => (cached ??= api<{ slots: SlotOption[] }>("/api/delivery/slots").then((r) => r.slots).catch(() => { cached = null; return []; }));
+let cachedAt = 0;
+const loadSlots = () => {
+  if (cached && Date.now() - cachedAt > MAX_AGE_MS) cached = null;
+  if (!cached) {
+    cachedAt = Date.now();
+    cached = api<{ slots: SlotOption[] }>("/api/delivery/slots").then((r) => r.slots).catch(() => { cached = null; return []; });
+  }
+  return cached;
+};
 
 function dayWord(date: string) {
   const today = istDateString(new Date());
@@ -27,11 +38,20 @@ export function useNextSlotLabel() {
   const [label, setLabel] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    void loadSlots().then((s) => {
-      const x = s.find((y) => y.available);
-      if (live) setLabel(x ? `${dayWord(x.date)}, ${range(x.startTime, x.endTime)}` : null);
-    });
-    return () => { live = false; };
+    const load = () =>
+      void loadSlots().then((s) => {
+        const x = s.find((y) => y.available);
+        if (live) setLabel(x ? `${dayWord(x.date)}, ${range(x.startTime, x.endTime)}` : null);
+      });
+    load();
+    const t = setInterval(load, MAX_AGE_MS);
+    const onShow = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      live = false;
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onShow);
+    };
   }, []);
   return label;
 }

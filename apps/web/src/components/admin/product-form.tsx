@@ -39,7 +39,11 @@ interface LoadedProduct {
 }
 interface CategoryOpt { id: string; name: string; active: boolean }
 
-type VariantRow = { key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean; note?: string };
+type VariantRow = {
+  key: string; id?: string; label: string; price: string; mrp: string; stock: string; stockLoaded?: number; active: boolean; hasOrders: boolean; note?: string;
+  /** As loaded (see adminVariantSchema): unchanged values don't overwrite edits made meanwhile elsewhere. */
+  loaded?: { price: number; mrp: number | null; active: boolean };
+};
 type ImageRow = { key: string; url: string; alt: string };
 
 let keySeq = 0;
@@ -150,7 +154,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [images, setImages] = useState<ImageRow[]>(() => (initial?.images ?? []).map((i) => ({ key: k(), url: i.url, alt: i.alt ?? "" })));
   const [variants, setVariants] = useState<VariantRow[]>(() =>
     initial?.variants.length
-      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders, note: v.note ?? "" }))
+      ? initial.variants.map((v) => ({ key: k(), id: v.id, label: v.label, price: paiseToInput(v.price), mrp: paiseToInput(v.mrp), stock: String(v.stock), stockLoaded: v.stock, active: v.active, hasOrders: v.hasOrders, note: v.note ?? "", loaded: { price: v.price, mrp: v.mrp ?? null, active: v.active } }))
       : [emptyVariant()],
   );
   // Stock by weight: one total in kg shared by every weight pack (used when all options are weights).
@@ -188,6 +192,7 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
   const [deleting, setDeleting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pendingSave = useRef<{ sig: string; id: string } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const chipId = useId();
 
@@ -275,7 +280,8 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       if (mrp !== null && Number.isNaN(mrp)) errs[`variants.${i}.mrp`] = "Use a rupee amount";
       else if (mrp !== null && price !== null && !Number.isNaN(price) && mrp < price) errs[`variants.${i}.mrp`] = "MRP should be at least the price";
       if (!byWeight && (stock === null || Number.isNaN(stock))) errs[`variants.${i}.stock`] = "Whole number";
-      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active, note: v.note?.trim() || null };
+      return { id: v.id, label: v.label, price: price ?? 0, mrp: mrp === null || Number.isNaN(mrp) ? null : mrp, stock: stock ?? 0, stockLoaded: v.id ? v.stockLoaded : undefined, sortOrder: i, active: v.active, note: v.note?.trim() || null,
+        ...(v.id && v.loaded ? { priceLoaded: v.loaded.price, mrpLoaded: v.loaded.mrp, activeLoaded: v.loaded.active } : {}) };
     });
     const raw = {
       name, slug, categoryId, description: description.trim() || null, highlights, seasonal, featured, active,
@@ -311,8 +317,13 @@ function ProductEditor({ initial, categories, back, onSaved }: { initial: Loaded
       return false;
     }
     setSaving(true);
+    // The same content sent again (retry after a timeout) keeps its request id, so a save that already
+    // went through isn't applied twice (stock is saved as "change since the form opened").
+    const sig = JSON.stringify(payload);
+    if (!pendingSave.current || pendingSave.current.sig !== sig) pendingSave.current = { sig, id: crypto.randomUUID() };
     try {
-      const r = await api<{ id: string }>(isNew ? "/api/admin/products" : `/api/admin/products/${initial!.id}`, { method: isNew ? "POST" : "PUT", json: payload });
+      const r = await api<{ id: string }>(isNew ? "/api/admin/products" : `/api/admin/products/${initial!.id}`, { method: isNew ? "POST" : "PUT", json: { ...payload, requestId: pendingSave.current.id } });
+      pendingSave.current = null;
       setDirty(false);
       toast(isNew ? "Product created" : "Product saved");
       if (isNew) router.replace(`/admin/products/${r.id}`);

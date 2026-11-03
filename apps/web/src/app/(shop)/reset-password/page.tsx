@@ -15,12 +15,12 @@ export const metadata: Metadata = { title: "Set a new password", robots: { index
  *   password change for THAT account, clearly labelled with its email;
  * - "expired": not signed in — the link didn't work.
  */
-export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ next?: string; from?: string }> }) {
   const [session, sp, store] = await Promise.all([getSession(), searchParams, cookies()]);
   const mode = !session ? "expired" : recoveryToken.verify(session.userId, store.get(RECOVERY_COOKIE)?.value) ? "recovery" : "change";
   return (
     <div className="container-page grid min-h-[60vh] place-items-center py-10">
-      <ResetPasswordForm mode={mode} email={session?.profile.email ?? null} next={safeNextPath(sp.next)} />
+      <ResetPasswordForm mode={mode} email={session?.profile.email ?? null} next={safeNextPath(sp.next)} fromAccount={sp.from === "account"} />
     </div>
   );
 }

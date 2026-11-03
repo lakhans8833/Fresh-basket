@@ -190,7 +190,8 @@ export async function ShopView({ filters: f, categories, whatsapp }: { filters: 
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-5">
               {/* sr-only, so it takes no grid cell; keeps headings in order (h1 → h2 → product h3). */}
               <h2 className="sr-only">Products</h2>
-              {products.map((p, i) => <ProductCard key={p.id} product={p} priority={i < 4} />)}
+              {/* With a discount filter on, each card opens on its best-deal pack, so the badge matches the filter. */}
+              {products.map((p, i) => <ProductCard key={p.id} product={p} priority={i < 4} preferDeal={f.discounts.length > 0} />)}
             </div>
           )}
           {whatsapp ? (

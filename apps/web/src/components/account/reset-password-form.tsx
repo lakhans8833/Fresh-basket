@@ -11,8 +11,8 @@ import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
 
 export function ResetPasswordForm({
-  mode, email, next = "/account",
-}: { mode: "recovery" | "change" | "expired"; email: string | null; next?: string }) {
+  mode, email, next = "/account", fromAccount = false,
+}: { mode: "recovery" | "change" | "expired"; email: string | null; next?: string; fromAccount?: boolean }) {
   const signedIn = mode !== "expired";
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -66,7 +66,9 @@ export function ResetPasswordForm({
         <Notice tone="success" className="mt-6">Password updated. Taking you to your account…</Notice>
       ) : (
         <form onSubmit={submit} className="mt-6 space-y-4">
-          {mode === "change" ? (
+          {mode === "change" && fromAccount ? (
+            <p className="text-sm text-ink-soft">New password for <b>{email ?? "your account"}</b>.</p>
+          ) : mode === "change" ? (
             <Notice tone="warning" title={`You're signed in as ${email ?? "this account"}`}>
               This changes the password of <b>{email ?? "the signed-in account"}</b>. If you opened a password-reset email for a
               different account, that link didn&apos;t work — sign out and ask for a new link for that account.

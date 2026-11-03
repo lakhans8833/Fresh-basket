@@ -6,7 +6,7 @@ import type { ProductSummary } from "@freshbasket/shared";
 import { api } from "@/lib/client/api";
 import { ButtonLink } from "../ui/button";
 import { EmptyState, Notice } from "../ui/feedback";
-import { onFavouritesChange, readFavourites } from "./favourites";
+import { onFavouritesChange, readFavourites, writeFavourites } from "./favourites";
 import { ProductCard, ProductCardSkeleton } from "./product-card";
 
 const grid = "grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
@@ -31,7 +31,15 @@ export function WishlistView() {
   useEffect(() => {
     if (!wanted || (catalog && !missing)) return;
     api<{ products: ProductSummary[] }>(`/api/products?limit=200&ids=${encodeURIComponent(idsKey)}`)
-      .then((r) => setCatalog(r.products))
+      .then((r) => {
+        setCatalog(r.products);
+        // Saved products the shop has since removed: forget them (they can't be shown or bought), so the
+        // ♥ count and "Nothing saved yet" stay true and this request doesn't repeat for them.
+        const found = new Set(r.products.map((p) => p.id));
+        const asked = idsKey.split(",").filter(Boolean);
+        const gone = new Set(asked.filter((id) => !found.has(id)));
+        if (gone.size) writeFavourites(readFavourites().filter((id) => !gone.has(id)));
+      })
       .catch(() => setError(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the saved list changes
   }, [wanted, idsKey]);

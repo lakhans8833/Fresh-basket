@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MAX_LINES, MAX_QTY_PER_LINE } from "@freshbasket/shared";
 
 export interface CartLine {
@@ -28,7 +28,8 @@ interface CartState {
   hydrated: boolean;
   couponCode: string | null;
   location: DeliveryLocation | null;
-  add: (line: Omit<CartLine, "quantity">, qty?: number) => void;
+  /** false when the basket already has the maximum number of different items (nothing was added). */
+  add: (line: Omit<CartLine, "quantity">, qty?: number) => boolean;
   setQuantity: (variantId: string, qty: number) => void;
   remove: (variantId: string) => void;
   clear: () => void;
@@ -60,6 +61,8 @@ function save(key: string, value: unknown) {
   }
 }
 
+export const FULL_BASKET = `Your basket already has ${MAX_LINES} different items — remove one to add another.`;
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [couponCode, setCouponCodeState] = useState<string | null>(null);
@@ -88,7 +91,38 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (hydrated) save(KEY, { lines, couponCode });
   }, [lines, couponCode, hydrated]);
 
+  // A basket saved yesterday shows yesterday's prices in the header / cart bar until a quote runs. Once
+  // per page load, ask the server for today's prices (no coupon: that endpoint is rate-limited per coupon).
+  const pricesChecked = useRef(false);
+  useEffect(() => {
+    if (!hydrated || pricesChecked.current || lines.length === 0) return;
+    pricesChecked.current = true;
+    fetch("/api/quote", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ items: lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })) }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { quote?: { lines: { variantId: string; unitPrice: number }[] } } | null) => {
+        const today = new Map((j?.quote?.lines ?? []).map((l) => [l.variantId, l.unitPrice]));
+        if (today.size === 0) return;
+        setLines((prev) => {
+          let changed = false;
+          const next = prev.map((l) => {
+            const p = today.get(l.variantId);
+            if (p === undefined || p === l.priceHint) return l;
+            changed = true;
+            return { ...l, priceHint: p };
+          });
+          return changed ? next : prev;
+        });
+      })
+      .catch(() => undefined);
+  }, [hydrated, lines]);
+
+  const linesRef = useRef(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
   const add = useCallback((line: Omit<CartLine, "quantity">, qty = 1) => {
+    const cur = linesRef.current;
+    if (!cur.some((l) => l.variantId === line.variantId) && cur.length >= MAX_LINES) return false;
     setLines((prev) => {
       const i = prev.findIndex((l) => l.variantId === line.variantId);
       if (i >= 0) {
@@ -99,6 +133,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (prev.length >= MAX_LINES) return prev;
       return [...prev, { ...line, quantity: Math.min(qty, MAX_QTY_PER_LINE) }];
     });
+    return true;
   }, []);
 
   const setQuantity = useCallback((variantId: string, qty: number) => {
