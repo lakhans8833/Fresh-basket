@@ -34,21 +34,21 @@ export const ORDER_COLUMNS = `o.id, o.order_number, o.user_id, o.status, o.payme
 export async function hydrateOrders(db: Q, rows: OrderRow[]): Promise<Order[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
-  // Both lookups at once (on a pool they run in parallel; on one client they simply queue).
-  const [{ rows: items }, { rows: events }, { rows: adjustments }] = await Promise.all([
-    db.query<{
-      id: string; order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
-      unit_price: number; quantity: number; line_total: number; image_url: string | null;
-    }>("select * from order_items where order_id = any($1::uuid[]) order by product_name", [ids]),
-    db.query<{ order_id: string; status: OrderStatus; note: string | null; created_at: Date }>(
-      "select order_id, status, note, created_at from order_events where order_id = any($1::uuid[]) order by created_at, id",
-      [ids],
-    ),
-    db.query<{
-      id: string; order_id: string; kind: "refund" | "replacement"; items: OrderAdjustment["items"]; amount: number; reason: string;
-      status: "pending" | "done"; created_at: Date; done_at: Date | null;
-    }>("select id, order_id, kind, items, amount, reason, status, created_at, done_at from order_adjustments where order_id = any($1::uuid[]) order by created_at", [ids]),
-  ]);
+  // One after another: on a transaction client, overlapping queries are deprecated in pg (and
+  // removed in pg@9); on the pool, running them in parallel would take three connections per
+  // request, which is what filled the database's connection limit under load.
+  const { rows: items } = await db.query<{
+    id: string; order_id: string; variant_id: string | null; product_id: string | null; product_name: string; variant_label: string;
+    unit_price: number; quantity: number; line_total: number; image_url: string | null;
+  }>("select * from order_items where order_id = any($1::uuid[]) order by product_name", [ids]);
+  const { rows: events } = await db.query<{ order_id: string; status: OrderStatus; note: string | null; created_at: Date }>(
+    "select order_id, status, note, created_at from order_events where order_id = any($1::uuid[]) order by created_at, id",
+    [ids],
+  );
+  const { rows: adjustments } = await db.query<{
+    id: string; order_id: string; kind: "refund" | "replacement"; items: OrderAdjustment["items"]; amount: number; reason: string;
+    status: "pending" | "done"; created_at: Date; done_at: Date | null;
+  }>("select id, order_id, kind, items, amount, reason, status, created_at, done_at from order_adjustments where order_id = any($1::uuid[]) order by created_at", [ids]);
   return rows.map((r) => ({
     id: r.id,
     orderNumber: r.order_number,
