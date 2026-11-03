@@ -21,7 +21,9 @@ function createPool() {
   const url = needsSsl ? stripSslParams(raw) : raw;
   const p = new Pool({
     connectionString: url,
-    max: Number(process.env.DB_POOL_MAX ?? 5),
+    // Small on purpose: every serverless instance has its own pool, and Supabase's pooler allows 200
+    // client connections in all (free plan). 3 per instance leaves room for a burst of instances.
+    max: Number(process.env.DB_POOL_MAX ?? 3),
     ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
     // Serverless: the function can be frozen between requests and Supabase drops idle
     // connections, so don't keep idle clients long, fail fast and keep sockets alive.
@@ -45,8 +47,16 @@ export function isConnectionError(e: unknown): boolean {
   const err = e as { code?: string; message?: string } | null;
   if (!err) return false;
   if (err.code && ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "57P01", "57P02", "57P03", "08000", "08003", "08006", "08001", "08004"].includes(err.code)) return true;
-  return /Connection terminated|connection timeout|Client has encountered a connection error|timeout exceeded when trying to connect|server closed the connection/i.test(err.message ?? "");
+  return isPoolFull(e) || /Connection terminated|connection timeout|Client has encountered a connection error|timeout exceeded when trying to connect|server closed the connection/i.test(err.message ?? "");
 }
+
+/** The database's connection pooler is momentarily full (Supabase: "EMAXCONN max client connections reached"). */
+export function isPoolFull(e: unknown): boolean {
+  return /EMAXCONN|max client connections reached|too many clients already|remaining connection slots are reserved/i.test((e as { message?: string } | null)?.message ?? "");
+}
+
+/** A short random pause before retrying, so a burst of requests doesn't retry in lockstep. */
+const backoff = () => new Promise((r) => setTimeout(r, 200 + Math.floor(Math.random() * 400)));
 
 const READ_ONLY = /^\s*(select|with\s[\s\S]*?\)\s*select)\b/i;
 
@@ -61,6 +71,7 @@ export async function query<T extends QueryResultRow = QueryResultRow>(text: str
   } catch (e) {
     if (!isConnectionError(e) || !READ_ONLY.test(text)) throw e;
     console.warn("[db] connection dropped during a read; retrying once:", (e as Error).message);
+    if (isPoolFull(e)) await backoff();
     return (await pool.query<T>(text, params)).rows;
   }
 }
@@ -74,13 +85,22 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(text: 
 /** A client with an open transaction; a dead connection at this point (nothing ran yet) is replaced once. */
 async function begin(): Promise<PoolClient> {
   for (let attempt = 0; ; attempt++) {
-    const client = await pool.connect();
+    let client: PoolClient;
+    try {
+      client = await pool.connect();
+    } catch (e) {
+      // Nothing has run yet, so connecting again is always safe.
+      if (attempt > 0 || !isConnectionError(e)) throw e;
+      if (isPoolFull(e)) await backoff();
+      continue;
+    }
     try {
       await client.query("begin");
       return client;
     } catch (e) {
       client.release(true);
       if (attempt > 0 || !isConnectionError(e)) throw e;
+      if (isPoolFull(e)) await backoff();
     }
   }
 }
