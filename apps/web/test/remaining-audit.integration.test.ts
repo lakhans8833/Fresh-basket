@@ -87,3 +87,31 @@ describe("FB-33 late payment: only 'revival blocked' becomes a refund", () => {
     }
   });
 });
+
+describe("FB-38 admin save retry id: same id + different content is refused", () => {
+  it("inventory: same id + same content → skipped (applied once); same id + different content → 409", async () => {
+    const { adminPatchInventory } = await import("@/lib/admin/catalog");
+    const pid = (await queryOne<{ id: string }>("select id from products where slug = 'tomato'"))!.id;
+    const grams = async () => Number((await queryOne<{ g: string }>("select stock_grams::text as g from products where id = $1", [pid]))!.g);
+    const g0 = await grams();
+    const id = randomUUID();
+    await adminPatchInventory([], [{ productId: pid, stockGrams: g0 + 3000, stockGramsLoaded: g0 }], id);
+    // Browser retry of the same save: not applied twice.
+    await expect(adminPatchInventory([], [{ productId: pid, stockGrams: g0 + 3000, stockGramsLoaded: g0 }], id)).resolves.toMatchObject({ alreadySaved: true });
+    expect(await grams()).toBe(g0 + 3000);
+    // A different save reusing that id must not be silently dropped.
+    await expect(adminPatchInventory([], [{ productId: pid, stockGrams: g0 + 50000, stockGramsLoaded: g0 }], id)).rejects.toMatchObject({ status: 409, code: "REQUEST_ID_REUSED" });
+    expect(await grams()).toBe(g0 + 3000);
+  });
+
+  it("product form: same id + different content → 409", async () => {
+    const { adminSaveProduct, adminGetProduct } = await import("@/lib/admin/catalog");
+    const pid = (await queryOne<{ id: string }>("select id from products where slug = 'tomato'"))!.id;
+    const cur = (await adminGetProduct(pid))!;
+    const id = randomUUID();
+    const base = { ...cur, requestId: id } as never;
+    await adminSaveProduct(pid, base);
+    await expect(adminSaveProduct(pid, base)).resolves.toEqual({ id: pid });
+    await expect(adminSaveProduct(pid, { ...(base as object), description: "changed in another tab" } as never)).rejects.toMatchObject({ status: 409, code: "REQUEST_ID_REUSED" });
+  });
+});

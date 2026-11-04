@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { z } from "zod";
 import type { adminCategorySchema, AdminProductInput } from "@freshbasket/shared";
 import { labelStockChange, query, queryOne, tx } from "../db";
@@ -71,17 +72,36 @@ export async function adminGetProduct(id: string) {
  * Create or update a product with its images and weight variants in one transaction.
  * Variants referenced by past orders are deactivated rather than deleted.
  */
-/** A save with this request id was already applied (browser retry): true → skip it. Prunes old ids now and then. */
-async function alreadyApplied(c: PoolClient, requestId: string | undefined): Promise<boolean> {
+/** Same content → same hash, whatever the key order. */
+function payloadHash(payload: unknown): string {
+  const stable = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(stable)
+      : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().filter((k) => k !== "requestId").map((k) => [k, stable((v as Record<string, unknown>)[k])]))
+        : v;
+  return createHash("sha256").update(JSON.stringify(stable(payload)) ?? "null").digest("hex");
+}
+
+/**
+ * A save with this request id was already applied (browser retry): true → skip it. The same id with
+ * DIFFERENT content is a different save (FB-38): refused with 409 rather than silently dropped.
+ * Prunes old ids now and then.
+ */
+async function alreadyApplied(c: PoolClient, requestId: string | undefined, payload: unknown): Promise<boolean> {
   if (!requestId) return false;
   if (Math.random() < 0.02) await c.query("delete from admin_request_log where created_at < now() - interval '1 day'");
-  const r = await c.query("insert into admin_request_log (id) values ($1) on conflict do nothing", [requestId]);
-  return r.rowCount === 0;
+  const hash = payloadHash(payload);
+  const r = await c.query("insert into admin_request_log (id, payload_hash) values ($1, $2) on conflict do nothing", [requestId, hash]);
+  if (r.rowCount) return false;
+  const prev = (await c.query<{ payload_hash: string | null }>("select payload_hash from admin_request_log where id = $1", [requestId])).rows[0];
+  if (prev?.payload_hash && prev.payload_hash !== hash) {
+    throw conflict("This save conflicts with an earlier one. Please reload the page and try again.", undefined, "REQUEST_ID_REUSED");
+  }
+  return true;
 }
 
 export async function adminSaveProduct(id: string | null, d: AdminProductInput) {
   return tx(async (c) => {
-    if (id && (await alreadyApplied(c, d.requestId))) return { id }; // the same save was applied before (retry)
+    if (id && (await alreadyApplied(c, d.requestId, { product: id, d }))) return { id }; // the same save was applied before (retry)
     await labelStockChange(c, "admin_edit", { actorId: currentActor()?.id });
     let productId = id;
     // Stock pool before this save (null = stock counted per pack), locked so a sale can't slip in between.
@@ -225,7 +245,7 @@ export async function adminPatchInventory(
   requestId?: string,
 ) {
   return tx(async (c) => {
-    if (await alreadyApplied(c, requestId)) return { updated: 0, alreadySaved: true }; // browser retry of a save that went through
+    if (await alreadyApplied(c, requestId, { updates, products })) return { updated: 0, alreadySaved: true }; // browser retry of a save that went through
     await labelStockChange(c, "admin_edit", { actorId: currentActor()?.id });
     // Same lock order as checkout: every affected product row (by id) first, then packs by id —
     // otherwise a save running alongside a checkout could deadlock.

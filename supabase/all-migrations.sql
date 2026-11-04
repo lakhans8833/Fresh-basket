@@ -3328,6 +3328,16 @@ revoke all on function public.mark_order_paid(uuid, text, text, text, integer, t
 -- Rollback (by hand): re-run the mark_order_paid definition from
 --   supabase/migrations/20261027000002_paid_after_slot_and_failed_delivery.sql
 
+-- ===== supabase/migrations/20261105000004_admin_request_log_payload_hash.sql =====
+-- FB-38 (5 Nov 2026): an admin save's retry id (admin_request_log) also records a hash of what was saved.
+-- Same id + same hash → a browser retry, skipped as before. Same id + DIFFERENT hash → the app answers 409
+-- ("This save conflicts with an earlier one, reload") instead of silently dropping the second save.
+-- Additive and idempotent: one nullable column. Rows written before this (null hash) are treated as a retry.
+alter table public.admin_request_log add column if not exists payload_hash text;
+
+-- Rollback:
+--   alter table public.admin_request_log drop column if exists payload_hash;
+
 -- ===== record the migrations above as applied (for apps/web/scripts/migrate.mjs) =====
 create table if not exists public._fb_migrations (name text primary key, applied_at timestamptz not null default now());
 alter table public._fb_migrations enable row level security;
@@ -3373,5 +3383,6 @@ insert into public._fb_migrations (name) values
   ('20261104000002_utr_hold_fk_indexes_column_grants.sql'),
   ('20261105000001_admin_audit_log_and_stock_ledger.sql'),
   ('20261105000002_stock_ledger_order_and_grants.sql'),
-  ('20261105000003_mark_order_paid_transient_errors.sql')
+  ('20261105000003_mark_order_paid_transient_errors.sql'),
+  ('20261105000004_admin_request_log_payload_hash.sql')
 on conflict (name) do nothing;
