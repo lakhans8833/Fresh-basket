@@ -2,6 +2,7 @@ import { safeNextPath } from "@/lib/safe-next";
 import { canonicalRedirect } from "@/lib/canonical-host";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createSlugCache, slugRoute } from "@/lib/known-slugs";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Internal header carrying the access token the proxy just verified (see lib/auth.ts). */
@@ -30,6 +31,15 @@ function withCors(req: NextRequest, res: NextResponse) {
   return res;
 }
 
+// FB-26: unknown product/category addresses answer a real 404 (see lib/known-slugs.ts). The list comes
+// from this site's own cached /api/catalog/slugs; every failure means "can't tell" → the page renders.
+let slugOrigin = "";
+const knownSlug = createSlugCache(async () => {
+  const res = await fetch(new URL("/api/catalog/slugs", slugOrigin), { signal: AbortSignal.timeout(2_000), cache: "no-store" });
+  if (!res.ok) throw new Error(`slug list ${res.status}`);
+  return res.json();
+});
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // Production: pages answer only on the shop's own address (NEXT_PUBLIC_APP_URL); other hosts → 308.
@@ -51,6 +61,14 @@ export async function proxy(req: NextRequest) {
       if (safe) to.searchParams.set("next", safe);
     }
     return NextResponse.redirect(to);
+  }
+  const slugPage = (req.method === "GET" || req.method === "HEAD") ? slugRoute(pathname) : null;
+  if (slugPage) {
+    slugOrigin = req.nextUrl.origin;
+    if ((await knownSlug(slugPage.kind, slugPage.slug)) === false) {
+      // Any address no route matches renders app/not-found.tsx (the shop's 404 page) with status 404.
+      return NextResponse.rewrite(new URL("/_not-found-fb", req.url));
+    }
   }
   if (pathname.startsWith("/api/") && req.method === "OPTIONS") {
     return withCors(req, new NextResponse(null, { status: 204 }));
