@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState } from "react-native";
 import { api, ApiError, setAuthHandlers } from "./api";
 import { secureStorage } from "./storage";
+import { supabaseSessionStore } from "./session-storage";
 
 export type AuthMode = "dev" | "supabase" | "unconfigured";
 
@@ -44,7 +45,7 @@ interface AuthState {
 
 const DEV_TOKEN_KEY = "fb.devToken";
 const PROFILE_CACHE_KEY = "fb.profile";
-/** Supabase keeps the session in AsyncStorage under "sb-<project>-auth-token". */
+/** Supabase keeps the session (encrypted, see session-storage.ts) in AsyncStorage under "sb-<project>-auth-token". */
 const isSupabaseSessionKey = (k: string) => /^sb-.+-auth-token$/.test(k);
 async function savedSupabaseSession(): Promise<boolean> {
   const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
@@ -53,7 +54,8 @@ async function savedSupabaseSession(): Promise<boolean> {
 async function removeSupabaseSessions() {
   const keys = await AsyncStorage.getAllKeys().catch(() => [] as readonly string[]);
   const ours = keys.filter(isSupabaseSessionKey);
-  if (ours.length) await AsyncStorage.multiRemove(ours).catch(() => undefined);
+  // Through the session storage, so each one's encryption key in SecureStore goes too.
+  for (const k of ours) await supabaseSessionStore.removeItem(k).catch(() => undefined);
 }
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -164,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { createClient } = await import("@supabase/supabase-js");
           supabase.current = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
             // PKCE: Google sign-in returns a one-time code to the app, exchanged for a session below.
-            auth: { storage: AsyncStorage, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
+            auth: { storage: supabaseSessionStore, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
           });
           // Which sign-in methods are on (public Supabase settings): show "Continue with Google" only when it works.
           fetch(`${cfg.supabaseUrl.replace(/\/+$/, "")}/auth/v1/settings`, { headers: { apikey: cfg.supabaseAnonKey } })

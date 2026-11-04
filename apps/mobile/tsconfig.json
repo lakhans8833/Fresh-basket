@@ -8,5 +8,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "../../packages/shared/src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "../../packages/shared/src/**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "test", "../../packages/shared/src/**/*.test.ts"]
 }
