@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, type ComponentRef } from "react";
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { colors, fonts, radius } from "@/theme";
 
@@ -9,7 +9,7 @@ export interface TextFieldProps extends TextInputProps {
   hintTone?: "muted" | "success" | "danger";
 }
 
-export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
+export const TextField = forwardRef<ComponentRef<typeof TextInput>, TextFieldProps>(function TextField(
   { label, error, hint, hintTone = "muted", style, ...rest },
   ref,
 ) {
