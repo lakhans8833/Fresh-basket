@@ -165,7 +165,9 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
    via Vercel's monorepo support). Set the env vars from `apps/web/.env.example` (`DATABASE_URL` = Supabase *transaction pooler*
    URL, `APP_SECRET`, Supabase keys, Razorpay keys, `CRON_SECRET`, `NEXT_PUBLIC_APP_URL`). `apps/web/vercel.json` runs the
    reservation clean-up once a day (02:00 IST; Vercel Hobby allows only daily crons). Expired payment holds are also
-   released on every checkout and admin order view, so the cron is just a backstop — on Pro you can make it `*/10 * * * *`.
+   released on every checkout and admin order view, and `.github/workflows/release-expired-holds.yml` calls the same
+   endpoint every 10 minutes once the `CRON_SECRET` secret and `SITE_URL` variable are set in GitHub Actions — on Pro you
+   can instead make the Vercel cron `*/10 * * * *`.
 3. **Razorpay**: Dashboard → API keys (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`). Webhooks → URL
    `https://<domain>/api/webhooks/razorpay`, events `payment.captured`, `order.paid`, `payment.failed`, `payment_link.paid`, secret →
    `RAZORPAY_WEBHOOK_SECRET`. Test with test-mode keys first. The footer and checkout show online payment only when all three are set.
@@ -194,6 +196,8 @@ cd apps/mobile && npx tsc --noEmit && npx expo export --platform android
 ## Known limitations
 
 - Rate limits are counted in Postgres (`public.rate_limits`), shared by every server instance, with a per-instance memory fallback if the database is briefly unreachable. A dedicated store (e.g. Upstash Redis) would take that load off the database at high traffic.
-- Admin inventory "set stock" overwrites the value (no stock movement ledger); admin lists show the latest 200 orders.
+- Every stock change is recorded in `public.stock_movements` (reason, order, actor) and every admin change in
+  `public.admin_audit_log` (who, method, path, result — never request bodies); read them in the Supabase SQL editor.
+  Admin lists show the latest 200 orders.
 - Supabase-mode sign-in and live Razorpay calls are implemented to the documented APIs but couldn't be exercised here
   without credentials; everything else was run end-to-end (browser, local Postgres with the real migrations and RLS).
