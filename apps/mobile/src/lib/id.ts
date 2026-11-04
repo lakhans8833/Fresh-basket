@@ -1,9 +1,10 @@
-/** Random id for idempotency keys (crypto.randomUUID when available). */
+import { randomUUID } from "expo-crypto";
+
+/**
+ * Random id for idempotency keys. FB-36: Hermes has no global crypto.randomUUID, and the old fallback used
+ * Math.random (predictable, can repeat). expo-crypto's randomUUID uses the OS secure random generator on
+ * Android/iOS (and crypto.randomUUID on web).
+ */
 export function randomId(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c?.randomUUID) return c.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
-    const r = (Math.random() * 16) | 0;
-    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+  return randomUUID();
 }
