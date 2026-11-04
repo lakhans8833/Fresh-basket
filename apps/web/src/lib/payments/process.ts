@@ -1,5 +1,5 @@
 import "server-only";
-import { pool, tx } from "../db";
+import { labelStockChange, pool, tx } from "../db";
 import { scheduleOrderNotification } from "../notify/whatsapp";
 import { CACHE_TAGS, invalidate } from "../cache";
 
@@ -80,6 +80,11 @@ export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<P
       );
       orderId = rows[0]?.id;
     } else {
+      // Checkout payment: the signature already proves the event is Razorpay's; also require the
+      // payment itself to be a captured INR payment (defence in depth, as for payment links above).
+      if (ev.type === "payment.captured" && ((ev.currency && ev.currency !== "INR") || (ev.paymentStatus && ev.paymentStatus !== "captured"))) {
+        return finish("ignored");
+      }
       const { rows } = await c.query<{ id: string }>(
         ev.orderId
           ? "select id from orders where id = $1"
@@ -98,6 +103,7 @@ export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<P
       return finish("failed_recorded");
     }
 
+    await labelStockChange(c, "late_payment", { orderId }); // only a late payment re-takes stock
     const { rows: r } = await c.query<{ result: ProcessResult }>(
       "select mark_order_paid($1, $2, $3, $4, $5, 'webhook') as result",
       [orderId, ev.provider, ev.providerOrderId, ev.paymentId, ev.amount],
@@ -114,6 +120,7 @@ export async function markPaidFromVerifiedPayment(args: {
   orderId: string; provider: PaymentProvider; providerOrderId: string; paymentId: string; amount: number;
 }): Promise<ProcessResult> {
   const result = await tx(async (c) => {
+    await labelStockChange(c, "late_payment", { orderId: args.orderId }); // only a late payment re-takes stock
     const { rows } = await c.query<{ result: ProcessResult }>(
       "select mark_order_paid($1, $2, $3, $4, $5, 'client_verify') as result",
       [args.orderId, args.provider, args.providerOrderId, args.paymentId, args.amount],

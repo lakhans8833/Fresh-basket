@@ -131,7 +131,7 @@ export function WhatsAppOrderView({
   }, []);
 
   const pinValid = isValidPincode(form.pincode);
-  const { data, loading, error: quoteError } = useQuote(pinValid ? form.pincode : null);
+  const { data, loading, error: quoteError, retry: requote } = useQuote(pinValid ? form.pincode : null);
   const quote = data?.quote ?? null;
   const area = data?.area ?? null;
   const delivery: "known" | "confirm" | "unknown" = !pinValid ? "unknown" : area ? "known" : "confirm";
@@ -208,6 +208,8 @@ export function WhatsAppOrderView({
           whatsappUpdates,
           unavailableItems,
           idempotencyKey: idemKey.current,
+          // Guests can't use coupons (the server ignores one), so the shown total only matches without one.
+          expectedTotal: profile || !couponCode ? quote?.total : undefined,
           deliveryDate: chosenSlot ? chosenSlot.date : null,
           slotId: chosenSlot ? chosenSlot.slotId : null,
         },
@@ -237,6 +239,7 @@ export function WhatsAppOrderView({
         void loadSlots();
         setReview(null);
       }
+      if (err.code === "PRICE_CHANGED") requote();
       setFormError(err.message || "Couldn't place the order. Please try again.");
     } finally {
       placingRef.current = false;

@@ -75,9 +75,13 @@ function Inner() {
   async function confirmEmail(u: AdminUser) {
     setEmailBusy(`confirm:${u.id}`);
     try {
-      const r = await api<{ emailConfirmedAt: string }>(`/api/admin/users/${u.id}`, { method: "POST", json: { action: "confirm-email" } });
+      const r = await api<{ emailConfirmedAt: string; passwordReset?: boolean }>(`/api/admin/users/${u.id}`, { method: "POST", json: { action: "confirm-email" } });
       setData((d) => (d ? { users: d.users.map((x) => (x.id === u.id ? { ...x, emailConfirmedAt: r.emailConfirmedAt } : x)) } : d));
-      toast(`${u.email ?? "Email"} is now confirmed — they can sign in.`);
+      toast(
+        r.passwordReset
+          ? `${u.email ?? "Email"} is now confirmed. For safety their sign-up password was cleared — they sign in with an email code or "Forgot password".`
+          : `${u.email ?? "Email"} is now confirmed — they can sign in.`,
+      );
     } catch (e) {
       toast(errorMessage(e));
     } finally {

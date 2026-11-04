@@ -13,6 +13,13 @@ export function getBrowserSupabase(): SupabaseClient | null {
   // No background refresh in the browser: the server proxy refreshes the session on every request
   // and updates the cookies. Two refreshers racing with one refresh token makes Supabase revoke
   // the session (that logged admins out after ~1 hour).
-  client = url && key ? createBrowserClient(url, key, { auth: { autoRefreshToken: false } }) : null;
+  client =
+    url && key
+      ? createBrowserClient(url, key, {
+          auth: { autoRefreshToken: false },
+          // Same cookie flags as the server: Secure on HTTPS.
+          cookieOptions: { secure: typeof location !== "undefined" && location.protocol === "https:" },
+        })
+      : null;
   return client;
 }

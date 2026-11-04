@@ -30,7 +30,8 @@ export default async function PayPage({ params, searchParams }: { params: Promis
       </div>
     );
   }
-  const payment = order.status === "pending_payment" ? await preparePayment(order).catch(() => undefined) : undefined;
+  // A page view never cancels the order on a gateway hiccup (cancelOnFailure: false); a refresh retries.
+  const payment = order.status === "pending_payment" ? await preparePayment(order, { cancelOnFailure: false }).catch(() => undefined) : undefined;
   const settings = await getSettings();
   return (
     <PayPanel

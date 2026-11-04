@@ -1,7 +1,7 @@
 import "server-only";
 import type { Order, PlaceOrderResponse } from "@freshbasket/shared";
 import { randomUUID } from "node:crypto";
-import { query, tx } from "../db";
+import { labelStockChange, query, tx } from "../db";
 import { env } from "../env";
 import { payToken, trackToken } from "../tokens";
 import { createRazorpayOrder } from "./razorpay";
@@ -17,7 +17,15 @@ export function payUrlFor(orderId: string) {
 }
 
 /** Prepare the gateway side of an online payment. Re-uses the gateway order on retries. */
-export async function preparePayment(order: Order & { razorpayOrderId?: string | null }): Promise<PlaceOrderResponse["payment"]> {
+/**
+ * `cancelOnFailure: false` is for page renders (GET /pay/[id]: a refresh, a prefetch, the app opening the
+ * link): a gateway hiccup there must never cancel the customer's order and release its stock — the page
+ * just offers to try again. Only POSTs (placing the order, "Pay now") may cancel on a gateway failure.
+ */
+export async function preparePayment(
+  order: Order & { razorpayOrderId?: string | null },
+  opts: { cancelOnFailure?: boolean } = {},
+): Promise<PlaceOrderResponse["payment"]> {
   if (order.status !== "pending_payment" || order.paymentStatus !== "pending") return undefined;
 
   if (order.paymentMethod === "mock") {
@@ -27,7 +35,7 @@ export async function preparePayment(order: Order & { razorpayOrderId?: string |
 
   if (order.paymentMethod === "razorpay") {
     if (env.payments.online !== "razorpay") throw new HttpError(503, "Online payment is not configured.");
-    const rzpId = await ensureRazorpayOrder(order.id);
+    const rzpId = await ensureRazorpayOrder(order.id, opts.cancelOnFailure ?? true);
     if (!rzpId) return undefined; // paid or cancelled meanwhile: nothing to pay
     return {
       provider: "razorpay",
@@ -56,7 +64,7 @@ const WAIT_MS = 25_000;
  *   it still awaits payment, has no gateway order, no captured payment, and the claim is still ours.
  * - An order paid or cancelled meanwhile is never handed a payable id ("nothing to pay").
  */
-async function ensureRazorpayOrder(orderId: string): Promise<string | null> {
+async function ensureRazorpayOrder(orderId: string, cancelOnFailure = true): Promise<string | null> {
   const token = randomUUID();
   const deadline = Date.now() + WAIT_MS;
   let cur: { status: string; payment_status: string; razorpay_order_id: string | null; total: number; order_number: string } | undefined;
@@ -103,6 +111,12 @@ async function ensureRazorpayOrder(orderId: string): Promise<string | null> {
     return again?.status === "pending_payment" && again.payment_status === "pending" ? (again.id ?? null) : null;
   }
 
+  if (!cancelOnFailure) {
+    // Give the claim back (only if it's still ours) so the next attempt can start straight away.
+    await query("update orders set payment_prep_token = null, payment_prep_at = null where id = $1 and payment_prep_token = $2", [orderId, token]);
+    throw new HttpError(503, "We couldn't reach the payment service just now. Please try again in a moment.");
+  }
+
   // Failure / timeout: decide under the row lock, in one transaction with the cancellation.
   const outcome = await tx<"cancelled" | "not_ours" | { id: string | null }>(async (c) => {
     const locked = (
@@ -118,6 +132,7 @@ async function ensureRazorpayOrder(orderId: string): Promise<string | null> {
     if (locked.razorpay_order_id) return { id: locked.razorpay_order_id }; // someone else succeeded
     if (locked.token !== token || locked.captured) return "not_ours";
     await c.query("update orders set payment_prep_token = null, payment_prep_at = null where id = $1", [orderId]);
+    await labelStockChange(c, "payment_start_failed", { orderId });
     await c.query("select cancel_order($1, 'system', 'Could not start online payment')", [orderId]);
     return "cancelled";
   });

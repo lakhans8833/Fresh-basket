@@ -77,6 +77,8 @@ export async function proxy(req: NextRequest) {
 
   const toSet: { name: string; value: string; options: Parameters<NextResponse["cookies"]["set"]>[2] }[] = [];
   const sb = createServerClient(url, key, {
+    // Session cookies only over HTTPS on the live site (the browser client reads them, so not httpOnly).
+    cookieOptions: { secure: req.nextUrl.protocol === "https:" },
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (list) => {

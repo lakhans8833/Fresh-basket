@@ -1,7 +1,7 @@
 import "server-only";
 import type { z } from "zod";
 import type { adminCategorySchema, AdminProductInput } from "@freshbasket/shared";
-import { query, queryOne, tx } from "../db";
+import { labelStockChange, query, queryOne, tx } from "../db";
 import type { PoolClient } from "pg";
 import { badRequest, conflict, notFound } from "../http";
 import { packGrams } from "@freshbasket/shared";
@@ -81,6 +81,7 @@ async function alreadyApplied(c: PoolClient, requestId: string | undefined): Pro
 export async function adminSaveProduct(id: string | null, d: AdminProductInput) {
   return tx(async (c) => {
     if (id && (await alreadyApplied(c, d.requestId))) return { id }; // the same save was applied before (retry)
+    await labelStockChange(c, "admin_edit");
     let productId = id;
     // Stock pool before this save (null = stock counted per pack), locked so a sale can't slip in between.
     const before = id
@@ -224,6 +225,7 @@ export async function adminPatchInventory(
 ) {
   return tx(async (c) => {
     if (await alreadyApplied(c, requestId)) return { updated: 0, alreadySaved: true }; // browser retry of a save that went through
+    await labelStockChange(c, "admin_edit");
     // Same lock order as checkout: every affected product row (by id) first, then packs by id —
     // otherwise a save running alongside a checkout could deadlock.
     await c.query(

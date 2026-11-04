@@ -77,6 +77,12 @@ export const placeOrderSchema = z.object({
   unavailableItems: z.enum(UNAVAILABLE_ITEM_PREFERENCES).optional().default("call"),
   /** Customer ticked "Send me order updates on WhatsApp". */
   whatsappUpdates: z.boolean().optional().default(false),
+  /**
+   * The total (paise) the customer was shown when they pressed the button. If prices, fees or the coupon
+   * changed since, the order is refused with PRICE_CHANGED instead of being placed at a total they never
+   * saw. Optional, so older app versions keep working.
+   */
+  expectedTotal: z.number().int().min(0).max(100_000_000).optional(),
   /** Client-generated key so a double-click or retry never creates two orders. */
   idempotencyKey: z.string().min(8).max(80),
 }).refine((v) => v.addressId || v.address, { message: "Choose or enter a delivery address", path: ["address"] });
@@ -341,6 +347,12 @@ export const upiReferenceSchema = z.object({
 
 /** "Order on WhatsApp": the order is saved on the server first, then WhatsApp opens with its details. */
 export const whatsappOrderSchema = z.object({
+  /**
+   * The total (paise) the customer was shown when they pressed the button. If prices, fees or the coupon
+   * changed since, the order is refused with PRICE_CHANGED instead of being placed at a total they never
+   * saw. Optional, so older app versions keep working.
+   */
+  expectedTotal: z.number().int().min(0).max(100_000_000).optional(),
   items: z.array(cartLineSchema).min(1).max(MAX_LINES),
   customer: whatsappCustomerSchema,
   paymentMethod: z.enum(["cod", "upi", "razorpay_link"]),

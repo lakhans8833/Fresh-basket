@@ -39,8 +39,21 @@ export async function parseBody<S extends z.ZodType>(req: Request, schema: S): P
 
 type Handler<C> = (req: Request, ctx: C) => Promise<Response>;
 
-/** Wrap a route handler: converts thrown HttpErrors to JSON and hides internal errors. */
+/** Wrap a route handler: converts thrown HttpErrors to JSON and hides internal errors. Admin changes are audit-logged. */
 export function route<C = unknown>(fn: Handler<C>): Handler<C> {
+  const handle = routeInner(fn);
+  return async (req, ctx) => {
+    const res = await handle(req, ctx);
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      // Loaded lazily: lib/auth imports this module.
+      const audit = await import("./admin-audit");
+      if (audit.isAuditedAdminRequest(req)) await audit.recordAdminAction(req, res.status);
+    }
+    return res;
+  };
+}
+
+function routeInner<C>(fn: Handler<C>): Handler<C> {
   return async (req, ctx) => {
     try {
       const res = await fn(req, ctx);

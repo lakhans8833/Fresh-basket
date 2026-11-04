@@ -1,6 +1,6 @@
 import "server-only";
 import { formatINR, type AdminAdjustmentInput } from "@freshbasket/shared";
-import { queryOne, tx } from "../db";
+import { labelStockChange, queryOne, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { adminGetOrder } from "./orders";
 
@@ -15,6 +15,7 @@ import { adminGetOrder } from "./orders";
  */
 export async function adminAddAdjustment(orderId: string, input: AdminAdjustmentInput, actorId: string) {
   await tx(async (c) => {
+    await labelStockChange(c, "order_adjustment", { orderId, actorId });
     const o = (
       await c.query<{ status: string; payment_status: string; total: number; subtotal: number; discount: number }>(
         "select status, payment_status, total, subtotal, discount from orders where id = $1 for update",
@@ -113,6 +114,7 @@ export async function adminAddAdjustment(orderId: string, input: AdminAdjustment
 /** Refund sent / replacement delivered. */
 export async function adminCompleteAdjustment(orderId: string, adjustmentId: string, actorId: string) {
   await tx(async (c) => {
+    await labelStockChange(c, "order_adjustment", { orderId, actorId });
     const a = (
       await c.query<{ kind: string; amount: number; status: string }>(
         "select kind, amount, status from order_adjustments where id = $1 and order_id = $2 for update",

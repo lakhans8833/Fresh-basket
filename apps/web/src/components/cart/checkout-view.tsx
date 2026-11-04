@@ -92,7 +92,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
 
   const selectedAddress = addressId && addressId !== "new" ? addresses?.find((a) => a.id === addressId) : null;
   const pincode = selectedAddress?.pincode ?? (draft.pincode.length === 6 ? draft.pincode : null);
-  const { data, loading } = useQuote(pincode);
+  const { data, loading, retry: requote } = useQuote(pincode);
 
   // A change to what's being ordered gets a fresh idempotency key. Address fields are left out on
   // purpose: they auto-fill (city/state from PIN) and a key change mid-submit allowed duplicates.
@@ -172,6 +172,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
           whatsappUpdates,
           unavailableItems,
           idempotencyKey: idemKey.current,
+          expectedTotal: quote?.total,
         },
       });
       cart.clear();
@@ -189,6 +190,7 @@ export function CheckoutView({ paymentMethods }: { paymentMethods: Method[] }) {
       if (isDefiniteRejection(err)) idemKey.current = newIdempotencyKey();
       const messages = (err.details as { messages?: Record<string, string> } | undefined)?.messages;
       setPlaceError({ message: err.message, messages });
+      if (err.code === "PRICE_CHANGED") requote(); // show the new total; the next tap places it
       // The chosen slot closed or filled while the customer was here: show today's slots again and
       // move to the next open one, so the next tap doesn't hit the same closed slot.
       if (messages?._slot) {

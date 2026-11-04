@@ -169,6 +169,11 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
     }
     if (!updates.length && !productUpdates.length) return true;
     setSaving(true);
+    // Parts that went through. If a later part fails, those rows' stock has ALREADY changed: their edits are
+    // dropped and the table reloaded, so saving again (even after more edits, which gives new request ids)
+    // can't apply the same "+10 since loaded" twice.
+    const savedVariants = new Set<string>();
+    const savedProducts = new Set<string>();
     try {
       // The API accepts up to 200 rows per request. Each part has a request id that stays the same when the
       // same changes are saved again after an error, so parts that already went through aren't applied twice.
@@ -176,7 +181,11 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       if (!pendingSave.current || pendingSave.current.sig !== sig) pendingSave.current = { sig, ids: [] };
       for (let i = 0, part = 0; i < Math.max(updates.length, productUpdates.length); i += 200, part++) {
         const requestId = (pendingSave.current.ids[part] ??= crypto.randomUUID());
-        await api("/api/admin/inventory", { method: "PATCH", json: { updates: updates.slice(i, i + 200), products: productUpdates.slice(i, i + 200), requestId } });
+        const partUpdates = updates.slice(i, i + 200);
+        const partProducts = productUpdates.slice(i, i + 200);
+        await api("/api/admin/inventory", { method: "PATCH", json: { updates: partUpdates, products: partProducts, requestId } });
+        for (const u of partUpdates) savedVariants.add(u.variantId);
+        for (const u of partProducts) savedProducts.add(u.productId);
       }
       pendingSave.current = null;
       const n = updates.length + productUpdates.length;
@@ -186,7 +195,15 @@ export function InventoryTable({ initialQ, initialFilter }: { initialQ: string; 
       setTotals({});
       return true;
     } catch (e) {
-      setSaveError(errorMessage(e));
+      if (savedVariants.size || savedProducts.size) {
+        pendingSave.current = null;
+        setEdits((all) => Object.fromEntries(Object.entries(all).filter(([id]) => !savedVariants.has(id))));
+        setTotals((all) => Object.fromEntries(Object.entries(all).filter(([id]) => !savedProducts.has(id))));
+        await reload().catch(() => undefined);
+        setSaveError(`${savedVariants.size + savedProducts.size} change(s) were saved; the rest weren't (${errorMessage(e)}). The table was refreshed — check the remaining changes and save again.`);
+      } else {
+        setSaveError(errorMessage(e));
+      }
       return false;
     } finally {
       setSaving(false);

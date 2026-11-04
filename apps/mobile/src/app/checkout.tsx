@@ -225,6 +225,8 @@ export default function Checkout() {
           paymentMethod: payment,
           customerNote: note.trim() || null,
           idempotencyKey: idem.current.key,
+          // The total shown on this screen; the server refuses the order (PRICE_CHANGED) if it changed.
+          expectedTotal: quote?.quote.total,
         },
       });
       cart.clear();

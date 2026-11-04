@@ -89,6 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     if (state.lines.length === 0) {
+      reqId.current++; // a quote still in flight for the old basket must not be applied to the empty one
       setQuote(null);
       setQuoteError(null);
       setQuoteLoading(false);

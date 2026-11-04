@@ -77,6 +77,18 @@ describe("/auth/callback", () => {
     expect(recoveryToken.verify("someone-else", cookie?.value)).toBe(false);
   });
 
+  it("someone's own magic/sign-up link with next=/reset-password does NOT set the recovery mark (login CSRF)", async () => {
+    sb.verifyOtp.mockResolvedValue(ok(B));
+    for (const type of ["magiclink", "signup", "email"]) {
+      const res = await raw(`token_hash=t&type=${type}&next=%2Freset-password`);
+      expect(res.cookies.get(RECOVERY_COOKIE)?.value ?? "").toBe("");
+    }
+    // A PKCE code link (no type, only usable in the browser that asked for it) sent to the reset page still counts.
+    sb.exchangeCodeForSession.mockResolvedValueOnce(ok(B));
+    const pkce = await raw("code=xyz&next=%2Freset-password");
+    expect(recoveryToken.verify(B, pkce.cookies.get(RECOVERY_COOKIE)?.value)).toBe(true);
+  });
+
   it("a failed recovery link or a non-recovery link never sets the recovery mark", async () => {
     sb.verifyOtp.mockResolvedValue({ data: { user: null }, error: { code: "otp_expired", message: "expired" } });
     expect((await raw("token_hash=t&type=recovery")).cookies.get(RECOVERY_COOKIE)).toBeUndefined();

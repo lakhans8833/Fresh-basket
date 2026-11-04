@@ -1,7 +1,7 @@
 import "server-only";
 import QRCode from "qrcode";
 import { buildUpiUri, formatINR, type Order, type StoreSettings } from "@freshbasket/shared";
-import { tx } from "../db";
+import { labelStockChange, tx } from "../db";
 import { badRequest, conflict, notFound } from "../http";
 import { scheduleOrderNotification } from "../notify/whatsapp";
 import { CACHE_TAGS, invalidate } from "../cache";
@@ -78,6 +78,7 @@ export async function adminConfirmUpiPayment(orderId: string, actor: { id: strin
       [reference, orderId],
     );
     if (used.rows[0]) throw conflict(`This UTR was already used to confirm order ${used.rows[0].order_number}.`);
+    await labelStockChange(c, "late_payment", { orderId }); // only a late payment re-takes stock
     const { rows: r } = await c.query<{ result: string }>(
       "select mark_order_paid($1, 'upi_manual', null, $2, $3, 'admin') as result",
       [orderId, reference, o.total],

@@ -23,6 +23,7 @@ const schema = z.object({
  *   that, a wider network (IPv6 /48 / IPv4 address) asking for the address for the first time this hour
  *   still gets one code, up to 10 more an hour (hard cap 25). A trade-off: nobody can flood an address,
  *   and locking its owner out takes more than 10 different networks every hour;
+ * - per wider network (IPv6 /48): 60 an hour, so one network can't use up the shop-wide allowance;
  * - whole shop: 300 an hour (protects the mailbox's sending allowance).
  */
 export const POST = route(async (req) => {
@@ -44,6 +45,11 @@ export const POST = route(async (req) => {
     if (fromHere > 1) throw e;
     await rateLimit(`auth-email:to-hour-extra:${to}`, 10, 60 * 60_000);
   }
+  // One wider network (IPv6 /48) may use at most a fifth of the shop's hourly emails, so a single cloud
+  // allocation rotating /64s can't use up the whole allowance and block sign-in for every customer.
+  // Generous on purpose: a mobile carrier can put many real customers in one /48 (IPv4 is already
+  // limited per address above). Checked only after the per-caller limits, before the shop-wide cap.
+  await rateLimit(`auth-email:net-hour:${ipNetworkKey(ip)}`, 60, 60 * 60_000);
   await rateLimit("auth-email:shop-hour", 300, 60 * 60_000);
   const send = () => sendAuthEmail(body.action, body.email, { name: body.name, password: body.action === "signup" ? body.password : null });
   if (body.action === "recovery") {

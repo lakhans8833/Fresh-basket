@@ -418,7 +418,8 @@ describe("admin users", () => {
     // the only admin can't be demoted
     const admins = (await query<{ n: number }>("select count(*)::int as n from profiles where role = 'admin'"))[0]!.n;
     expect(admins).toBe(1);
-    await expect(adminSetRole(OTHER, ADMIN, "customer")).rejects.toMatchObject({ status: 409 });
+    // Refused: demoting an admin needs a store owner (ADMIN_EMAILS) — 403 before the "keep one admin" rule (409).
+    await expect(adminSetRole(OTHER, ADMIN, "customer")).rejects.toMatchObject({ status: 403 });
   });
 });
 

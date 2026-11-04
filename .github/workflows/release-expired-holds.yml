@@ -1,0 +1,46 @@
+# Releases expired stock holds (unpaid online orders, unconfirmed WhatsApp orders) every 10 minutes
+# by calling the site's existing, secret-protected cron endpoint.
+#
+# Why: Vercel Hobby only allows a once-a-day cron (apps/web/vercel.json), and a sub-daily schedule
+# there makes Hobby deployments fail. Holds are also released on shopper traffic (quote / delivery
+# checks / checkout / admin views), but a quiet shop could keep showing items "out of stock" for hours.
+# This workflow works on any Vercel plan. It is safe to run any number of times: the database function
+# locks the rows it releases, so a hold is never released (or its stock returned) twice.
+#
+# Setup (repository Settings → Secrets and variables → Actions):
+#   - Secret   CRON_SECRET : the same value as CRON_SECRET in Vercel (Production)
+#   - Variable SITE_URL    : the primary production URL, e.g. https://fresh-basket-veg.vercel.app
+# Until both are set the job only prints a notice and succeeds (nothing is called).
+# Note: GitHub runs schedules on the default branch only, and may delay them a few minutes at busy times.
+name: Release expired stock holds
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: release-expired-holds
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call /api/cron/release-expired
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$SITE_URL" ]; then
+            echo "::notice::CRON_SECRET secret or SITE_URL variable not set — skipping."
+            exit 0
+          fi
+          code=$(curl -sS -o response.json -w '%{http_code}' --max-time 60 --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer $CRON_SECRET" "${SITE_URL%/}/api/cron/release-expired")
+          echo "HTTP $code"
+          cat response.json; echo
+          [ "$code" = "200" ] || { echo "::error::release-expired returned HTTP $code"; exit 1; }

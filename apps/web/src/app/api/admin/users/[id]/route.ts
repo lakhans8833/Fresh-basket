@@ -19,7 +19,7 @@ export const PATCH = route<{ params: Promise<{ id: string }> }>(async (req, { pa
   if (!z.string().uuid().safeParse(id).success) throw badRequest("Invalid user id.");
   const body = await parseBody(req, schema);
   if ("role" in body) return json(await adminSetRole(me.userId, id, body.role));
-  return json({ user: await adminUpdateUser(id, body) });
+  return json({ user: await adminUpdateUser(me.userId, id, body) });
 });
 
 const actionSchema = z.discriminatedUnion("action", [

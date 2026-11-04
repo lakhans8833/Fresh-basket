@@ -29,8 +29,11 @@ export async function GET(req: Request) {
   const fallbackNext = type === "recovery" ? "/reset-password" : null;
   const next = sp.get("next") ?? fallbackNext;
   const safeNext = safeNextPath(next);
-  // A recovery link: Supabase says so (type=recovery), or a code link that was sent to the reset page.
-  const isRecovery = type === "recovery" || safeNext.startsWith("/reset-password");
+  // A recovery link: Supabase says so (type=recovery), or a PKCE code link (no type) sent to the reset page.
+  // A token_hash link of another type (e.g. someone's own magic link with next=/reset-password) must not
+  // put this browser into "set a new password" mode — that would help sign a victim into the sender's
+  // account (login CSRF). A PKCE code only works in the browser that requested it, so it can't be planted.
+  const isRecovery = type === "recovery" || (!type && sp.has("code") && safeNext.startsWith("/reset-password"));
 
   /** Signed in through the link: go on, and for recovery mark THIS browser + user as recovering. */
   const success = (userId: string | undefined) => {

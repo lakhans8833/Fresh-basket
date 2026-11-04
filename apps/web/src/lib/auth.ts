@@ -52,6 +52,8 @@ export const devCookieOptions = {
 export async function supabaseServerClient() {
   const store = await cookies();
   return createServerClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, {
+    // Session cookies only over HTTPS on the live site (the browser client reads them, so not httpOnly).
+    cookieOptions: { secure: env.appUrl.startsWith("https://") || process.env.VERCEL === "1" },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {

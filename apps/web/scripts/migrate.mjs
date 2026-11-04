@@ -57,7 +57,10 @@ const [base, query = ""] = raw.split("?");
 const kept = query.split("&").filter((kv) => kv && !/^(sslmode|supa|pgbouncer)=/.test(kv));
 const connectionString = kept.length ? `${base}?${kept.join("&")}` : base;
 
-const client = new pg.Client({ connectionString, ssl: needsSsl ? { rejectUnauthorized: false } : undefined });
+// DATABASE_CA_CERT (PEM; "\\n" escapes allowed) turns on certificate verification — same as src/lib/db.ts.
+const ca = process.env.DATABASE_CA_CERT?.trim().replace(/\\n/g, "\n");
+const ssl = ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: false };
+const client = new pg.Client({ connectionString, ssl: needsSsl ? ssl : undefined });
 
 try {
   await client.connect();

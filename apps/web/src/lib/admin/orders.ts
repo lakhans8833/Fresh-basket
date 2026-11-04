@@ -1,6 +1,6 @@
 import "server-only";
 import { canAdminTransition, NO_SLOT_LABEL, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
-import { pool, query, tx } from "../db";
+import { labelStockChange, pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, ORDER_COLUMNS, releaseExpired, type OrderRow } from "../orders";
 import { notificationSetup, notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
@@ -99,6 +99,7 @@ export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorI
     if (!from) throw notFound();
     if (!canAdminTransition(from, to)) throw conflict(`An order that is "${from.replaceAll("_", " ")}" can't be moved to "${to.replaceAll("_", " ")}".`);
     if (to === "cancelled") {
+      await labelStockChange(c, "order_cancelled", { orderId: id, actorId });
       await c.query("select cancel_order($1, $2, $3)", [id, `admin:${actorId}`, note || "Cancelled by store"]);
       return;
     }
@@ -178,6 +179,7 @@ export async function adminStats() {
          (select count(*)::int from orders where status = 'out_for_delivery') as "outForDelivery",
          (select count(*)::int from orders where status = 'pending_payment') as "awaitingPayment",
          (select count(*)::int from orders where payment_status = 'refund_pending') as "refundsPending",
+         (select count(*)::int from orders where status = 'pending_payment' and payment_method = 'upi' and upi_reference is not null) as "upiToCheck",
          (select count(*)::int from (${LOW_STOCK_SQL}) ls) as "lowStockCount",
          (select count(*)::int from support_messages where status = 'open') as "openMessages"`,
     ),

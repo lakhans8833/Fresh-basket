@@ -9,6 +9,7 @@ import { resolveWhatsAppNumber, storeConfig } from "@/config/store";
 import { HeroCarousel, type HeroSlide } from "@/components/home/hero-carousel";
 import { BuyAgainRail, CategoryGrid, DeliveryInfo, ProductRail, WhatsAppBand } from "@/components/home/sections";
 import { PromoStrip } from "@/components/home/promo-strip";
+import { buildStoreJsonLd, jsonLdString } from "@/lib/structured-data";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
@@ -144,6 +145,14 @@ export default async function HomePage() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdString(
+            buildStoreJsonLd(settings, { siteUrl: storeConfig.siteUrl, city: storeConfig.defaultCity, state: storeConfig.defaultState, areas }),
+          ),
+        }}
+      />
       <h1 className="sr-only">{settings.storeName} — fresh vegetables delivered in {area}</h1>
       <HeroCarousel slides={slides} />
       <PromoStrip banners={banners.slice(0, 3)} />

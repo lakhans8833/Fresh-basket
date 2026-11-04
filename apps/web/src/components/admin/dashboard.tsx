@@ -19,6 +19,8 @@ export interface Stats {
   outForDelivery: number;
   awaitingPayment: number;
   refundsPending: number;
+  /** UPI orders whose customer reported a UTR: staff must check the bank and confirm (or cancel + refund). */
+  upiToCheck?: number;
   lowStockCount: number;
   lateOrders: number;
   openMessages: number;
@@ -65,6 +67,7 @@ export function Dashboard({ initial }: { initial?: Stats | null }) {
         { label: "Overdue deliveries", value: data.lateOrders, icon: AlarmClock, href: "/admin/orders?status=late", warn: data.lateOrders > 0, hint: "Slot over, not delivered yet" },
         { label: "Out for delivery", value: data.outForDelivery, icon: Truck, href: "/admin/orders?status=out_for_delivery" },
         { label: "Awaiting payment", value: data.awaitingPayment, icon: Clock, href: "/admin/orders?status=pending_payment" },
+        { label: "UPI payments to check", value: data.upiToCheck ?? 0, icon: IndianRupee, href: "/admin/orders?status=pending_payment", attention: (data.upiToCheck ?? 0) > 0, hint: "Customer sent a UTR — check the bank" },
         { label: "Refunds pending", value: data.refundsPending, icon: RotateCcw, href: "/admin/orders?status=cancelled", warn: data.refundsPending > 0 },
         { label: "Low stock", value: data.lowStockCount, icon: AlertTriangle, href: "/admin/inventory?filter=low", warn: data.lowStockCount > 0, hint: "Products (all sizes together)" },
         { label: "Open messages", value: data.openMessages, icon: MessageSquare, href: "/admin/messages", attention: data.openMessages > 0 },

@@ -1,9 +1,10 @@
 import "server-only";
 import type { Profile } from "@freshbasket/shared";
+import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../env";
 import { query, queryOne, tx } from "../db";
-import { badRequest, conflict, HttpError, notFound } from "../http";
+import { badRequest, conflict, forbidden, HttpError, notFound } from "../http";
 
 export interface AdminUser {
   id: string;
@@ -47,9 +48,33 @@ export async function adminListUsers(q?: string | null): Promise<AdminUser[]> {
   }));
 }
 
+/** Owner accounts: ADMIN_EMAILS (the same list the deploy uses to bootstrap admins). */
+function ownerEmails(): Set<string> {
+  return new Set((process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+}
+
+/**
+ * Admins can't take over or lock out ANOTHER admin (change their sign-in email, create a reset link, set
+ * their password, or demote them) unless the acting admin is a store owner: an account whose CONFIRMED
+ * Supabase Auth email is listed in ADMIN_EMAILS. Otherwise one admin account (or a stolen admin session)
+ * could take over the owner's account. Customers and staff can still be managed by any admin.
+ */
+export async function assertMayManageAccount(actorId: string, userId: string, what: string) {
+  const target = await queryOne<{ role: Profile["role"] }>("select role from profiles where id = $1", [userId]);
+  if (!target || target.role !== "admin") return;
+  const owners = ownerEmails();
+  const actor = await queryOne<{ email: string | null; confirmed: boolean }>(
+    "select lower(email) as email, email_confirmed_at is not null as confirmed from auth.users where id = $1",
+    [actorId],
+  );
+  if (actor?.confirmed && actor.email && owners.has(actor.email)) return;
+  throw forbidden(`Only the store owner can ${what} for another admin. Owner accounts are listed in ADMIN_EMAILS on the server.`);
+}
+
 /** Change a user's role. You can't change your own role, and the store always keeps one admin. */
 export async function adminSetRole(actorId: string, userId: string, role: Profile["role"]) {
   if (actorId === userId) throw badRequest("You can't change your own role. Ask another admin.");
+  if (role !== "admin") await assertMayManageAccount(actorId, userId, "change the role");
   return tx(async (c) => {
     // Lock the admin rows so two admins can't demote each other at the same moment.
     const { rows: admins } = await c.query<{ id: string }>("select id from profiles where role = 'admin' for update");
@@ -71,19 +96,25 @@ async function authUser(userId: string) {
  * Mark a user's email as confirmed (e.g. they called the store and can't find the email).
  * Uses the Supabase Auth admin API with the server-only service role key; on a local database
  * without Supabase Auth it sets auth.users.email_confirmed_at directly.
+ *
+ * The password chosen at sign-up is REPLACED with a random one and existing sessions end: the store
+ * can't know who typed that password. If someone else signed up with this address first, confirming it
+ * would otherwise hand them the real owner's (now confirmed) account. The customer signs in with an
+ * email code or "Forgot password" and can set their own password afterwards.
  */
-export async function adminConfirmEmail(userId: string): Promise<{ id: string; emailConfirmedAt: string }> {
+export async function adminConfirmEmail(userId: string): Promise<{ id: string; emailConfirmedAt: string; passwordReset: boolean }> {
   const u = await authUser(userId);
-  if (u.email_confirmed_at) return { id: userId, emailConfirmedAt: new Date(u.email_confirmed_at).toISOString() };
+  if (u.email_confirmed_at) return { id: userId, emailConfirmedAt: new Date(u.email_confirmed_at).toISOString(), passwordReset: false };
   if (env.auth.mode === "supabase") {
     if (!env.storage.serviceRoleKey) throw new HttpError(503, "Set SUPABASE_SERVICE_ROLE_KEY on the server to confirm emails from Admin.");
     const sb = createClient(env.auth.supabaseUrl!, env.storage.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error } = await sb.auth.admin.updateUserById(userId, { email_confirm: true });
+    const { data, error } = await sb.auth.admin.updateUserById(userId, { email_confirm: true, password: randomBytes(32).toString("base64url") });
     if (error) throw new HttpError(502, `Supabase couldn't confirm this email: ${error.message}`);
-    return { id: userId, emailConfirmedAt: data.user?.email_confirmed_at ?? new Date().toISOString() };
+    await endAllSessions(userId);
+    return { id: userId, emailConfirmedAt: data.user?.email_confirmed_at ?? new Date().toISOString(), passwordReset: true };
   }
   const r = await queryOne<{ at: Date }>("update auth.users set email_confirmed_at = now() where id = $1 returning email_confirmed_at as at", [userId]);
-  return { id: userId, emailConfirmedAt: new Date(r!.at).toISOString() };
+  return { id: userId, emailConfirmedAt: new Date(r!.at).toISOString(), passwordReset: false }; // local dev: no passwords
 }
 
 /**
@@ -112,6 +143,7 @@ export async function adminResendConfirmation(userId: string): Promise<{ id: str
  * uses that address.
  */
 export async function adminUpdateUser(
+  actorId: string,
   userId: string,
   input: { fullName: string; phone: string | null; email: string },
 ): Promise<{ id: string; email: string; fullName: string; phone: string | null; emailConfirmedAt: string | null }> {
@@ -119,6 +151,8 @@ export async function adminUpdateUser(
   const email = input.email.trim().toLowerCase();
   const emailChanged = (u.email ?? "").toLowerCase() !== email;
   if (emailChanged) {
+    if (actorId === userId) throw badRequest("Change your own sign-in email from Your account → Profile.");
+    await assertMayManageAccount(actorId, userId, "change the sign-in email");
     const taken = await queryOne("select 1 from auth.users where lower(email) = $1 and id <> $2", [email, userId]);
     if (taken) throw conflict("Another account already uses that email.", undefined, "EMAIL_TAKEN");
     if (env.auth.mode === "supabase") {
@@ -161,6 +195,7 @@ async function endAllSessions(userId: string) {
  */
 export async function adminCreateResetLink(actorId: string, userId: string, origin: string): Promise<{ id: string; email: string; link: string }> {
   if (actorId === userId) throw badRequest("Change your own password from Your account → Profile → Change password.");
+  await assertMayManageAccount(actorId, userId, "create a password reset link");
   const u = await authUser(userId);
   if (!u.email) throw badRequest("This user has no email address.");
   const sb = adminAuthClient("create a reset link");
@@ -177,6 +212,7 @@ export async function adminCreateResetLink(actorId: string, userId: string, orig
  */
 export async function adminSetPassword(actorId: string, userId: string, password: string): Promise<{ id: string }> {
   if (actorId === userId) throw badRequest("Change your own password from Your account → Profile → Change password.");
+  await assertMayManageAccount(actorId, userId, "set the password");
   await authUser(userId);
   if (password.length < 8 || password.length > 72) throw badRequest("Use 8 to 72 characters.");
   const sb = adminAuthClient("set passwords");

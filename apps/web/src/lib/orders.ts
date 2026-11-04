@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, PREPAID_METHODS, stateMatchesPincode,
-  type Order, type OrderAdjustment, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE } from "@freshbasket/shared";
-import { asUser, pool, query, tx } from "./db";
+  type Order, type OrderAdjustment, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE, formatINR } from "@freshbasket/shared";
+import { asUser, labelStockChange, pool, query, tx } from "./db";
 import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
 import { conflict, badRequest, notFound, HttpError } from "./http";
@@ -150,7 +150,10 @@ async function retryOnDeadlock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function releaseExpired(): Promise<number> {
-  const rows = await query<{ n: number }>("select release_expired_reservations() as n");
+  const rows = await tx(async (c) => {
+    await labelStockChange(c, "hold_expired");
+    return (await c.query<{ n: number }>("select release_expired_reservations() as n")).rows;
+  });
   const n = rows[0]?.n ?? 0;
   // Stock came back: drop the cached catalogue (this also runs from GET requests, e.g. Admin → Orders).
   if (n > 0) invalidate(CACHE_TAGS.catalog);
@@ -225,6 +228,8 @@ interface CoreOrder {
   holdMinutes?: number;
   /** Cash-on-delivery orders that the store must confirm first (WhatsApp orders). Stock is still reserved. */
   needsConfirmation?: boolean;
+  /** Total the customer was shown (paise); a different server total refuses the order (PRICE_CHANGED). */
+  expectedTotal?: number;
 }
 
 /**
@@ -239,6 +244,11 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
   );
   if (!ctx.quote.ok) {
     throw new OrderRejected("Some items in your basket need attention.", quoteMessages(ctx.quote));
+  }
+  // Prices, delivery fees and coupons can change between the shopper's last quote and this moment (the
+  // store edits vegetable prices daily). Never place an order at a total the customer didn't see.
+  if (o.expectedTotal !== undefined && ctx.quote.total !== o.expectedTotal) {
+    throw new HttpError(409, `The total changed to ${formatINR(ctx.quote.total)} (prices or delivery charges were updated). Please check your order and place it again.`, "PRICE_CHANGED", { total: ctx.quote.total, expectedTotal: o.expectedTotal });
   }
   const slot = o.slot ? await o.slot(c) : null;
 
@@ -264,6 +274,7 @@ async function insertOrder(c: PoolClient, o: CoreOrder): Promise<string> {
     ],
   );
   const id = orows[0]!.id;
+  await labelStockChange(c, "order_placed", { orderId: id });
 
   for (const line of ctx.quote.lines) {
     const meta = ctx.variants.get(line.variantId)!;
@@ -415,7 +426,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: input.couponCode, paymentMethod: input.paymentMethod, channel: "web",
         deliveryDate: input.deliveryDate, customerNote: input.customerNote, unavailableItems: input.unavailableItems ?? "call",
-        idempotencyKey: input.idempotencyKey, fingerprint,
+        idempotencyKey: input.idempotencyKey, fingerprint, expectedTotal: input.expectedTotal,
         whatsappUpdates: Boolean(input.whatsappUpdates),
         slot: async (cc) => {
           const slot = await lockAndCheckSlot(cc, input.slotId, input.deliveryDate);
@@ -503,6 +514,10 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
         if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_LIMIT) {
           throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
         }
+        // The per-number lock above doesn't serialise guests with DIFFERENT numbers: without this second
+        // lock, a burst of guest orders could all read "39 open" and push the shop past its cap. Taken
+        // only for guests, after the per-number lock (same order everywhere → no deadlock), and held to commit.
+        await c.query("select pg_advisory_xact_lock(hashtext('place_order:guest_shop_cap'))");
         const shop = await c.query<{ n: number }>(
           // Unpaid UPI / payment-link guest orders hold stock too, so they count towards the shop-wide cap.
           "select count(*)::int as n from orders where user_id is null and status in ('pending_payment', 'pending_confirmation')",
@@ -514,7 +529,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
       const id = await insertOrder(c, {
         userId, address, items: input.items, couponCode: userId ? input.couponCode : null, paymentMethod: input.paymentMethod,
         channel: "whatsapp", deliveryDate, customerNote: cu.notes || null, unavailableItems: input.unavailableItems ?? "call",
-        idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates),
+        idempotencyKey: input.idempotencyKey, fingerprint, whatsappUpdates: Boolean(input.whatsappUpdates), expectedTotal: input.expectedTotal,
         // Cash on delivery: the store confirms it after the customer's WhatsApp message arrives.
         needsConfirmation: true,
         // Slot capacity is shared with website orders; without a slot the time is agreed on WhatsApp.
@@ -550,6 +565,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
 
 export async function cancelOrder(orderId: string, actor: string, reason: string) {
   await tx(async (c) => {
+    await labelStockChange(c, "order_cancelled", { orderId });
     await c.query("select cancel_order($1, $2, $3)", [orderId, actor, reason]);
   });
   cancelPaymentLinkFor(orderId);
@@ -562,13 +578,17 @@ export async function cancelOrder(orderId: string, actor: string, reason: string
  */
 export async function customerCancel(userId: string, orderId: string) {
   await tx(async (c) => {
-    const { rows } = await c.query<{ status: OrderStatus }>(
-      "select status from orders where id = $1 and user_id = $2 for update",
+    const { rows } = await c.query<{ status: OrderStatus; upi_claimed: boolean }>(
+      "select status, (payment_method = 'upi' and upi_reference is not null and payment_status = 'pending') as upi_claimed from orders where id = $1 and user_id = $2 for update",
       [orderId, userId],
     );
     const o = rows[0];
     if (!o) throw notFound("Order not found.");
     if (!canCustomerCancel(o.status)) throw conflict("This order can no longer be cancelled. Please contact support.");
+    // The customer told us they paid (UTR sent): cancelling here would mark it "payment failed" and nobody
+    // would check the bank. The store checks the payment and cancels with a refund if needed.
+    if (o.upi_claimed) throw conflict("You've sent a UPI payment reference for this order, so the store needs to check it first. Please contact the store to cancel — they'll refund you if the money arrived.", undefined, "UPI_CLAIMED");
+    await labelStockChange(c, "order_cancelled", { orderId, actorId: userId });
     await c.query("select cancel_order($1, $2, $3)", [orderId, "customer", "Cancelled by customer"]);
   });
   cancelPaymentLinkFor(orderId);

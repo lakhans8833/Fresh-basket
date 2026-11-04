@@ -17,7 +17,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { SignInPrompt } from "@/components/SignInPrompt";
 import { ListSkeleton } from "@/components/Skeleton";
 import { ErrorState, InlineMessage } from "@/components/States";
-import { errorMessage } from "@/lib/api";
+import { ApiError, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatDateLabel, formatDateTime, statusTone } from "@/lib/format";
 import { cancelOrder, fetchOrder, resumePayment } from "@/lib/orders";
@@ -25,6 +25,7 @@ import { openPayPage } from "@/lib/payment";
 import { colors, fonts, radius, type } from "@/theme";
 
 const POLL_MS = 4000;
+const MAX_POLL_FAILURES = 5;
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cod: "Cash on delivery", razorpay: "Online payment", mock: "Test payment (development)", upi: "UPI", razorpay_link: "Payment link",
 };
@@ -41,14 +42,24 @@ export default function OrderDetail() {
   const [actionError, setActionError] = useState<string | null>(null);
   const appActive = useRef(true);
 
+  // Consecutive failed loads; polling pauses after a few so an offline phone or an expired session
+  // doesn't retry every few seconds forever. A successful pull-to-refresh resumes it.
+  const failures = useRef(0);
+  const [pollStopped, setPollStopped] = useState(false);
   const load = useCallback(async () => {
     if (!id) return;
     try {
       const res = await fetchOrder(id);
       setOrder(res.order);
       setError(null);
+      failures.current = 0;
+      setPollStopped(false);
     } catch (e) {
       setError(errorMessage(e));
+      failures.current++;
+      if (failures.current >= MAX_POLL_FAILURES || (e instanceof ApiError && (e.status === 401 || e.status === 403 || e.status === 404))) {
+        setPollStopped(true);
+      }
     }
   }, [id]);
 
@@ -57,7 +68,12 @@ export default function OrderDetail() {
   }, [load, auth.signedIn]);
 
   // Poll while awaiting payment confirmation (the server verifies the payment, not the app).
-  const pending = order?.status === "pending_payment";
+  // Polling also ends a couple of minutes after the stock hold expires (the server then cancels the
+  // order; one last load shows that). This is separate from pollStopped so a later successful load
+  // can't restart it.
+  const holdEnds = order?.reservationExpiresAt ? new Date(order.reservationExpiresAt).getTime() + 2 * 60_000 : null;
+  const [holdOver, setHoldOver] = useState(false);
+  const pending = order?.status === "pending_payment" && !pollStopped && !holdOver;
   useEffect(() => {
     if (!pending) return;
     const sub = AppState.addEventListener("change", (s) => {
@@ -65,13 +81,18 @@ export default function OrderDetail() {
       if (s === "active") void load();
     });
     const t = setInterval(() => {
+      if (holdEnds !== null && Date.now() > holdEnds) {
+        setHoldOver(true);
+        void load();
+        return;
+      }
       if (appActive.current) void load();
     }, POLL_MS);
     return () => {
       clearInterval(t);
       sub.remove();
     };
-  }, [pending, load]);
+  }, [pending, load, holdEnds]);
 
   const onRefresh = async () => {
     setRefreshing(true);

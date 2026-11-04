@@ -13,6 +13,16 @@ function stripSslParams(raw: string) {
   return kept.length ? `${base}?${kept.join("&")}` : base!;
 }
 
+/**
+ * TLS for the database. With DATABASE_CA_CERT (the PEM of Supabase's CA, from Supabase → Database →
+ * SSL configuration; "\n" escapes allowed) the server certificate is VERIFIED. Without it, the
+ * connection is still encrypted but not verified (the previous behaviour) — set the CA to close that.
+ */
+export function databaseSsl(): { rejectUnauthorized: boolean; ca?: string } {
+  const ca = process.env.DATABASE_CA_CERT?.trim().replace(/\\n/g, "\n");
+  return ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: false };
+}
+
 function createPool() {
   const raw = env.databaseUrl;
   const needsSsl = /supabase\.(co|com)|sslmode=require/.test(raw);
@@ -24,7 +34,7 @@ function createPool() {
     // Small on purpose: every serverless instance has its own pool, and Supabase's pooler allows 200
     // client connections in all (free plan). 3 per instance leaves room for a burst of instances.
     max: Number(process.env.DB_POOL_MAX ?? 3),
-    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    ssl: needsSsl ? databaseSsl() : undefined,
     // Serverless: the function can be frozen between requests and Supabase drops idle
     // connections, so don't keep idle clients long, fail fast and keep sockets alive.
     idleTimeoutMillis: 10_000,
@@ -129,4 +139,21 @@ export async function asUser<T>(userId: string, fn: (c: PoolClient) => Promise<T
     await c.query("set local role authenticated");
     return fn(c);
   });
+}
+
+/** Reasons recorded in public.stock_movements (see migration 20261104000001). */
+export type StockReason =
+  | "order_placed" | "order_cancelled" | "hold_expired" | "late_payment" | "order_adjustment" | "admin_edit" | "payment_start_failed";
+
+/**
+ * Label the stock changes made in this transaction for the stock movement history. Transaction-local
+ * (set_config(..., true)), so it can't leak to another request sharing the pooled connection.
+ * Must be called inside tx()/asUser(). Changes made without a label are still recorded ("unlabelled").
+ */
+export async function labelStockChange(c: PoolClient, reason: StockReason, ids: { orderId?: string | null; actorId?: string | null } = {}) {
+  await c.query("select set_config('fb.stock_reason', $1, true), set_config('fb.order_id', $2, true), set_config('fb.actor', $3, true)", [
+    reason,
+    ids.orderId ?? "",
+    ids.actorId ?? "",
+  ]);
 }
