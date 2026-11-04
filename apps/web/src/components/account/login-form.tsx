@@ -24,7 +24,7 @@ const LINK_ERRORS: Record<"expired" | "device" | "link", string> = {
   link: "That sign-in link didn't work. Please request a new one below.",
 };
 
-export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp = false }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null; /** sign-in / sign-up emails are sent by this server over SMTP */ emailByApp?: boolean }) {
+export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp = false, embedded = false }: { mode: "supabase" | "dev" | "unconfigured"; next: string; linkError?: "expired" | "device" | "link"; signedInAs?: string | null; /** sign-in / sign-up emails are sent by this server over SMTP */ emailByApp?: boolean; /** inside the sign-in page's two-panel card: no card of its own */ embedded?: boolean }) {
   const router = useRouter();
   const { refresh } = useSession();
   const [method, setMethod] = useState<"code" | "password">("code");
@@ -191,7 +191,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp
   }
 
   return (
-    <div className="w-full max-w-md rounded-[1.75rem] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-8">
+    <div className={cn("w-full", embedded ? "p-6 sm:p-10" : "max-w-md rounded-[1.75rem] border border-line bg-white p-6 shadow-[var(--shadow-card)] sm:p-8")}>
       <div className="flex items-center gap-3">
         <span className="grid size-12 place-items-center rounded-full bg-lime-100"><LeafMark className="size-7 text-leaf-500" /></span>
         <div>
@@ -300,7 +300,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp
           ) : null}
           </>
           )}
-          <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="size-3.5" aria-hidden /> Secured by Supabase Auth</p>
+          <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-muted"><ShieldCheck className="size-3.5" aria-hidden /> Secure sign-in</p>
         </>
       ) : (
         <Notice tone="error" className="mt-6" title="Sign-in is not configured">
