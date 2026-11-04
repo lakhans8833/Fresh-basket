@@ -3,5 +3,6 @@ import { getSettings, supportedPaymentMethods, whatsappPaymentMethods } from "@/
 
 export const GET = route(async () => {
   const s = await getSettings();
-  return json({ settings: s, paymentMethods: supportedPaymentMethods(s), whatsappPaymentMethods: whatsappPaymentMethods(s) });
+  // The store's phone number is not published (owner's choice): the app gets no number to show.
+  return json({ settings: { ...s, supportPhone: null }, paymentMethods: supportedPaymentMethods(s), whatsappPaymentMethods: whatsappPaymentMethods(s) });
 });

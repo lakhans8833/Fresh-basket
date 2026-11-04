@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Banknote, CreditCard, Landmark, Mail, MapPin, Phone, Clock, FlaskConical, Headset } from "lucide-react";
+import { Banknote, CreditCard, Landmark, Mail, MapPin, Clock, FlaskConical, Headset } from "lucide-react";
 import { WhatsAppIcon } from "../ui/whatsapp-icon";
 import type { Category, StoreSettings } from "@freshbasket/shared";
 import { Logo } from "./logo";
@@ -32,11 +32,6 @@ function SocialIcon({ kind }: { kind: "instagram" | "facebook" | "youtube" | "x"
 }
 
 /** "919891244561" / "9891244561" → "+91 98912 44561"; anything else is shown as typed. */
-function displayIndianNumber(raw: string) {
-  const d = raw.replace(/\D/g, "");
-  const local = d.length === 12 && d.startsWith("91") ? d.slice(2) : d.length === 10 ? d : null;
-  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw;
-}
 
 const SOCIAL_LABEL = { instagram: "Instagram", facebook: "Facebook", youtube: "YouTube", x: "X (Twitter)" } as const;
 
@@ -53,9 +48,10 @@ export function SiteFooter({
   settings, categories, paymentMethods, serviceArea,
 }: { settings: StoreSettings; categories: Category[]; paymentMethods: string[]; serviceArea: string }) {
   const socials = (Object.keys(settings.social) as (keyof StoreSettings["social"])[]).filter((k) => settings.social[k]);
-  const hasContact = settings.supportPhone || settings.supportEmail || settings.address || settings.whatsapp;
+  // The store's phone number is not shown anywhere on the site (owner's choice, 4 Nov 2026); WhatsApp
+  // chat stays, without the number written out.
+  const hasContact = settings.supportEmail || settings.address || settings.whatsapp;
   const waLink = settings.whatsapp ? `https://wa.me/${settings.whatsapp.replace(/\D/g, "").replace(/^(?=[6-9]\d{9}$)/, "91")}` : null;
-  const telLink = settings.supportPhone ? `tel:${settings.supportPhone.replace(/\s/g, "")}` : null;
   const year = new Date().getFullYear();
   const linkCls = "rounded transition-colors hover:text-white hover:underline underline-offset-4";
   const headCls = "flex items-center gap-2 font-sans text-[0.8125rem] font-bold uppercase tracking-[0.14em] text-lime-200 before:h-3.5 before:w-1 before:rounded-full before:bg-lime-300";
@@ -79,17 +75,12 @@ export function SiteFooter({
               </div>
             </div>
             <div className="grid gap-2.5 sm:flex sm:flex-wrap [&>a]:justify-center">
-              {telLink ? (
-                <a href={telLink} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-semibold text-forest-900 transition-colors hover:bg-lime-100">
-                  <Phone className="size-4" aria-hidden /> Call {settings.supportPhone}
-                </a>
-              ) : null}
               {waLink ? (
                 <a href={waLink} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-whatsapp px-5 text-sm font-semibold text-forest-950 transition-colors hover:bg-lime-300">
                   <WhatsAppIcon className="size-5" /> Chat on WhatsApp
                 </a>
               ) : null}
-              {!telLink && !waLink ? (
+              {!waLink ? (
                 <Link href="/contact" className="inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-semibold text-forest-900 hover:bg-lime-100">Contact us</Link>
               ) : null}
             </div>
@@ -153,11 +144,8 @@ export function SiteFooter({
               <h2 className={headCls}>Get in touch</h2>
               {hasContact ? (
                 <ul className="mt-4 space-y-2.5 text-[0.9375rem] text-white/85">
-                  {telLink ? (
-                    <li className="flex items-center gap-3"><span className={iconWrap}><Phone className="size-4" aria-hidden /></span><a className={linkCls} href={telLink}>{settings.supportPhone}</a></li>
-                  ) : null}
                   {waLink ? (
-                    <li className="flex items-center gap-3"><span className={iconWrap}><WhatsAppIcon className="size-4" /></span><a className={linkCls} href={waLink} target="_blank" rel="noopener noreferrer">WhatsApp {displayIndianNumber(settings.whatsapp!)}</a></li>
+                    <li className="flex items-center gap-3"><span className={iconWrap}><WhatsAppIcon className="size-4" /></span><a className={linkCls} href={waLink} target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a></li>
                   ) : null}
                   {settings.supportEmail ? (
                     <li className="flex items-center gap-3"><span className={iconWrap}><Mail className="size-4" aria-hidden /></span><a className={`${linkCls} break-all`} href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></li>
