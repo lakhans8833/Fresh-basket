@@ -6,6 +6,7 @@ import { AppState } from "react-native";
 import { api, ApiError, setAuthHandlers } from "./api";
 import { secureStorage } from "./storage";
 import { supabaseSessionStore } from "./session-storage";
+import { createCodeExchanger } from "./deep-links";
 
 export type AuthMode = "dev" | "supabase" | "unconfigured";
 
@@ -37,6 +38,8 @@ interface AuthState {
   googleEnabled: boolean;
   /** true when signed in; false when the customer closed the Google window. */
   signInWithGoogle(): Promise<boolean>;
+  /** FB-37(a): a ?code= that reached freshbasket://auth-callback — exchanged once (no-op if already being exchanged). */
+  completeOAuthRedirect(code: string): Promise<void>;
   signOut(): Promise<void>;
   refreshProfile(): Promise<Profile | null>;
   setProfile(p: Profile): void;
@@ -80,6 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = useRef<SupabaseClient | null>(null);
   const modeRef = useRef<AuthMode | null>(null);
   const codesByApp = useRef(false);
+  /** One exchange per OAuth code, whichever path (browser session or auth-callback route) gets it first. */
+  const exchangeCode = useRef(
+    createCodeExchanger(async (code) => {
+      if (!supabase.current) throw new Error("Sign-in is not configured.");
+      const ex = await supabase.current.auth.exchangeCodeForSession(code);
+      if (ex.error) throw new Error(friendlyAuthError(ex.error));
+    }),
+  );
 
   const getToken = useCallback(async (): Promise<string | null> => {
     if (modeRef.current === "dev") return devToken.current;
@@ -299,11 +310,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const code = back.searchParams.get("code");
     const err = back.searchParams.get("error_description") ?? back.searchParams.get("error");
     if (!code) throw new Error(err ?? "Google sign-in didn't finish. Please try again.");
-    const ex = await supabase.current.auth.exchangeCodeForSession(code);
-    if (ex.error) throw new Error(friendlyAuthError(ex.error));
+    await exchangeCode.current(code);
     const p = await refreshProfile();
     if (!p) throw new Error("Signed in, but could not load your profile. Please try again.");
     return true;
+  }, [refreshProfile]);
+
+  const completeOAuthRedirect = useCallback(async (code: string) => {
+    if (modeRef.current !== "supabase" || !supabase.current) return;
+    if ((await exchangeCode.current(code)) === "exchanged") await refreshProfile();
   }, [refreshProfile]);
 
   const signOut = useCallback(async () => {
@@ -331,12 +346,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resendSignupCode,
       googleEnabled,
       signInWithGoogle,
+      completeOAuthRedirect,
       signOut,
       refreshProfile,
       setProfile,
       retryConfig: () => setConfigAttempt((n) => n + 1),
     }),
-    [mode, configError, ready, profile, devLogin, signInWithPassword, signUpWithPassword, sendEmailCode, verifyEmailCode, resendSignupCode, googleEnabled, signInWithGoogle, signOut, refreshProfile],
+    [mode, configError, ready, profile, devLogin, signInWithPassword, signUpWithPassword, sendEmailCode, verifyEmailCode, resendSignupCode, googleEnabled, signInWithGoogle, completeOAuthRedirect, signOut, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

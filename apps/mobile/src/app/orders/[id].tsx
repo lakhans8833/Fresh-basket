@@ -1,4 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { watchOrderLinks } from "@/lib/order-links";
 import { formatSlotLabel } from "@shared/slots";
 import { Check, CircleX, Clock } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -66,6 +67,15 @@ export default function OrderDetail() {
   useEffect(() => {
     if (auth.signedIn) void load();
   }, [load, auth.signedIn]);
+
+  // FB-37(b): while this order is on screen, a repeated payment-return link refreshes it instead of
+  // opening a second copy of this screen.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return undefined;
+      return watchOrderLinks(id, () => void load());
+    }, [id, load]),
+  );
 
   // Poll while awaiting payment confirmation (the server verifies the payment, not the app).
   // Polling also ends a couple of minutes after the stock hold expires (the server then cancels the
