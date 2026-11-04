@@ -504,7 +504,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
           [cu.phone],
         );
         if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_LIMIT) {
-          throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
+          throw conflict("This mobile number already has orders waiting for the store to confirm. You can still order on the website (sign in and check out), or message us on WhatsApp about your earlier order.", undefined, "GUEST_OPEN_ORDERS");
         }
         const shop = await c.query<{ n: number }>(
           // Unpaid UPI / payment-link guest orders hold stock too, so they count towards the shop-wide cap.

@@ -10,7 +10,8 @@ import { canonicalRedirect } from "@/lib/canonical-host";
 import { json, route } from "@/lib/http";
 import { sanitize } from "@/lib/audit";
 import { requestContext, setActor } from "@/lib/request-context";
-import { customerCancel, placeOrder } from "@/lib/orders";
+import { customerCancel, placeOrder, placeWhatsAppOrder } from "@/lib/orders";
+import { whatsappOrderSchema } from "@freshbasket/shared";
 import { adminPatchInventory } from "@/lib/admin/catalog";
 
 const ADMIN = "00000000-0000-4000-8000-0000000000a8";
@@ -140,5 +141,26 @@ describe("stock ledger", () => {
       expect((await c.query("select * from stock_movements limit 1")).rows).toEqual([]);
       expect((await c.query("select * from admin_audit_log limit 1")).rows).toEqual([]);
     });
+  });
+});
+
+describe("guest WhatsApp orders: a blocked number is told it can still order on the website", () => {
+  it("the third open guest order for one mobile number is refused with GUEST_OPEN_ORDERS", async () => {
+    await query("update product_variants set stock = 200 where id = $1", [vid]);
+    const phone = `97${String(Date.now()).slice(-8)}`;
+    const wa = () =>
+      whatsappOrderSchema.parse({
+        items: [{ variantId: vid, quantity: 4 }],
+        customer: { name: "Guest Two Ways", phone, address: `House ${randomUUID().slice(0, 4)}, Lane 2`, area: "", city: "Bengaluru", pincode: "560034", notes: "" },
+        slotId: slot, deliveryDate: tomorrow, paymentMethod: "cod", idempotencyKey: randomUUID(),
+      });
+    await placeWhatsAppOrder(null, wa());
+    // A different basket so the double-tap guard doesn't hand back the first order.
+    const second = wa();
+    second.items = [{ variantId: vid, quantity: 5 }];
+    await placeWhatsAppOrder(null, second);
+    const third = wa();
+    third.items = [{ variantId: vid, quantity: 6 }];
+    await expect(placeWhatsAppOrder(null, third)).rejects.toMatchObject({ status: 409, code: "GUEST_OPEN_ORDERS" });
   });
 });
