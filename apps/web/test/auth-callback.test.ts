@@ -13,15 +13,28 @@ const sb = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth", () => ({ supabaseServerClient: async () => ({ auth: sb }) }));
 
-import { GET } from "@/app/auth/callback/route";
+import { GET, POST } from "@/app/auth/callback/route";
 import { RECOVERY_COOKIE, recoveryToken } from "@/lib/tokens";
 
 const B = "00000000-0000-4000-8000-00000000000b";
 const ok = (id = B) => ({ data: { user: { id } }, error: null });
-const raw = (qs: string) => GET(new Request(`https://shop.example/auth/callback?${qs}`));
+/** The browser's path for an email link: token_hash links show a confirm page, and its form POSTs back. */
+const post = (fields: Record<string, string>, headers: Record<string, string> = { origin: "https://shop.example" }) =>
+  POST(new Request("https://shop.example/auth/callback", {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...headers }, body: new URLSearchParams(fields).toString(),
+  }));
+const raw = async (qs: string) => {
+  const sp = new URLSearchParams(qs);
+  if (!sp.has("token_hash") || sp.has("error") || sp.has("error_code")) return GET(new Request(`https://shop.example/auth/callback?${qs}`));
+  const page = await GET(new Request(`https://shop.example/auth/callback?${qs}`));
+  expect(page.status).toBe(200); // the confirm page, nothing verified yet
+  const html = await page.text();
+  const fields = Object.fromEntries([...html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)].map((m) => [m[1]!, m[2]!.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'")]));
+  return post(fields);
+};
 
 const call = async (qs: string) => {
-  const res = await GET(new Request(`https://shop.example/auth/callback?${qs}`));
+  const res = await raw(qs);
   return new URL(res.headers.get("location")!);
 };
 
@@ -102,5 +115,44 @@ describe("/auth/callback", () => {
     const to = await call("token_hash=SECRET123&type=recovery&next=%2Freset-password%3Fnext%3D%252Fadmin%252Flogin");
     expect(to.searchParams.get("next")).toBe("/reset-password?next=%2Fadmin%2Flogin");
     expect(to.toString()).not.toMatch(/SECRET123|token_hash|code=/);
+  });
+
+  it("S-21: a token_hash link does NOT sign in on GET — it shows a confirm page whose form POSTs back", async () => {
+    sb.verifyOtp.mockResolvedValue(ok(B));
+    const res = await GET(new Request("https://shop.example/auth/callback?token_hash=t%22x&type=magiclink&next=%2Fcheckout"));
+    expect(res.status).toBe(200);
+    expect(sb.verifyOtp).not.toHaveBeenCalled();
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(res.headers.get("cache-control")).toMatch(/no-store/);
+    expect(res.headers.get("referrer-policy")).toBe("same-origin"); // the token never leaves the site; Origin stays set
+    const html = await res.text();
+    expect(html).toMatch(/<form method="post" action="\/auth\/callback">/);
+    expect(html).toContain('name="token_hash" value="t&quot;x"'); // escaped
+    expect(html).toContain('name="next" value="/checkout"');
+    expect(html).toMatch(/noindex/);
+  });
+
+  it("S-21: the POST signs in only from this site (cross-site or Origin-less form posts are refused)", async () => {
+    sb.verifyOtp.mockResolvedValue(ok(B));
+    const fields = { token_hash: "t", type: "magiclink", next: "/checkout" };
+    expect((await post(fields, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await post(fields, {})).status).toBe(403);
+    expect((await post(fields, { "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect(sb.verifyOtp).not.toHaveBeenCalled();
+    const okRes = await post(fields);
+    expect(okRes.status).toBe(303); // the browser follows with a GET
+    expect(new URL(okRes.headers.get("location")!).pathname).toBe("/checkout");
+    expect(sb.verifyOtp).toHaveBeenCalledWith({ type: "magiclink", token_hash: "t" });
+    // Same-origin without an Origin header but with Sec-Fetch-Site: same-origin is fine too.
+    expect((await post(fields, { "sec-fetch-site": "same-origin" })).status).toBe(303);
+    expect((await post(fields, { origin: "null", "sec-fetch-site": "same-origin" })).status).toBe(303);
+    expect((await post(fields, { origin: "null", "sec-fetch-site": "cross-site" })).status).toBe(403);
+  });
+
+  it("S-21: a POST with a bad type or no token goes to the sign-in page without verifying", async () => {
+    const r = await post({ token_hash: "t", type: "bogus" });
+    expect(new URL(r.headers.get("location")!).pathname).toBe("/login");
+    expect((await post({ type: "magiclink" })).headers.get("location")).toMatch(/\/login\?error=link/);
+    expect(sb.verifyOtp).not.toHaveBeenCalled();
   });
 });

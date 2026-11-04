@@ -24,6 +24,15 @@ def check(name, cond, detail=""):
     print(("PASS " if cond else "FAIL ") + name + (f" — {detail}" if detail and not cond else ""))
 
 
+def open_email_link(page, url):
+    """S-21: a token_hash link first shows a confirm page (nothing verified on GET); its button POSTs back."""
+    page.goto(url)
+    btn = page.get_by_role("button", name=re.compile(r"^Continue"))
+    check("email link shows the confirm page first (no sign-in on GET)", btn.count() == 1 and "/auth/callback" in page.url, page.url)
+    btn.click()
+    page.wait_for_load_state("networkidle")
+
+
 def changes():
     return json.loads(urllib.request.urlopen(f"{AUTH}/changes").read())
 
@@ -53,7 +62,7 @@ with sync_playwright() as p:
     check("…shows the expired-link error", page.get_by_text("expired or was already used").count() > 0)
     check("…says which account is still signed in", page.get_by_text(f"still signed in as {A}").count() > 0)
     # Same through the token_hash flow (verify → 403 otp_expired).
-    page.goto(f"{BASE}/auth/callback?token_hash=stale-token&type=recovery")
+    open_email_link(page, f"{BASE}/auth/callback?token_hash=stale-token&type=recovery")
     page.wait_for_load_state("networkidle")
     check("A signed in + expired token_hash → /login?error=expired", re.search(r"/login\?.*error=expired", page.url) is not None, page.url)
     check("…error URL carries no token", "stale-token" not in page.url and "token_hash" not in page.url, page.url)
@@ -64,7 +73,7 @@ with sync_playwright() as p:
 
     # 2. Expired recovery link with NO session.
     ctx = b.new_context(); page = ctx.new_page()
-    page.goto(f"{BASE}/auth/callback?token_hash=old&type=recovery")
+    open_email_link(page, f"{BASE}/auth/callback?token_hash=old&type=recovery")
     page.wait_for_load_state("networkidle")
     check("no session + expired link → /login with error", "error=expired" in page.url and page.get_by_text("expired or was already used").count() > 0, page.url)
     check("…no 'still signed in' notice", page.get_by_text("still signed in").count() == 0)
@@ -72,7 +81,7 @@ with sync_playwright() as p:
     check("/reset-password without a session says the link didn't work", page.get_by_text("has expired or was already used").count() > 0)
 
     # 3. Successful recovery for B and password update (applies to B, not anyone else).
-    page.goto(f"{BASE}/auth/callback?token_hash=good-b&type=recovery")
+    open_email_link(page, f"{BASE}/auth/callback?token_hash=good-b&type=recovery")
     page.wait_for_url(re.compile(r"/reset-password"), timeout=20000)
     check("valid recovery link → reset page for B", page.locator("#main").get_by_test_id("password-account").inner_text() == B)
     check("…in recovery mode (no 'signed in as' warning)", page.get_by_text("You're signed in as").count() == 0)
