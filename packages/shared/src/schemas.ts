@@ -5,6 +5,12 @@ import { ORDER_STATUSES, UNAVAILABLE_ITEM_PREFERENCES } from "./orderStatus";
 import { UPI_ID_REGEX } from "./upi";
 import { whatsappCustomerSchema } from "./whatsapp";
 
+// No JIT: Zod probes `new Function("")` once to decide whether to compile fast parsers. The site's
+// Content Security Policy (no 'unsafe-eval') blocks it; Zod catches that and falls back, but the
+// browser still reports a CSP violation (DevTools: "CSP blocks the use of eval"). jitless skips the
+// probe. Parsing stays correct; the speed difference is irrelevant for our small forms.
+z.config({ jitless: true });
+
 /** "YYYY-MM-DD" that is a real calendar day ("2026-10-99" / "2026-02-30" are refused with a 400, not a database error). */
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((d) => {
   const t = new Date(`${d}T00:00:00Z`);
