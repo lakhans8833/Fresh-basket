@@ -1,6 +1,6 @@
 import "server-only";
 import { canAdminTransition, NO_SLOT_LABEL, type OrderStatus, type PaymentStatus } from "@freshbasket/shared";
-import { pool, query, tx } from "../db";
+import { noteStock, pool, query, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { getOrderById, hydrateOrders, ORDER_COLUMNS, releaseExpired, type OrderRow } from "../orders";
 import { notificationSetup, notifyEventForStatus, orderNotifications, scheduleOrderNotification } from "../notify/whatsapp";
@@ -94,6 +94,7 @@ export async function adminGetOrder(id: string) {
 
 export async function adminUpdateOrderStatus(id: string, to: OrderStatus, actorId: string, note?: string | null) {
   await tx(async (c) => {
+    await noteStock(c, `order ${to.replaceAll("_", " ")} by store`, actorId);
     const { rows } = await c.query<{ status: OrderStatus }>("select status from orders where id = $1 for update", [id]);
     const from = rows[0]?.status;
     if (!from) throw notFound();
@@ -140,6 +141,7 @@ const PAYMENT_TRANSITIONS: Partial<Record<PaymentStatus, PaymentStatus[]>> = {
 
 export async function adminUpdatePaymentStatus(id: string, to: PaymentStatus, actorId: string) {
   await tx(async (c) => {
+    await noteStock(c, `payment ${to.replaceAll("_", " ")} by store`, actorId);
     const { rows } = await c.query<{ status: OrderStatus; payment_status: PaymentStatus }>(
       "select status, payment_status from orders where id = $1 for update",
       [id],

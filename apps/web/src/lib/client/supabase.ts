@@ -13,6 +13,8 @@ export function getBrowserSupabase(): SupabaseClient | null {
   // No background refresh in the browser: the server proxy refreshes the session on every request
   // and updates the cookies. Two refreshers racing with one refresh token makes Supabase revoke
   // the session (that logged admins out after ~1 hour).
-  client = url && key ? createBrowserClient(url, key, { auth: { autoRefreshToken: false } }) : null;
+  // Secure: the session cookie is never sent over plain HTTP on the live (https) site.
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  client = url && key ? createBrowserClient(url, key, { auth: { autoRefreshToken: false }, cookieOptions: { secure } }) : null;
   return client;
 }

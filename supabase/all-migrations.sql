@@ -2405,6 +2405,510 @@ revoke all on function public.cancel_order(uuid, text, text) from public, anon, 
 alter table public.product_variants
   add column if not exists note text check (note is null or char_length(note) <= 40);
 
+-- ===== supabase/migrations/20261027000001_legal_details.sql =====
+-- Business details shown on the Privacy, Terms and Returns pages. Filled in by the owner in
+-- Admin → Settings → Legal & policies; pages leave out anything still empty (nothing is invented).
+-- Additive only: new nullable columns, no data changed.
+alter table public.store_settings
+  add column if not exists legal_name text check (legal_name is null or char_length(legal_name) <= 120),
+  add column if not exists legal_address text check (legal_address is null or char_length(legal_address) <= 300),
+  add column if not exists legal_registration text check (legal_registration is null or char_length(legal_registration) <= 200),
+  add column if not exists grievance_officer text check (grievance_officer is null or char_length(grievance_officer) <= 80),
+  add column if not exists grievance_email text check (grievance_email is null or grievance_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+  add column if not exists legal_jurisdiction text check (legal_jurisdiction is null or char_length(legal_jurisdiction) <= 80),
+  add column if not exists policies_updated date;
+
+-- ===== supabase/migrations/20261027000002_paid_after_slot_and_failed_delivery.sql =====
+-- Deep check 27 Oct 2026.
+-- 1. mark_order_paid: a payment confirmed in time for its stock hold but after the booked delivery
+--    window ended (or after the delivery date) no longer leaves a "placed" order for a past slot: the
+--    order is kept and moved to "delivery time agreed on WhatsApp", today or later (same as a late payment).
+--    Everything else is unchanged from 20261023000001.
+-- 2. cancel_order: the store (actor "admin:…") can cancel an order that is out for delivery when the
+--    customer refused it or couldn't be reached; its stock is returned. Customers still can't.
+
+create or replace function public.mark_order_paid(
+  p_order_id uuid,
+  p_provider text,
+  p_provider_order_id text,
+  p_payment_id text,
+  p_amount integer,
+  p_source text
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order public.orders;
+  v_item record;
+  v_coupon public.coupons;
+  v_coupon_id uuid;
+  v_slot public.delivery_slots;
+  v_n integer;
+  v_today date := (now() at time zone 'Asia/Kolkata')::date;
+  v_reason text;
+  v_slot_note text;
+  v_detail text;
+  v_new_payment boolean;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    return 'not_found';
+  end if;
+
+  insert into public.payments (order_id, provider, provider_order_id, provider_payment_id, amount, status, source)
+  values (p_order_id, p_provider, p_provider_order_id, p_payment_id, p_amount, 'captured', p_source)
+  on conflict (provider, provider_payment_id) do nothing;
+  v_new_payment := found;
+
+  -- A payment id already recorded for ANOTHER order is never reused to pay this one.
+  if not v_new_payment and exists (
+    select 1 from public.payments
+     where provider = p_provider and provider_payment_id = p_payment_id and order_id <> p_order_id
+  ) then
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, v_order.status, format('Payment %s belongs to another order — not applied, needs review', p_payment_id), 'system');
+    return 'payment_reused';
+  end if;
+
+  if v_order.payment_status in ('paid', 'refund_pending', 'refunded') then
+    -- A second, different payment for an order that is already paid: flag it so staff refund it.
+    if v_new_payment then
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, v_order.status, format('Second payment %s (%s paise) received for an order that was already paid — refund required', p_payment_id, p_amount), 'system');
+      return 'duplicate_payment';
+    end if;
+    return 'already_processed';
+  end if;
+
+  if p_amount <> v_order.total then
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, v_order.status, format('Payment %s amount %s does not match order total %s — needs review', p_payment_id, p_amount, v_order.total), 'system');
+    return 'amount_mismatch';
+  end if;
+
+  if v_order.status = 'pending_payment' then
+    -- Paid in time for the hold, but the booked delivery window may already be over (UPI/payment-link
+    -- holds last up to 24 h; staff may verify a UPI payment late): don't promise a past slot — keep the
+    -- order, deliver today or later at a time agreed with the customer, like a late payment.
+    v_slot_note := null;
+    if v_order.delivery_date < v_today then
+      v_slot_note := 'the delivery date had passed';
+    elsif v_order.slot_id is not null then
+      select * into v_slot from public.delivery_slots where id = v_order.slot_id;
+      if found and now() >= ((v_order.delivery_date + v_slot.end_time) at time zone 'Asia/Kolkata') then
+        v_slot_note := 'the delivery slot had ended';
+      end if;
+    end if;
+    if v_slot_note is null then
+      update public.orders
+         set status = 'placed', payment_status = 'paid', paid_at = now(), reservation_expires_at = null
+       where id = p_order_id;
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, 'placed', 'Payment confirmed', 'system');
+    else
+      update public.orders
+         set status = 'placed', payment_status = 'paid', paid_at = now(), reservation_expires_at = null,
+             slot_id = null, delivery_date = greatest(v_order.delivery_date, v_today), slot_label = 'Delivery time confirmed on WhatsApp'
+       where id = p_order_id;
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, 'placed',
+              format('Payment confirmed. %s, so the store will agree a new delivery time with you.', initcap(left(v_slot_note, 1)) || substr(v_slot_note, 2)),
+              'system');
+    end if;
+    return 'paid';
+  end if;
+
+  if v_order.status = 'cancelled' and v_order.stock_released and v_order.cancelled_reason = 'Payment was not completed in time' then
+    begin
+      -- 1. Every item must still exist and be sellable. No inner join: a missing variant/product fails.
+      select count(*) into v_n
+        from public.order_items oi
+        left join public.product_variants v on v.id = oi.variant_id
+        left join public.products p on p.id = v.product_id
+        left join public.categories c on c.id = p.category_id
+       where oi.order_id = p_order_id
+         and (v.id is null or not v.active or p.id is null or not p.active or c.id is null or not c.active);
+      if v_n > 0 then
+        raise exception 'revival_blocked' using detail = 'an item in the order is no longer available';
+      end if;
+
+      -- 2. Stock, same lock order as checkout (products by id), with the pack size that was sold.
+      for v_item in
+        select oi.variant_id, oi.quantity, oi.variant_label
+          from public.order_items oi join public.product_variants v on v.id = oi.variant_id
+         where oi.order_id = p_order_id
+         order by v.product_id, oi.variant_id
+      loop
+        if not public.take_stock(v_item.variant_id, v_item.quantity, true, v_item.variant_label) then
+          raise exception 'revival_blocked' using detail = 'items are out of stock';
+        end if;
+      end loop;
+
+      -- 3. Coupon: locked and re-validated, this order excluded from its own counts.
+      if v_order.coupon_id is null and v_order.discount > 0 then
+        raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+      end if;
+      if v_order.coupon_id is not null then
+        select * into v_coupon from public.coupons where id = v_order.coupon_id for update;
+        if not found then
+          raise exception 'revival_blocked' using detail = 'the coupon used no longer exists';
+        end if;
+        if not v_coupon.active or (v_coupon.ends_at is not null and v_coupon.ends_at < now()) then
+          raise exception 'revival_blocked' using detail = format('coupon %s is no longer valid', v_coupon.code);
+        end if;
+        if v_coupon.usage_limit is not null then
+          select count(*) into v_n from public.coupon_redemptions where coupon_id = v_coupon.id and order_id <> p_order_id;
+          if greatest(v_n, v_coupon.used_count) >= v_coupon.usage_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s has reached its usage limit', v_coupon.code);
+          end if;
+        end if;
+        if v_coupon.per_user_limit is not null and v_order.user_id is not null then
+          select count(*) into v_n from public.coupon_redemptions
+           where coupon_id = v_coupon.id and user_id = v_order.user_id and order_id <> p_order_id;
+          if v_n >= v_coupon.per_user_limit then
+            raise exception 'revival_blocked' using detail = format('coupon %s was already used by this customer', v_coupon.code);
+          end if;
+        end if;
+        if coalesce(v_coupon.first_order_only, false) then
+          select count(*) into v_n from public.orders
+           where user_id = v_order.user_id and status <> 'cancelled' and id <> p_order_id;
+          if v_order.user_id is null or v_n > 0 then
+            raise exception 'revival_blocked' using detail = format('coupon %s is for a first order only', v_coupon.code);
+          end if;
+        end if;
+        insert into public.coupon_redemptions (coupon_id, order_id, user_id)
+        values (v_coupon.id, p_order_id, v_order.user_id)
+        on conflict (order_id) do nothing
+        returning coupon_id into v_coupon_id;
+        if v_coupon_id is not null then
+          update public.coupons set used_count = used_count + 1 where id = v_coupon_id;
+        end if;
+      end if;
+
+      -- 4. Delivery slot (locked last, like checkout). Not usable → no slot, today, agreed with customer.
+      v_slot_note := null;
+      if v_order.slot_id is not null then
+        select * into v_slot from public.delivery_slots where id = v_order.slot_id for update;
+        if not found or not v_slot.active then
+          v_slot_note := 'the delivery slot is no longer offered';
+        elsif v_order.delivery_date < v_today then
+          v_slot_note := 'the delivery date had passed';
+        elsif now() >= ((v_order.delivery_date + v_slot.start_time) at time zone 'Asia/Kolkata') - make_interval(mins => v_slot.cutoff_minutes) then
+          v_slot_note := 'the delivery slot had closed';
+        else
+          select count(*) into v_n from public.orders
+           where slot_id = v_order.slot_id and delivery_date = v_order.delivery_date and status <> 'cancelled' and id <> p_order_id;
+          if v_n >= v_slot.capacity then
+            v_slot_note := 'the delivery slot was full';
+          end if;
+        end if;
+      elsif v_order.delivery_date < v_today then
+        v_slot_note := 'the delivery date had passed';
+      end if;
+
+      if v_slot_note is null then
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed', 'Payment confirmed after reservation expired; stock re-reserved', 'system');
+      else
+        update public.orders
+           set status = 'placed', payment_status = 'paid', paid_at = now(), stock_released = false, cancelled_reason = null,
+               slot_id = null, delivery_date = greatest(v_order.delivery_date, v_today), slot_label = 'Delivery time confirmed on WhatsApp'
+         where id = p_order_id;
+        insert into public.order_events (order_id, status, note, actor)
+        values (p_order_id, 'placed',
+                format('Payment confirmed after reservation expired; stock re-reserved. %s, so the store will agree a new delivery time with you.', initcap(left(v_slot_note, 1)) || substr(v_slot_note, 2)),
+                'system');
+      end if;
+      return 'paid_late';
+    exception when others then
+      -- Nothing above is kept (stock, coupon). Keep the order cancelled; flag the captured payment.
+      get stacked diagnostics v_detail = pg_exception_detail;
+      v_reason := case when sqlerrm = 'revival_blocked' then coalesce(nullif(v_detail, ''), 'the order can no longer be fulfilled') else 'the order could not be restored' end;
+      update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+      insert into public.order_events (order_id, status, note, actor)
+      values (p_order_id, 'cancelled', format('Payment received after expiry but %s — refund required', v_reason), 'system');
+      return 'refund_required';
+    end;
+  end if;
+
+  if v_order.status = 'cancelled' then
+    update public.orders set payment_status = 'refund_pending', paid_at = now() where id = p_order_id;
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'cancelled', 'Payment received for a cancelled order — refund required', 'system');
+    return 'refund_required';
+  end if;
+
+  update public.orders set payment_status = 'paid', paid_at = now() where id = p_order_id;
+  return 'paid';
+end $$;
+
+revoke all on function public.mark_order_paid(uuid, text, text, text, integer, text) from public, anon, authenticated;
+
+create or replace function public.cancel_order(p_order_id uuid, p_actor text, p_reason text)
+returns public.orders
+language plpgsql security definer set search_path = public as $$
+declare
+  v_order public.orders;
+  v_captured boolean;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    raise exception 'Order not found' using errcode = 'P0002';
+  end if;
+  if v_order.status = 'cancelled' then
+    return v_order; -- idempotent
+  end if;
+  -- Out for delivery: only the store can cancel (customer refused / not reachable) — the goods come
+  -- back, so their stock is returned. Delivered orders can never be cancelled.
+  if v_order.status = 'delivered' or (v_order.status = 'out_for_delivery' and p_actor not like 'admin:%') then
+    raise exception 'Order can no longer be cancelled' using errcode = 'P0001';
+  end if;
+
+  select exists (select 1 from public.payments where order_id = p_order_id and status = 'captured') into v_captured;
+
+  perform public.release_order_stock(p_order_id);
+
+  update public.orders
+     set status = 'cancelled',
+         cancelled_reason = p_reason,
+         reservation_expires_at = null,
+         payment_status = case
+           when payment_status = 'paid' then 'refund_pending'
+           when payment_status = 'pending' and v_captured then 'refund_pending'
+           when payment_status = 'pending' then 'failed'
+           when payment_status = 'cod_pending' then 'cod_cancelled'
+           else payment_status end
+   where id = p_order_id
+   returning * into v_order;
+
+  insert into public.order_events (order_id, status, note, actor)
+  values (p_order_id, 'cancelled', p_reason, p_actor);
+  if v_captured and v_order.payment_status = 'refund_pending' and v_order.paid_at is null then
+    insert into public.order_events (order_id, status, note, actor)
+    values (p_order_id, 'cancelled', 'A captured payment exists for this unpaid order — refund required', 'system');
+  end if;
+
+  return v_order;
+end $$;
+revoke all on function public.cancel_order(uuid, text, text) from public, anon, authenticated;
+
+-- ===== supabase/migrations/20261028000001_deleted_account_coupon_history.sql =====
+-- Deleting an account and signing up again with the same email must not make "first order only"
+-- coupons, or coupons limited per customer, usable again. When an account is deleted we keep only a
+-- keyed hash of its normalised email (HMAC made by the server — no email address is stored), whether
+-- it had ordered, and how many times it used each coupon. Server-only table: RLS on, no client grants.
+create table if not exists public.deleted_account_identities (
+  identity text primary key check (char_length(identity) = 64),
+  had_orders boolean not null default false,
+  coupon_uses jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz not null default now()
+);
+alter table public.deleted_account_identities enable row level security;
+revoke all on public.deleted_account_identities from anon, authenticated;
+
+-- ===== supabase/migrations/20261031000001_release_lock_order_and_order_numbers.sql =====
+-- Audit round 6 (31 Oct 2026).
+--
+-- 1. release_expired_reservations() cancelled expired orders one by one, so the product rows of
+--    several orders were locked in "order by order" sequence, not by product id. A checkout that
+--    locks the same products in id order could deadlock with it ("deadlock detected" → 500).
+--    Now every product (then coupon) touched by the expired orders is locked up front in id order —
+--    the same order checkout, payment revival and inventory edits use — before anything is cancelled.
+-- 2. Order numbers: lpad(n, 5) cuts numbers above 99 999 to 5 characters ("100007" → "10000"), so
+--    after that many orders numbers would repeat and checkouts fail on the unique index.
+
+create or replace function public.release_expired_reservations() returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  v_ids uuid[];
+  v_id uuid;
+  v_status text;
+  v_count integer := 0;
+begin
+  select coalesce(array_agg(id order by reservation_expires_at), '{}') into v_ids
+    from (
+      select id, reservation_expires_at from public.orders
+       where status in ('pending_payment', 'pending_confirmation') and reservation_expires_at < now()
+       order by reservation_expires_at
+       for update skip locked
+    ) o;
+  if cardinality(v_ids) = 0 then
+    return 0;
+  end if;
+
+  -- Same lock order as checkout: products (by id), then their packs, then coupons (by id).
+  perform 1 from public.products p
+   where p.id in (select v.product_id from public.order_items oi join public.product_variants v on v.id = oi.variant_id
+                   where oi.order_id = any(v_ids))
+   order by p.id for update;
+  perform 1 from public.product_variants v
+   where v.id in (select oi.variant_id from public.order_items oi where oi.order_id = any(v_ids))
+   order by v.id for update;
+  perform 1 from public.coupons c
+   where c.id in (select cr.coupon_id from public.coupon_redemptions cr where cr.order_id = any(v_ids))
+   order by c.id for update;
+
+  foreach v_id in array v_ids loop
+    select status into v_status from public.orders where id = v_id;
+    perform public.cancel_order(
+      v_id, 'system',
+      case when v_status = 'pending_payment' then 'Payment was not completed in time'
+           else 'Not confirmed by the store in time' end);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end $$;
+revoke all on function public.release_expired_reservations() from public, anon, authenticated;
+
+create or replace function public.next_order_number() returns text
+language plpgsql set search_path = public as $$
+declare
+  n bigint := nextval('public.order_number_seq');
+begin
+  return 'FB' || to_char(now() at time zone 'Asia/Kolkata', 'YYMMDD') || '-' || lpad(n::text, greatest(5, length(n::text)), '0');
+end $$;
+
+alter table public.orders alter column order_number set default public.next_order_number();
+revoke all on function public.next_order_number() from public, anon, authenticated;
+
+-- ===== supabase/migrations/20261031000002_order_adjustments.sql =====
+-- After-delivery problems (31 Oct 2026): the returns policy promises a refund or a replacement for items
+-- that arrive missing, damaged, spoiled or wrong. Staff record it on the order; the customer sees it on
+-- the order page. Refunds are money leaving the shop: only an admin records and closes them (server
+-- rule, see lib/admin/adjustments.ts). Rows are written only by the server (owner role).
+
+create table public.order_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references public.orders (id) on delete cascade,
+  kind text not null check (kind in ('refund', 'replacement')),
+  -- [{ "itemId": uuid, "name": text, "label": text, "quantity": int }] — a snapshot of the affected items
+  items jsonb not null check (jsonb_typeof(items) = 'array' and jsonb_array_length(items) between 1 and 50),
+  -- refund: paise to give back (> 0); replacement: 0
+  amount integer not null default 0 check (amount >= 0 and amount <= 10000000),
+  reason text not null check (char_length(reason) between 3 and 300),
+  status text not null default 'pending' check (status in ('pending', 'done')),
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  done_by text,
+  done_at timestamptz,
+  check ((kind = 'refund' and amount > 0) or (kind = 'replacement' and amount = 0)),
+  check ((status = 'done') = (done_at is not null))
+);
+create index order_adjustments_order_idx on public.order_adjustments (order_id, created_at);
+
+alter table public.order_adjustments enable row level security;
+create policy order_adjustments_owner_read on public.order_adjustments for select to authenticated
+  using (exists (select 1 from public.orders o where o.id = order_id and (o.user_id = auth.uid() or public.is_staff())));
+revoke insert, update, delete on public.order_adjustments from anon, authenticated;
+grant select on public.order_adjustments to authenticated;
+
+-- ===== supabase/migrations/20261103000001_admin_request_log.sql =====
+-- Audit round 7 (3 Nov 2026): admin saves that apply a *change* (stock "+10 since loaded") must not be
+-- applied twice when the browser retries after a timeout or a partly failed save. Each save carries a
+-- request id; one already in this log was saved before and is skipped. Rows older than a day are pruned.
+create table public.admin_request_log (
+  id uuid primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.admin_request_log enable row level security;
+revoke all on public.admin_request_log from anon, authenticated;
+
+-- Clean data that the old Inventory screen could leave: an MRP below the selling price (the product form
+-- refuses to save such a pack, and the shop never shows it as a discount anyway).
+update public.product_variants set mrp = null where mrp is not null and mrp < price;
+
+-- ===== supabase/migrations/20261105000001_admin_audit_log_and_stock_ledger.sql =====
+-- Audit round 8 (5 Nov 2026). Two add-only history tables; nothing existing is changed or removed.
+-- To undo: drop trigger stock_movement_variants on public.product_variants;
+--          drop trigger stock_movement_products on public.products;
+--          drop function public.log_stock_movement(); drop table public.stock_movements, public.admin_audit_log;
+
+-- 1. Who changed what in Admin: one row per saving admin/staff API call (method, path, result, the
+--    sanitised request — never passwords, tokens or codes). Written by the server only.
+create table if not exists public.admin_audit_log (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  actor_id uuid,                -- no foreign key: the history stays if the account is later deleted
+  actor_email text,
+  actor_role text,
+  method text not null,
+  path text not null,
+  status integer not null,
+  details jsonb
+);
+create index if not exists admin_audit_log_created_idx on public.admin_audit_log (created_at desc);
+create index if not exists admin_audit_log_actor_idx on public.admin_audit_log (actor_id, created_at desc);
+alter table public.admin_audit_log enable row level security;
+revoke all on public.admin_audit_log from anon, authenticated;
+grant select on public.admin_audit_log to authenticated;
+drop policy if exists "admins read the audit log" on public.admin_audit_log;
+create policy "admins read the audit log" on public.admin_audit_log for select to authenticated using (public.is_admin());
+
+-- 2. Stock ledger: every change of a pack's stock or a product's stock by weight, with before/after,
+--    why (set by the app for the transaction: order, cancellation, admin edit, …) and who.
+create table if not exists public.stock_movements (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  product_id uuid not null,     -- no foreign keys: the history stays if a product is deleted
+  variant_id uuid,              -- null for stock kept by weight on the product
+  unit text not null check (unit in ('packs', 'grams')),
+  before bigint not null,
+  after bigint not null,
+  change bigint not null,
+  reason text,
+  actor_id uuid
+);
+create index if not exists stock_movements_product_idx on public.stock_movements (product_id, created_at desc);
+create index if not exists stock_movements_created_idx on public.stock_movements (created_at desc);
+alter table public.stock_movements enable row level security;
+revoke all on public.stock_movements from anon, authenticated;
+grant select on public.stock_movements to authenticated;
+drop policy if exists "staff read the stock ledger" on public.stock_movements;
+create policy "staff read the stock ledger" on public.stock_movements for select to authenticated using (public.is_staff());
+
+-- Security definer so the row is written whoever changed the stock (checkout runs some steps as the
+-- customer under row-level security). A bad "fb.actor" value is ignored, never an error: logging must
+-- not be able to stop an order.
+create or replace function public.log_stock_movement() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_reason text := nullif(current_setting('fb.stock_reason', true), '');
+  v_actor_raw text := nullif(current_setting('fb.actor', true), '');
+  v_actor uuid;
+  v_before bigint;
+  v_after bigint;
+begin
+  if v_actor_raw ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then v_actor := v_actor_raw::uuid; end if;
+  if tg_table_name = 'product_variants' then
+    -- Packs of a product sold by weight only mirror the product's kilos (logged on the product row).
+    if exists (select 1 from products where id = new.product_id and stock_grams is not null) then return null; end if;
+    v_before := case when tg_op = 'INSERT' then 0 else coalesce(old.stock, 0) end;
+    v_after := coalesce(new.stock, 0);
+    if v_before is distinct from v_after then
+      insert into stock_movements (product_id, variant_id, unit, before, after, change, reason, actor_id)
+      values (new.product_id, new.id, 'packs', v_before, v_after, v_after - v_before, coalesce(v_reason, case when tg_op = 'INSERT' then 'new pack' end), v_actor);
+    end if;
+  else
+    v_before := case when tg_op = 'INSERT' then null else old.stock_grams end;
+    v_after := new.stock_grams;
+    if v_before is distinct from v_after and v_after is not null then
+      insert into stock_movements (product_id, variant_id, unit, before, after, change, reason, actor_id)
+      values (new.id, null, 'grams', coalesce(v_before, 0), v_after, v_after - coalesce(v_before, 0), coalesce(v_reason, case when tg_op = 'INSERT' then 'new product' end), v_actor);
+    end if;
+  end if;
+  return null;
+end $$;
+revoke all on function public.log_stock_movement() from public, anon, authenticated;
+
+drop trigger if exists stock_movement_variants on public.product_variants;
+create trigger stock_movement_variants after insert or update of stock on public.product_variants
+  for each row execute function public.log_stock_movement();
+drop trigger if exists stock_movement_products on public.products;
+create trigger stock_movement_products after insert or update of stock_grams on public.products
+  for each row execute function public.log_stock_movement();
+
 -- ===== record the migrations above as applied (for apps/web/scripts/migrate.mjs) =====
 create table if not exists public._fb_migrations (name text primary key, applied_at timestamptz not null default now());
 alter table public._fb_migrations enable row level security;
@@ -2439,5 +2943,12 @@ insert into public._fb_migrations (name) values
   ('20261017200003_late_payment_keep_future_date.sql'),
   ('20261020000001_rate_limits.sql'),
   ('20261023000001_payment_safety.sql'),
-  ('20261024000001_variant_approx_note.sql')
+  ('20261024000001_variant_approx_note.sql'),
+  ('20261027000001_legal_details.sql'),
+  ('20261027000002_paid_after_slot_and_failed_delivery.sql'),
+  ('20261028000001_deleted_account_coupon_history.sql'),
+  ('20261031000001_release_lock_order_and_order_numbers.sql'),
+  ('20261031000002_order_adjustments.sql'),
+  ('20261103000001_admin_request_log.sql'),
+  ('20261105000001_admin_audit_log_and_stock_ledger.sql')
 on conflict (name) do nothing;

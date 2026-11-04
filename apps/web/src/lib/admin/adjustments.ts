@@ -1,6 +1,6 @@
 import "server-only";
 import { formatINR, type AdminAdjustmentInput } from "@freshbasket/shared";
-import { queryOne, tx } from "../db";
+import { noteStock, queryOne, tx } from "../db";
 import { conflict, notFound } from "../http";
 import { adminGetOrder } from "./orders";
 
@@ -15,6 +15,7 @@ import { adminGetOrder } from "./orders";
  */
 export async function adminAddAdjustment(orderId: string, input: AdminAdjustmentInput, actorId: string) {
   await tx(async (c) => {
+    await noteStock(c, `${input.kind} after delivery`, actorId);
     const o = (
       await c.query<{ status: string; payment_status: string; total: number; subtotal: number; discount: number }>(
         "select status, payment_status, total, subtotal, discount from orders where id = $1 for update",
