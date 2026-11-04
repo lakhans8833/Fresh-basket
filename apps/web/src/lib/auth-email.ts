@@ -85,13 +85,21 @@ export async function sendAuthEmail(action: AuthEmailAction, email: string, opts
 
   // signin / resend: a magic-link code. For an email without an account Supabase creates one (like
   // signInWithOtp); verifying the code with type "email" also confirms an unconfirmed account.
-  const { data: r, error } = await sb.auth.admin.generateLink({ type: "magiclink", email, options: data ? { data } : undefined });
-  if (error) throw new HttpError(502, "Couldn't send the code just now. Please try again in a minute.");
+  const magic = async () => {
+    const { data: link, error } = await sb.auth.admin.generateLink({ type: "magiclink", email, options: data ? { data } : undefined });
+    if (error) throw new HttpError(502, "Couldn't send the code just now. Please try again in a minute.");
+    return link;
+  };
+  let r = await magic();
   // Signing in with a code to an account that was never confirmed: someone else may have registered
   // this address earlier with THEIR password. Replace it with a random one, so only the inbox owner
   // gets in (they can set a password later with "Forgot password?").
+  // Supabase Auth clears every pending code when a password changes, so the code generated above is
+  // dead after this — generate the code we email AFTER the password change (4 Nov 2026: new customers
+  // got "That code is wrong" for the code they had just received).
   if (action === "signin" && r.user && !r.user.email_confirmed_at) {
-    await sb.auth.admin.updateUserById(r.user.id, { password: randomBytes(24).toString("base64url") }).catch(() => undefined);
+    const reset = await sb.auth.admin.updateUserById(r.user.id, { password: randomBytes(24).toString("base64url") }).catch(() => null);
+    if (reset && !reset.error) r = await magic();
   }
   await sendMail(
     codeMail(store, email, r.properties.email_otp, action === "resend" ? "Here is a new code to confirm your email." : `Here is your code to sign in to ${store}.`),

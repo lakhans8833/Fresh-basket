@@ -4,17 +4,24 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const gen = vi.hoisted(() => ({ calls: [] as unknown[], updates: [] as { id: string; attrs: { password?: string } }[], result: null as unknown }));
+const gen = vi.hoisted(() => ({
+  calls: [] as unknown[],
+  updates: [] as { id: string; attrs: { password?: string } }[],
+  result: null as unknown,
+  dynamic: null as null | (() => unknown),
+  onUpdate: null as null | (() => void),
+}));
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     auth: {
       admin: {
         generateLink: async (p: unknown) => {
           gen.calls.push(p);
-          return gen.result;
+          return gen.dynamic ? gen.dynamic() : gen.result;
         },
         updateUserById: async (id: string, attrs: { password?: string }) => {
           gen.updates.push({ id, attrs });
+          gen.onUpdate?.();
           return { data: {}, error: null };
         },
       },
@@ -53,6 +60,8 @@ async function load(vars: Record<string, string>) {
 beforeEach(() => {
   gen.calls = [];
   gen.updates = [];
+  gen.dynamic = null;
+  gen.onUpdate = null;
   gen.result = { data: { properties: { email_otp: "482913", hashed_token: "hash-abc", verification_type: "magiclink" }, user: { id: "u-confirmed", email_confirmed_at: "2026-10-01T00:00:00Z" } }, error: null };
   sent.mails = [];
 });
@@ -167,6 +176,37 @@ describe("with SMTP", () => {
     gen.result = { data: { properties: { email_otp: "555222", hashed_token: "h", verification_type: "magiclink" }, user: { id: "u-confirmed", email_confirmed_at: "2026-10-01T00:00:00Z" } }, error: null };
     expect((await post({ action: "signin", email: "i@example.com" })).status).toBe(200);
     expect(gen.updates).toHaveLength(1);
+  });
+
+  it("code sign-in to a never-confirmed account emails a code that still works after the password reset", async () => {
+    // Like Supabase Auth: a password change clears the user's pending codes.
+    const { post } = await load(SMTP_ENV);
+    let n = 0;
+    let valid: string | null = null;
+    let confirmed = false;
+    const seq: string[] = [];
+    gen.dynamic = () => {
+      const otp = String(700000 + ++n);
+      valid = otp;
+      seq.push("generate");
+      return { data: { properties: { email_otp: otp, hashed_token: "h" + n, verification_type: "magiclink" }, user: { id: "u-new", email_confirmed_at: confirmed ? "2026-11-04T00:00:00Z" : null } }, error: null };
+    };
+    gen.onUpdate = () => {
+      valid = null; // every pending code dies
+      seq.push("password");
+    };
+    expect((await post({ action: "signin", email: "brand-new@example.com" })).status).toBe(200);
+    expect(seq).toEqual(["generate", "password", "generate"]);
+    expect(sent.mails).toHaveLength(1);
+    expect(valid).not.toBeNull();
+    expect(sent.mails[0]!.text).toContain(valid!);
+    // A confirmed account: one code, no password change.
+    confirmed = true;
+    seq.length = 0;
+    sent.mails = [];
+    expect((await post({ action: "signin", email: "known@example.com" })).status).toBe(200);
+    expect(seq).toEqual(["generate"]);
+    expect(sent.mails[0]!.text).toContain(valid!);
   });
 
   it("the same network can't spray codes to many addresses", async () => {
