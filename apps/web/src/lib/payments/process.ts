@@ -1,4 +1,5 @@
 import "server-only";
+import type { PoolClient } from "pg";
 import { labelStockChange, pool, tx } from "../db";
 import { scheduleOrderNotification } from "../notify/whatsapp";
 import { CACHE_TAGS, invalidate } from "../cache";
@@ -116,17 +117,23 @@ export async function processPaymentEvent(ev: NormalisedPaymentEvent): Promise<P
 }
 
 /** Used by the client-side "verify" call after the server has independently confirmed the payment. */
-export async function markPaidFromVerifiedPayment(args: {
-  orderId: string; provider: PaymentProvider; providerOrderId: string; paymentId: string; amount: number;
-}): Promise<ProcessResult> {
-  const result = await tx(async (c) => {
-    await labelStockChange(c, "late_payment", { orderId: args.orderId }); // only a late payment re-takes stock
-    const { rows } = await c.query<{ result: ProcessResult }>(
-      "select mark_order_paid($1, $2, $3, $4, $5, 'client_verify') as result",
-      [args.orderId, args.provider, args.providerOrderId, args.paymentId, args.amount],
-    );
-    return rows[0]!.result;
-  });
+type VerifiedPayment = { orderId: string; provider: PaymentProvider; providerOrderId: string; paymentId: string; amount: number };
+
+/** mark_order_paid on an open transaction (the caller may already hold the order row). Call afterPaymentApplied after commit. */
+export async function applyVerifiedPayment(c: PoolClient, args: VerifiedPayment): Promise<ProcessResult> {
+  await labelStockChange(c, "late_payment", { orderId: args.orderId }); // only a late payment re-takes stock
+  const { rows } = await c.query<{ result: ProcessResult }>(
+    "select mark_order_paid($1, $2, $3, $4, $5, 'client_verify') as result",
+    [args.orderId, args.provider, args.providerOrderId, args.paymentId, args.amount],
+  );
+  return rows[0]!.result;
+}
+
+/** Cache + customer notification once a payment has been committed. */
+export const afterPaymentApplied = confirmedOnPayment;
+
+export async function markPaidFromVerifiedPayment(args: VerifiedPayment): Promise<ProcessResult> {
+  const result = await tx((c) => applyVerifiedPayment(c, args));
   confirmedOnPayment(args.orderId, result);
   return result;
 }

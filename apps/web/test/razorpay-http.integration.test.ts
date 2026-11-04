@@ -10,6 +10,7 @@ vi.hoisted(() => {
   process.env.RAZORPAY_KEY_ID = "rzp_test_dummy";
   process.env.RAZORPAY_KEY_SECRET = "dummy_secret";
   process.env.RAZORPAY_WEBHOOK_SECRET = "dummy_webhook";
+  process.env.DB_POOL_MAX = "6"; // FB-34 test: verify (holding the order) + a waiting cancel + reads
 });
 const KEY_SECRET = "dummy_secret";
 const WEBHOOK_SECRET = "dummy_webhook";
@@ -19,14 +20,14 @@ vi.mock("next/headers", () => ({
   headers: async () => ({ get: () => null }),
   cookies: async () => ({ get: () => undefined, getAll: () => [], set: () => {}, delete: () => {} }),
 }));
-const gw = vi.hoisted(() => ({ payment: null as null | Record<string, unknown>, captures: 0 }));
+const gw = vi.hoisted(() => ({ payment: null as null | Record<string, unknown>, captures: 0, onCapture: null as null | (() => Promise<void>) }));
 vi.mock("@/lib/payments/razorpay", async (orig) => {
   const real = await orig<typeof import("@/lib/payments/razorpay")>();
   return {
     ...real,
     createRazorpayOrder: vi.fn(async (a: { amount: number; orderId: string }) => ({ id: `order_${a.orderId.slice(0, 8)}${randomUUID().slice(0, 4)}`, amount: a.amount, currency: "INR", receipt: "r", status: "created" })),
     fetchPayment: vi.fn(async () => gw.payment),
-    capturePayment: vi.fn(async () => { gw.captures++; return { ...gw.payment, status: "captured" }; }),
+    capturePayment: vi.fn(async () => { gw.captures++; await gw.onCapture?.(); return { ...gw.payment, status: "captured" }; }),
   };
 });
 
@@ -84,7 +85,7 @@ beforeAll(async () => {
   await query("update products set stock_grams = 1000000 where slug = 'tomato'");
   slot = (await queryOne<{ id: string }>("insert into delivery_slots (label, start_time, end_time, cutoff_minutes, capacity) values ($1, '18:00', '20:00', 0, 1000) returning id", [`W${randomUUID().slice(0, 6)}`]))!.id;
 });
-beforeEach(() => { gw.payment = null; gw.captures = 0; });
+beforeEach(() => { gw.payment = null; gw.captures = 0; gw.onCapture = null; });
 afterAll(async () => { await pool.end(); });
 
 describe("webhook signature", () => {
@@ -190,6 +191,43 @@ describe("checkout verify route", () => {
     expect((await callVerify(o.id, body)).body.status).toBe("paid");
     expect(gw.captures).toBe(1);
     expect(await state(o.id)).toEqual({ status: "placed", payment_status: "paid" });
+  });
+});
+
+describe("FB-34: the customer cancels while verify is capturing", () => {
+  const sig = (rzp: string, pay: string) => createHmac("sha256", KEY_SECRET).update(`${rzp}|${pay}`).digest("hex");
+
+  it("the cancel waits until the payment is applied; the money is never captured for an order cancelled meanwhile", async () => {
+    const o = await newOrder();
+    const pay = `pay_${randomUUID().slice(0, 10)}`;
+    gw.payment = { id: pay, order_id: o.rzp, amount: o.total, currency: "INR", status: "authorized" };
+    let cancel: Promise<unknown> = Promise.resolve();
+    let cancelledDuringCapture: boolean | null = null;
+    gw.onCapture = async () => {
+      // The customer taps "Cancel" while Razorpay is capturing.
+      cancel = customerCancel(CUSTOMER, o.id).then(() => "cancelled", (e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 400));
+      cancelledDuringCapture = (await state(o.id)).status === "cancelled";
+    };
+    const r = await callVerify(o.id, { razorpay_order_id: o.rzp, razorpay_payment_id: pay, razorpay_signature: sig(o.rzp, pay) });
+    expect(cancelledDuringCapture).toBe(false);
+    expect(r.body.status).toBe("paid");
+    expect(gw.captures).toBe(1);
+    // The cancel then runs on a PAID order: the normal paid-order cancel (refund owed), not a stray capture.
+    expect(await cancel).toBe("cancelled");
+    const ev = (await getOrderById(o.id))!.events.map((e) => e.note ?? "");
+    expect(ev.some((n) => n.includes("Payment received for a cancelled order"))).toBe(false);
+  });
+
+  it("cancelled before verify → the authorisation is not captured", async () => {
+    const o = await newOrder();
+    await customerCancel(CUSTOMER, o.id);
+    const pay = `pay_${randomUUID().slice(0, 10)}`;
+    gw.payment = { id: pay, order_id: o.rzp, amount: o.total, currency: "INR", status: "authorized" };
+    const r = await callVerify(o.id, { razorpay_order_id: o.rzp, razorpay_payment_id: pay, razorpay_signature: sig(o.rzp, pay) });
+    expect(r.body.status).toBe("order_cancelled");
+    expect(gw.captures).toBe(0);
+    expect(await state(o.id)).toEqual({ status: "cancelled", payment_status: "failed" });
   });
 });
 
