@@ -130,3 +130,11 @@ export async function asUser<T>(userId: string, fn: (c: PoolClient) => Promise<T
     return fn(c);
   });
 }
+
+/**
+ * Label this transaction's stock changes for the stock ledger (public.stock_movements, written by a
+ * trigger): why the stock moved and which staff member did it (if any). Transaction-local.
+ */
+export async function noteStock(c: Pick<PoolClient, "query">, reason: string, actorId?: string | null) {
+  await c.query("select set_config('fb.stock_reason', $1, true), set_config('fb.actor', $2, true)", [reason.slice(0, 120), actorId ?? ""]);
+}

@@ -5,7 +5,7 @@ import type { PoolClient } from "pg";
 import {
   addDays, canCustomerCancel, istDateString, pincodeStateMessage, PREPAID_METHODS, stateMatchesPincode,
   type Order, type OrderAdjustment, type OrderStatus, type PaymentMethod, type PaymentStatus, type PlaceOrderInput, type WhatsAppOrderInput, NO_SLOT_LABEL, MAX_QTY_PER_LINE } from "@freshbasket/shared";
-import { asUser, pool, query, tx } from "./db";
+import { asUser, noteStock, pool, query, tx } from "./db";
 import { CACHE_TAGS, invalidate } from "./cache";
 import { env } from "./env";
 import { conflict, badRequest, notFound, HttpError } from "./http";
@@ -150,7 +150,8 @@ async function retryOnDeadlock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function releaseExpired(): Promise<number> {
-  const rows = await query<{ n: number }>("select release_expired_reservations() as n");
+  // set_config runs first in the same statement, so the ledger says why the stock came back.
+  const rows = await query<{ n: number }>("select r.n from (select set_config('fb.stock_reason', 'unpaid order expired', true) as x) s, lateral (select release_expired_reservations() as n where s.x is not null) r");
   const n = rows[0]?.n ?? 0;
   // Stock came back: drop the cached catalogue (this also runs from GET requests, e.g. Admin → Orders).
   if (n > 0) invalidate(CACHE_TAGS.catalog);
@@ -365,6 +366,7 @@ async function placeOrderOnce(userId: string, input: PlaceOrderInput): Promise<{
 
   try {
     const result = await tx(async (c): Promise<{ id: string; created: boolean }> => {
+      await noteStock(c, "order placed (website/app)");
       // One order placement at a time per customer, so two simultaneous submits can't both pass the check below.
       await c.query("select pg_advisory_xact_lock(hashtext('place_order:' || $1))", [userId]);
       const dup = await c.query<{ id: string }>(
@@ -489,6 +491,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
 
   try {
     const result = await tx(async (c): Promise<{ id: string; created: boolean }> => {
+      await noteStock(c, "order placed (WhatsApp)");
       // Serialise placements per customer (or per mobile number for guests).
       await c.query("select pg_advisory_xact_lock(hashtext('place_order:' || $1))", [owner]);
       const dup = await findSame(c);
@@ -501,7 +504,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
           [cu.phone],
         );
         if ((open.rows[0]?.n ?? 0) >= GUEST_OPEN_LIMIT) {
-          throw conflict("You already have orders waiting for payment or confirmation. Please send them on WhatsApp or wait for the store to confirm, or sign in to order.");
+          throw conflict("This mobile number already has orders waiting for the store to confirm. You can still order on the website (sign in and check out), or message us on WhatsApp about your earlier order.", undefined, "GUEST_OPEN_ORDERS");
         }
         const shop = await c.query<{ n: number }>(
           // Unpaid UPI / payment-link guest orders hold stock too, so they count towards the shop-wide cap.
@@ -550,6 +553,7 @@ async function placeWhatsAppOrderOnce(userId: string | null, input: WhatsAppOrde
 
 export async function cancelOrder(orderId: string, actor: string, reason: string) {
   await tx(async (c) => {
+    await noteStock(c, `order cancelled (${actor})`);
     await c.query("select cancel_order($1, $2, $3)", [orderId, actor, reason]);
   });
   cancelPaymentLinkFor(orderId);
@@ -569,6 +573,7 @@ export async function customerCancel(userId: string, orderId: string) {
     const o = rows[0];
     if (!o) throw notFound("Order not found.");
     if (!canCustomerCancel(o.status)) throw conflict("This order can no longer be cancelled. Please contact support.");
+    await noteStock(c, "order cancelled by customer");
     await c.query("select cancel_order($1, $2, $3)", [orderId, "customer", "Cancelled by customer"]);
   });
   cancelPaymentLinkFor(orderId);

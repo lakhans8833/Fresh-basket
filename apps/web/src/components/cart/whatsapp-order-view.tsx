@@ -86,6 +86,8 @@ export function WhatsAppOrderView({
   const [unavailableItems, setUnavailableItems] = useState<UnavailableItemPreference>("call");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  /** This mobile number already has guest WhatsApp orders waiting: offer the other way to order. */
+  const [guestBlocked, setGuestBlocked] = useState(false);
   const [review, setReview] = useState<WhatsAppCustomer | null>(null);
   const [placing, setPlacing] = useState(false);
   const placingRef = useRef(false);
@@ -237,6 +239,7 @@ export function WhatsAppOrderView({
         void loadSlots();
         setReview(null);
       }
+      setGuestBlocked(err.code === "GUEST_OPEN_ORDERS");
       setFormError(err.message || "Couldn't place the order. Please try again.");
     } finally {
       placingRef.current = false;
@@ -346,14 +349,38 @@ export function WhatsAppOrderView({
           </div>
           <p className="mt-3 text-xs text-muted">Prices and charges are checked again on our server when you confirm.</p>
           {formError ? <Notice tone="error" className="mt-4">{formError}</Notice> : null}
+          {guestBlocked ? (
+            // Two ways to order: if WhatsApp ordering is blocked for this number, the website checkout still works
+            // (the cart is kept), and the customer can ask about the earlier order on WhatsApp.
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+              <ButtonLink href={profile ? "/checkout" : "/login?next=/checkout"} size="lg" variant="dark" className="rounded-xl">
+                <ShoppingBasket className="size-5" aria-hidden /> Order on the website
+              </ButtonLink>
+              {whatsappNumber ? (
+                <a
+                  href={buildWhatsAppUrl(whatsappNumber, `Hi ${storeName}, I placed an order earlier with mobile ${review.phone} and it is waiting for confirmation.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-forest-800 px-5 font-semibold text-forest-800 hover:bg-lime-50"
+                >
+                  <WhatsAppIcon className="size-5" /> Ask about my earlier order
+                </a>
+              ) : null}
+            </div>
+          ) : null}
           <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
             <Button size="lg" className="rounded-xl sm:flex-1" loading={placing} onClick={confirmOrder}>
               <WhatsAppIcon className="size-5" /> Confirm &amp; send on WhatsApp
             </Button>
-            <Button size="lg" variant="outline" className="rounded-xl" disabled={placing} onClick={() => { setReview(null); void loadSlots(); }}>
+            <Button size="lg" variant="outline" className="rounded-xl" disabled={placing} onClick={() => { setReview(null); setGuestBlocked(false); void loadSlots(); }}>
               <Pencil className="size-4" aria-hidden /> Edit details
             </Button>
           </div>
+          {!guestBlocked ? (
+            <p className="mt-3 text-center text-sm text-muted">
+              Prefer not to use WhatsApp? <Link href={profile ? "/checkout" : "/login?next=/checkout"} className="font-semibold text-forest-800 underline">Order on the website instead</Link>
+            </p>
+          ) : null}
         </section>
       </div>
     );

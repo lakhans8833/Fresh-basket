@@ -8,6 +8,7 @@ import { env } from "./env";
 import { queryOne } from "./db";
 import { forbidden, unauthorized } from "./http";
 import { issueToken, readToken } from "./tokens";
+import { setActor } from "./request-context";
 
 export const DEV_COOKIE = "fb_dev_session";
 /** Set by src/proxy.ts after it verified/refreshed the Supabase session (client values are stripped). */
@@ -52,6 +53,8 @@ export const devCookieOptions = {
 export async function supabaseServerClient() {
   const store = await cookies();
   return createServerClient(env.auth.supabaseUrl!, env.auth.supabaseAnonKey!, {
+    // Session cookies only over HTTPS on the live site (Supabase's defaults leave Secure off).
+    cookieOptions: { secure: env.appUrl.startsWith("https://") },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {
@@ -152,6 +155,7 @@ export async function requireUser(): Promise<Session> {
 export async function requireStaff(): Promise<Session> {
   const s = await requireUser();
   if (s.profile.role !== "admin" && s.profile.role !== "staff") throw forbidden();
+  setActor({ id: s.userId, email: s.profile.email, role: s.profile.role });
   return s;
 }
 
@@ -159,5 +163,6 @@ export async function requireStaff(): Promise<Session> {
 export async function requireAdmin(): Promise<Session> {
   const s = await requireUser();
   if (s.profile.role !== "admin") throw forbidden();
+  setActor({ id: s.userId, email: s.profile.email, role: s.profile.role });
   return s;
 }
