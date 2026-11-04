@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { MailCheck } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { api } from "@/lib/client/api";
+import { turnstileToken } from "@/lib/client/turnstile";
 import { OTP_MAX, OTP_MIN, sendErrorMessage, verifyErrorMessage, waitSeconds } from "@/lib/client/otp-errors";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
@@ -81,7 +82,7 @@ export function SignupCode({
     setBusy("resend");
     setError(null);
     try {
-      if (byApp) await api("/api/auth/email", { method: "POST", json: { action: "resend", email } });
+      if (byApp) await api("/api/auth/email", { method: "POST", json: { action: "resend", email, turnstileToken: await turnstileToken() } });
       const { error } = byApp ? { error: null } : await sb.auth.resend({
         type: "signup",
         email,

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { KeyRound, Mail, ShieldCheck, UserRound, Store } from "lucide-react";
 import { api } from "@/lib/client/api";
+import { turnstileToken } from "@/lib/client/turnstile";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { useSession } from "./session-context";
 import { OtpLogin } from "./otp-login";
@@ -100,7 +101,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp
         await done();
       } else if (emailByApp) {
         // This store emails the confirmation code itself (SMTP); the account is created on the server.
-        await api("/api/auth/email", { method: "POST", json: { action: "signup", email: email.trim(), password, name: name.trim() || null } });
+        await api("/api/auth/email", { method: "POST", json: { action: "signup", email: email.trim(), password, name: name.trim() || null, turnstileToken: await turnstileToken() } });
         setConfirming({ email: email.trim().toLowerCase(), justSent: true });
         setBusy(null);
       } else {
@@ -150,7 +151,7 @@ export function LoginForm({ mode, next, linkError, signedInAs = null, emailByApp
     setBusy("forgot");
     if (emailByApp) {
       try {
-        await api("/api/auth/email", { method: "POST", json: { action: "recovery", email: email.trim() } });
+        await api("/api/auth/email", { method: "POST", json: { action: "recovery", email: email.trim(), turnstileToken: await turnstileToken() } });
         setInfo(`If an account exists for ${email}, we've emailed a link to set a new password. Check your inbox (and spam).`);
       } catch (err) {
         setError((err as Error).message);

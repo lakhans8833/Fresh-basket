@@ -18,14 +18,17 @@ const supabaseOrigin = publicSupabaseUrl ? new URL(publicSupabaseUrl).origin : "
 const supabaseWs = supabaseOrigin.replace(/^http/, "ws");
 // Vercel preview deployments load the Vercel toolbar (feedback/comments) from vercel.live.
 const previewToolbar = process.env.VERCEL_ENV === "preview" ? " https://vercel.live" : "";
+// FB-05: Cloudflare Turnstile on the email-code form, only when both keys are set (lib/turnstile.ts).
+const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY?.trim() && process.env.TURNSTILE_SECRET_KEY?.trim() ? process.env.TURNSTILE_SITE_KEY.trim() : "";
+const turnstile = turnstileSiteKey ? " https://challenges.cloudflare.com" : "";
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com${previewToolbar}`,
+  `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://*.razorpay.com${previewToolbar}${turnstile}`,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: https: ${supabaseOrigin}`, // + the project origin when it isn't https (self-hosted)
   "font-src 'self' data:",
   `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https://*.razorpay.com https://api.bigdatacloud.net${previewToolbar}`,
-  `frame-src 'self' https://*.razorpay.com${previewToolbar}`,
+  `frame-src 'self' https://*.razorpay.com${previewToolbar}${turnstile}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
@@ -47,6 +50,7 @@ const nextConfig: NextConfig = {
   env: {
     ...(publicSupabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: publicSupabaseUrl } : {}),
     ...(publicSupabaseAnonKey ? { NEXT_PUBLIC_SUPABASE_ANON_KEY: publicSupabaseAnonKey } : {}),
+    ...(turnstileSiteKey ? { NEXT_PUBLIC_TURNSTILE_SITE_KEY: turnstileSiteKey } : {}),
   },
   poweredByHeader: false,
   images: {

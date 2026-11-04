@@ -20,6 +20,7 @@ Names only — **no values are printed in this repository**. "Prod" / "Preview" 
 | `CRON_SECRET` | **yes** | yes | ✅ | ✅ | `/api/cron/release-expired` bearer secret. Also add as a **GitHub Actions secret** (FB-10) |
 | `ADMIN_EMAILS` | no | recommended | ✅ | ✅ | comma-separated **owner** emails: promoted to admin on deploy once confirmed, and (**new**) the only admins allowed to manage other admins (FB-06) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | `SMTP_PASS` **yes** | for store-sent email codes | ✅ (set 4 Nov) | ❌ | Note: the variable is **`SMTP_PASS`** (not `SMTP_PASSWORD`). `SMTP_SECURE` optional (465 → TLS) |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | secret key **yes** | optional | ❌ | ❌ | Cloudflare Turnstile on the email-code form (FB-05). Active only when **both** are set; without them nothing changes. Redeploy after changing (the site key is built into the page). The phone app is not asked for a token (rate limits only) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | secret + webhook secret **yes** | for online payment | ❌ | ❌ | all three needed; otherwise online checkout is hidden (FB-16). Use **test keys on Preview**, live keys on Production only |
 | `PAYMENT_RESERVATION_MINUTES` | no | optional | ❌ (default 15) | | stock hold for online payment |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | no | optional | ❌ | | fallback; Admin → Settings → WhatsApp takes precedence |

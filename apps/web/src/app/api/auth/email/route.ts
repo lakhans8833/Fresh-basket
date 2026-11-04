@@ -4,12 +4,15 @@ import { clientIp, HttpError, json, parseBody, rateLimit, route } from "@/lib/ht
 import { emailCodesBySmtp } from "@/lib/env";
 import { sendAuthEmail } from "@/lib/auth-email";
 import { emailLimitKey, ipNetworkKey } from "@/lib/limit-keys";
+import { requireTurnstile } from "@/lib/turnstile";
 
 const schema = z.object({
   action: z.enum(["signin", "signup", "resend", "recovery"]),
   email: z.string().trim().toLowerCase().email().max(254),
   name: z.string().trim().max(80).optional().nullable(),
   password: z.string().min(8).max(72).optional().nullable(),
+  /** Cloudflare Turnstile token — required from browsers only when Turnstile is configured (lib/turnstile.ts). */
+  turnstileToken: z.string().max(2048).optional().nullable(),
 });
 
 /**
@@ -30,6 +33,7 @@ export const POST = route(async (req) => {
   if (!emailCodesBySmtp()) throw new HttpError(404, "Email codes are sent by Supabase on this store.", "EMAIL_BY_SUPABASE");
   const body = await parseBody(req, schema);
   const ip = clientIp(req); // IPv6 already grouped by /64
+  await requireTurnstile(req, body.turnstileToken, ip);
   const to = emailLimitKey(body.email);
   await rateLimit(`auth-email:ip:${ip}`, 10, 10 * 60_000);
   await rateLimit(`auth-email:ip-to:${ip}:${to}`, 1, 45_000);

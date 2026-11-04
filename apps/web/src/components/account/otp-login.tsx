@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, MailCheck } from "lucide-react";
 import { getBrowserSupabase } from "@/lib/client/supabase";
 import { api } from "@/lib/client/api";
+import { turnstileToken } from "@/lib/client/turnstile";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/form";
 import { Notice } from "../ui/feedback";
@@ -57,7 +58,7 @@ export function OtpLogin({ next, onSignedIn, byApp = false }: { next: string; on
     try {
       if (byApp) {
         // This store emails the code itself (SMTP); Supabase still checks it below.
-        await api("/api/auth/email", { method: "POST", json: { action: "signin", email: addr, name: name.trim() || null } });
+        await api("/api/auth/email", { method: "POST", json: { action: "signin", email: addr, name: name.trim() || null, turnstileToken: await turnstileToken() } });
       }
       const { error } = byApp ? { error: null } : await sb.auth.signInWithOtp({
         email: addr,
