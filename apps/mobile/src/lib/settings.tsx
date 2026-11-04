@@ -6,6 +6,8 @@ import { api } from "./api";
 interface SettingsState {
   settings: StoreSettings | null;
   paymentMethods: PaymentMethod[];
+  /** Ways to pay for a WhatsApp order that the app can complete (cash, or a Razorpay payment link). */
+  whatsappPaymentMethods: PaymentMethod[];
   error: string | null;
   reload(): Promise<void>;
 }
@@ -14,19 +16,24 @@ const SettingsContext = createContext<SettingsState | null>(null);
 
 /** Payment methods the app checkout can complete end to end. */
 export const APP_PAYMENT_METHODS: PaymentMethod[] = ["cod", "razorpay", "mock"];
+/** WhatsApp orders in the app: cash on delivery or a payment link (opens in the browser). Not UPI-to-store,
+ * which needs the UTR screen the website has. */
+export const APP_WHATSAPP_METHODS: PaymentMethod[] = ["cod", "razorpay_link"];
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [whatsappPaymentMethods, setWhatsappPaymentMethods] = useState<PaymentMethod[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const res = await api<{ settings: StoreSettings; paymentMethods: PaymentMethod[] }>("/api/settings", { auth: false });
+      const res = await api<{ settings: StoreSettings; paymentMethods: PaymentMethod[]; whatsappPaymentMethods?: PaymentMethod[] }>("/api/settings", { auth: false });
       setSettings(res.settings);
       // The app can only complete cash on delivery and Razorpay checkout. UPI (pay to the store's UPI ID,
       // then send the reference) has no screen in the app, so a UPI order would sit unpaid until it expired.
       setPaymentMethods(res.paymentMethods.filter((m) => APP_PAYMENT_METHODS.includes(m)));
+      setWhatsappPaymentMethods((res.whatsappPaymentMethods ?? []).filter((m) => APP_WHATSAPP_METHODS.includes(m)));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load store settings.");
@@ -37,7 +44,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     void reload();
   }, [reload]);
 
-  return <SettingsContext.Provider value={{ settings, paymentMethods, error, reload }}>{children}</SettingsContext.Provider>;
+  return <SettingsContext.Provider value={{ settings, paymentMethods, whatsappPaymentMethods, error, reload }}>{children}</SettingsContext.Provider>;
 }
 
 export function useSettings(): SettingsState {

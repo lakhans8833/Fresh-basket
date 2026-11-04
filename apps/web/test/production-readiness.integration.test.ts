@@ -130,11 +130,11 @@ describe("stock movement history", () => {
   it("records every change with its reason and order (grams for products sold by weight)", async () => {
     const { order } = await placeOrder(CUSTOMER, input());
     const placed = await query<{ unit: string; delta: string; reason: string }>(
-      "select unit, delta::text, reason from stock_movements where order_id = $1 order by id", [order.id],
+      "select unit, change::text as delta, reason from stock_movements where order_id = $1 order by id", [order.id],
     );
-    expect(placed).toEqual([{ unit: "g", delta: "-4000", reason: "order_placed" }]);
+    expect(placed).toEqual([{ unit: "grams", delta: "-4000", reason: "order_placed" }]);
     await customerCancel(CUSTOMER, order.id);
-    const all = await query<{ delta: string; reason: string }>("select delta::text, reason from stock_movements where order_id = $1 order by id", [order.id]);
+    const all = await query<{ delta: string; reason: string }>("select change::text as delta, reason from stock_movements where order_id = $1 order by id", [order.id]);
     expect(all.map((m) => [m.delta, m.reason])).toEqual([["-4000", "order_placed"], ["4000", "order_cancelled"]]);
   });
 
@@ -148,7 +148,7 @@ describe("admin audit log", () => {
   const patch = (body: unknown) =>
     inventoryPatch(new Request("http://localhost/api/admin/inventory", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), {});
 
-  it("records who changed what (method, path, status) without the request body; the stock change is labelled admin_edit", async () => {
+  it("records who changed what (method, path, status; secrets never stored); the stock change is labelled admin_edit", async () => {
     who.session = { userId: ADMIN, profile: { role: "admin", email: null } };
     const before = (await queryOne<{ id: string }>("select coalesce(max(id), 0)::text as id from admin_audit_log"))!.id;
     const cur = Number((await queryOne<{ g: string }>("select stock_grams::text as g from products where id = $1", [onionProduct]))!.g);
@@ -158,7 +158,8 @@ describe("admin audit log", () => {
     expect(rows).toEqual([{ actor_id: ADMIN, actor_role: "admin", method: "PATCH", path: "/api/admin/inventory", status: 200 }]);
     const cols = (await query<{ column_name: string }>("select column_name from information_schema.columns where table_name = 'admin_audit_log'")).map((c) => c.column_name);
     expect(cols.some((c) => /body|payload|password|token|otp/i.test(c))).toBe(false);
-    const m = await queryOne<{ delta: string; reason: string }>("select delta::text, reason from stock_movements where product_id = $1 order by id desc limit 1", [onionProduct]);
+    // The sanitised request (details) is kept for context; secret-looking keys would be "[hidden]".
+    const m = await queryOne<{ delta: string; reason: string }>("select change::text as delta, reason from stock_movements where product_id = $1 order by id desc limit 1", [onionProduct]);
     expect(m).toEqual({ delta: "1000", reason: "admin_edit" });
   });
 

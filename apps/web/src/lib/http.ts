@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { invalidateAfter } from "./cache";
 import { query, queryOne } from "./db";
+import { isAuditedRequest, writeAuditLog } from "./audit";
+import { requestContext, type RequestContext } from "./request-context";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string, public details?: unknown) {
@@ -41,47 +43,44 @@ type Handler<C> = (req: Request, ctx: C) => Promise<Response>;
 
 /** Wrap a route handler: converts thrown HttpErrors to JSON and hides internal errors. Admin changes are audit-logged. */
 export function route<C = unknown>(fn: Handler<C>): Handler<C> {
-  const handle = routeInner(fn);
   return async (req, ctx) => {
-    const res = await handle(req, ctx);
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      // Loaded lazily: lib/auth imports this module.
-      const audit = await import("./admin-audit");
-      if (audit.isAuditedAdminRequest(req)) await audit.recordAdminAction(req, res.status);
-    }
+    // Admin/staff saves are written to admin_audit_log (who, what, result) after they finish.
+    const audited = isAuditedRequest(req);
+    const bodyCopy = audited ? req.clone() : null;
+    const store: RequestContext = {};
+    const res = await requestContext.run(store, () => handle(fn, req, ctx));
+    if (audited) await writeAuditLog(req, bodyCopy, res.status, store);
     return res;
   };
 }
 
-function routeInner<C>(fn: Handler<C>): Handler<C> {
-  return async (req, ctx) => {
-    try {
-      const res = await fn(req, ctx);
-      invalidateAfter(req, res.status);
-      return res;
-    } catch (e) {
-      if (e instanceof HttpError) {
-        return NextResponse.json({ error: e.message, code: e.code, details: e.details }, { status: e.status });
-      }
-      const pgCode = (e as { code?: string })?.code;
-      if (pgCode === "42501") {
-        return NextResponse.json({ error: "You don't have access to this.", code: "FORBIDDEN" }, { status: 403 });
-      }
-      if (pgCode === "22P02") {
-        // Malformed id in the URL (e.g. not a UUID): treat as "not found", not a server error.
-        return NextResponse.json({ error: "Not found.", code: "NOT_FOUND" }, { status: 404 });
-      }
-      if (pgCode === "22021") {
-        // A NUL / invalid byte in a text field (the database can't store it): the input's fault, not ours.
-        return NextResponse.json({ error: "Some text contains a character that can't be saved. Please remove it and try again.", code: "BAD_TEXT" }, { status: 400 });
-      }
-      if (pgCode === "23505") {
-        return NextResponse.json({ error: "That already exists.", code: "DUPLICATE" }, { status: 409 });
-      }
-      console.error("[api]", req.method, new URL(req.url).pathname, e);
-      return NextResponse.json({ error: "Something went wrong. Please try again.", code: "INTERNAL" }, { status: 500 });
+async function handle<C>(fn: Handler<C>, req: Request, ctx: C): Promise<Response> {
+  try {
+    const res = await fn(req, ctx);
+    invalidateAfter(req, res.status);
+    return res;
+  } catch (e) {
+    if (e instanceof HttpError) {
+      return NextResponse.json({ error: e.message, code: e.code, details: e.details }, { status: e.status });
     }
-  };
+    const pgCode = (e as { code?: string })?.code;
+    if (pgCode === "42501") {
+      return NextResponse.json({ error: "You don't have access to this.", code: "FORBIDDEN" }, { status: 403 });
+    }
+    if (pgCode === "22P02") {
+      // Malformed id in the URL (e.g. not a UUID): treat as "not found", not a server error.
+      return NextResponse.json({ error: "Not found.", code: "NOT_FOUND" }, { status: 404 });
+    }
+    if (pgCode === "22021") {
+      // A NUL / invalid byte in a text field (the database can't store it): the input's fault, not ours.
+      return NextResponse.json({ error: "Some text contains a character that can't be saved. Please remove it and try again.", code: "BAD_TEXT" }, { status: 400 });
+    }
+    if (pgCode === "23505") {
+      return NextResponse.json({ error: "That already exists.", code: "DUPLICATE" }, { status: 409 });
+    }
+    console.error("[api]", req.method, new URL(req.url).pathname, e);
+    return NextResponse.json({ error: "Something went wrong. Please try again.", code: "INTERNAL" }, { status: 500 });
+  }
 }
 
 /**

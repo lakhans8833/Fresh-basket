@@ -1,4 +1,5 @@
 import { safeNextPath } from "@/lib/safe-next";
+import { canonicalRedirect } from "@/lib/canonical-host";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
@@ -31,6 +32,9 @@ function withCors(req: NextRequest, res: NextResponse) {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Production: pages answer only on the shop's own address (NEXT_PUBLIC_APP_URL); other hosts → 308.
+  const canonical = canonicalRedirect(req.nextUrl, req.headers.get("host"), req.method, process.env.NEXT_PUBLIC_APP_URL, process.env.VERCEL_ENV);
+  if (canonical) return NextResponse.redirect(canonical, 308);
   // A Supabase email link that failed (used twice / too old) or wasn't allowed to return to its page
   // arrives on any page with ?error_code=… — send it to the sign-in page, which explains what to do.
   // /auth/callback handles its own errors (it knows the link type and keeps `next`). Only the
@@ -105,7 +109,9 @@ export async function proxy(req: NextRequest) {
   // Cookies changed by the refresh must be visible to the route as well.
   if (toSet.length) forwarded.set("cookie", req.cookies.toString());
   const res = NextResponse.next({ request: { headers: forwarded } });
-  for (const c of toSet) res.cookies.set(c.name, c.value, c.options);
+  // Session cookies only travel over HTTPS on the live site (Supabase's defaults leave Secure off).
+  const secure = req.nextUrl.protocol === "https:";
+  for (const c of toSet) res.cookies.set(c.name, c.value, { ...c.options, secure: secure || c.options?.secure });
   return withCors(req, res);
 }
 

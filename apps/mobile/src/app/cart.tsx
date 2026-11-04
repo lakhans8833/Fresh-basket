@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ShoppingBasket, Ticket, X } from "lucide-react-native";
+import { MessageCircle, ShoppingBasket, Ticket, X } from "lucide-react-native";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -24,12 +24,16 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { Skeleton } from "@/components/Skeleton";
 import { EmptyState, InlineMessage } from "@/components/States";
 import { useCart } from "@/lib/cart";
+import { useSettings } from "@/lib/settings";
+import { normalizeWhatsAppNumber } from "@shared/whatsapp";
 import { colors, fonts, HIT, radius, type } from "@/theme";
 
 export default function CartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const cart = useCart();
+  const { settings, whatsappPaymentMethods } = useSettings();
+  const whatsappOrders = Boolean(normalizeWhatsAppNumber(settings?.whatsapp ?? null)) && whatsappPaymentMethods.length > 0;
   const [code, setCode] = useState("");
   const { quote: q, quoteLoading, quoteError } = cart;
   const quote = q?.quote;
@@ -219,15 +223,39 @@ export default function CartScreen() {
             Please fix the items marked above to continue.
           </Text>
         ) : null}
-        <Button
-          label={quote ? `Checkout · ${formatINR(quote.total)}` : "Checkout"}
-          variant="dark"
-          size="lg"
-          fullWidth
-          disabled={!canCheckout}
-          loading={quoteLoading && !quote}
-          onPress={() => router.push("/checkout")}
-        />
+        {whatsappOrders ? (
+          // Two ways to order, as on the website: send the order on WhatsApp, or check out in the app.
+          <View style={{ gap: 8 }}>
+            <Button
+              label="Order on WhatsApp"
+              variant="primary"
+              size="lg"
+              fullWidth
+              disabled={!canCheckout}
+              icon={<MessageCircle size={20} color={colors.white} />}
+              onPress={() => router.push("/whatsapp-order")}
+            />
+            <Button
+              label={quote ? `Checkout · ${formatINR(quote.total)}` : "Checkout"}
+              variant="outline"
+              size="lg"
+              fullWidth
+              disabled={!canCheckout}
+              loading={quoteLoading && !quote}
+              onPress={() => router.push("/checkout")}
+            />
+          </View>
+        ) : (
+          <Button
+            label={quote ? `Checkout · ${formatINR(quote.total)}` : "Checkout"}
+            variant="dark"
+            size="lg"
+            fullWidth
+            disabled={!canCheckout}
+            loading={quoteLoading && !quote}
+            onPress={() => router.push("/checkout")}
+          />
+        )}
       </View>
     </KeyboardAvoidingView>
   );
