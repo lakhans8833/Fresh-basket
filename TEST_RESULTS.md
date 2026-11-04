@@ -78,3 +78,61 @@ resolved (§3).
 Live payments (Razorpay not configured in production; test-mode keys not available) · live Supabase Auth emails /
 SMTP delivery · Android/iOS device builds (EAS) · live Core Web Vitals · live database policies (project not in the
 connected Supabase account) · public reachability of the live hosts from this sandbox (egress blocked).
+
+## 7. Round 2 — `fix/remaining-audit-items` (5 Nov 2026)
+
+Same environment; mobile on **Expo SDK 58** after FB-15. Every item's test was written first and failed before the fix
+(failure shown), then passed.
+
+### Project checks (final run, after all 10 commits)
+
+| Command | Result |
+| --- | --- |
+| `npm ci` | **PASS** |
+| `npm run typecheck` | **PASS** |
+| `cd apps/web && npx eslint` | **PASS (0 problems)** |
+| `npm test` — shared | **52/52 PASS** (8 files) |
+| `npm test` — web unit + integration (real Postgres) | **299/299 PASS** (36 files; was 269) |
+| `npm run build` | **PASS** |
+| Mobile `npx tsc --noEmit` | **PASS** |
+| Mobile `npm test` (new, Node vitest) | **9/9 PASS** (3 files) |
+| Mobile `EXPO_OFFLINE=1 npx expo export --platform android` | **PASS** (SDK 58, 3564 modules) |
+| Mobile `npm audit` | **5 moderate** (was 17: 2 low, 9 moderate, 6 high) — dev tooling only |
+
+**Totals: 360 automated tests passed, 0 failed** (52 + 299 + 9).
+
+### Browser end-to-end (production build, local DB)
+
+| Suite | Result |
+| --- | --- |
+| `e2e/flow.py` | **PASS** (`E2E OK …/orders/<id>`) |
+| `e2e/checkout_retry.py` | **PASS** (`CHECKOUT RETRY E2E OK`) |
+| `e2e/whatsapp.py` | **PASS** (`WHATSAPP E2E OK`) |
+| `e2e/login_recovery.py` (fake GoTrue; clicks the new confirm page) | **31/31 PASS** |
+| `e2e/email_otp.py` | **20/20 PASS** |
+| `e2e/signup_code.py` | **7/7 PASS** |
+| FB-26 `curl` on `next start` | `/product/tomato` 200 · `/product/no-such-veg-xyz` **404** · `/category/leafy-greens` 200 · `/category/no-such-cat` **404** (before: 200 / 200) |
+| App `smoke.py` (SDK 58 web build) | **13/13 PASS** |
+| App `auth_mock.py` | **13/13 PASS** |
+| App `whatsapp_order.py` | **9/9 PASS** — first run timed out: the local test DB had only 1.5 kg broccoli left after the earlier e2e orders, so the "+" button was disabled (test data, not a code defect); restocked the local DB → pass |
+
+### Tests written first (failed → pass)
+
+| ID | Test | Failure before the fix |
+| --- | --- | --- |
+| FB-33 | `test/remaining-audit` (4) | 40P01 / 55P03 / 40001: "promise resolved instead of rejecting" (order went to refund_pending) |
+| FB-34 | `test/razorpay-http` FB-34 (2) | the customer's cancel completed while capture was in flight (`expected true to be false`) |
+| FB-38 | `test/remaining-audit` FB-38 (2) | same id + different content: "promise resolved instead of rejecting" |
+| FB-26 | curl + `test/known-slugs` (4) | unknown slugs answered 200 |
+| S-21 | `test/auth-callback` (12, 3 new) | GET with token_hash answered 307 and called verifyOtp; POST missing |
+| FB-05 | `test/turnstile.integration` (6) | no/bad token: 200 and the email was sent |
+| FB-14 | `apps/mobile/test/large-secure-store` (4) | module missing (session stored as plain JSON) |
+| FB-36 | `apps/mobile/test/id` (1) | with no global crypto, two ids were identical (`88888888-…`) |
+| FB-37 | `apps/mobile/test/deep-links` (4) | module missing (code dropped; duplicate link not filtered) |
+| FB-15 | upgrade checks above | 17 audit advisories (6 high) on SDK 57 |
+
+### Not tested here (needs a real phone or live systems)
+
+FB-14 sign-in survives app restart and the update from the SDK 57 build · FB-37 Google sign-in round trip and the
+Android payment return link · SDK 58 native build (EAS) on Android/iOS · FB-05 with real Cloudflare keys · live
+Razorpay (FB-34 used mocked Razorpay).

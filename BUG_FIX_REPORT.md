@@ -108,9 +108,34 @@ the table reloaded with an explanation, so a retry can't re-apply "+N since load
 ### FB-28 / FB-29 / FB-30 · Low · robots `Host:` removed; `GroceryStore` + `WebSite` JSON-LD
 (`lib/structured-data.ts`, 3 unit tests incl. `</script>` escaping); `all-migrations.sql` regenerated.
 
+## Round 2 — branch `fix/remaining-audit-items` (5 Nov 2026)
+
+Started from `audit/production-readiness`, reconciled with `main` (merge commit `459d8b2`: the audit branch and
+PR #36 had both created `stock_movements` / `admin_audit_log`; `20261104000001` now only adds `fb_setting_uuid`, and
+`20261105000002` merges the two stock-ledger designs — without this, the second migration would have failed on
+production and blocked the deploy). One commit per item; each bug reproduced by a failing test first.
+
+| ID | Commit | Fix | Test (written first → failed before, passes after) |
+| --- | --- | --- | --- |
+| FB-33 | `86ea243` | `mark_order_paid`: blockers `raise … using errcode = 'P0F01'`; `exception when sqlstate 'P0F01'` only. Other errors roll back → webhook 500 → Razorpay retries. Migration `20261105000003` (function copied from `20261027000002`, only this change) | `test/remaining-audit` FB-33 ×4 (40P01 / 55P03 / 40001 → error, order stays cancelled+failed; real blocker → refund_required) |
+| FB-34 | `7b98a7e` | verify route: one transaction — `select … for update` → usable? → capture → `mark_order_paid` (`applyVerifiedPayment(client)`); notifications after commit. A cancel waits, then cancels a paid order normally; an order cancelled before verify is never captured | `test/razorpay-http` FB-34 ×2 (cancel during capture waits; verify → paid; no "payment received for a cancelled order"; cancelled first → not captured) |
+| FB-38 | `dbea9e1` | `admin_request_log.payload_hash` (migration `20261105000004`); key-order-independent SHA-256 of the save (requestId excluded). Same hash → skip; different → 409 `REQUEST_ID_REUSED`; old rows (null) → skip | `test/remaining-audit` FB-38 ×2 (inventory + product form) |
+| FB-26 | `1b23176` | `lib/known-slugs.ts` in `proxy.ts`: GET/HEAD `/product/<slug>`, `/category/<slug>` checked against active slugs from the cached `/api/catalog/slugs` (tag `catalog`, 60 s); per-instance 60 s TTL, miss re-check ≤ every 10 s, fail open; unknown → rewrite to an unmatched path → `app/not-found.tsx` (shop 404, same header/footer) with 404. Loading skeletons kept | `next build` + `next start`: before 200/200 → after `/product/no-such-veg-xyz` 404, `/category/no-such-cat` 404, real slugs 200; `test/known-slugs` ×4 |
+| S-21 / FB-24 | `5c8b3cf` | `/auth/callback` GET with `token_hash` → same-origin confirm page (no script, no-store, noindex, Referrer-Policy same-origin) whose form POSTs; `verifyOtp` only on POST with Origin = this site (or `Sec-Fetch-Site: same-origin`); 303 after. PKCE `?code=` + error links unchanged. The page can't show the masked email (unknown until the token is verified; a URL value would be attacker-controlled) | `test/auth-callback` 12/12 (+3 new); e2e `login_recovery` 31/31 (clicks Continue), `email_otp` 20/20, `signup_code` 7/7 |
+| FB-05 | `7734e1f` | optional Turnstile: `lib/turnstile.ts` (server, siteverify, fail open on Cloudflare outage), `lib/client/turnstile.ts` (on-demand widget), 4 calls to `/api/auth/email`, CSP + site key only when both keys set; names in `.env.example` / `ENVIRONMENT_SETUP.md` | `test/turnstile.integration` ×6 |
+| FB-14 | `5470ef9` | app: `lib/large-secure-store.ts` (AES-256-CTR, fresh key + IV per write, key in SecureStore, wrong-key marker, plain-session migration) wired via `lib/session-storage.ts`; `removeSupabaseSessions` deletes keys too | `apps/mobile/test/large-secure-store` ×4 (Node, in-memory stores, real AES) |
+| FB-36 | `5c59918` | app: `randomId()` = `expo-crypto` `randomUUID()` | `apps/mobile/test/id` (failed: Math.random → identical ids) |
+| FB-37 | `43f1acf` | app: (a) `auth-callback.tsx` → `completeOAuthRedirect(code)`, one exchanger shared with Google sign-in; (b) `app/+native-intent.tsx` + `lib/order-links.ts` drop a repeated `orders/<id>` link (10 s, or that order already on screen) and refresh the screen | `apps/mobile/test/deep-links` ×4 |
+| FB-15 | `de45658` | Expo SDK 58: `expo` ~58.0.23, all `expo-*` via `EXPO_OFFLINE=1 npx expo install --fix`, RN 0.88.1, React 19.3; lock regenerated (no `--force` / `--legacy-peer-deps`); one type fix (`TextField` ref → `ComponentRef<typeof TextInput>`) | tsc, Android export, `smoke.py`, `auth_mock.py`, `whatsapp_order.py` (see TEST_RESULTS §7) |
+
+Migrations added in this round (all additive / idempotent, rollback SQL at the end of each file):
+`20261105000003_mark_order_paid_transient_errors.sql` (create or replace function) ·
+`20261105000004_admin_request_log_payload_hash.sql` (add column if not exists). `supabase/all-migrations.sql`
+regenerated with `scripts/build-all-migrations.sh`.
+
 ## Not fixed (and why)
 
 FB-01, FB-09, FB-11, FB-12, FB-16, FB-35 need dashboard/owner actions (see `PRODUCTION_READINESS.md`). FB-02 needs a
-live sign-up test. FB-14, FB-15, FB-36, FB-37 need device testing / an Expo SDK upgrade. FB-26 trade-off documented.
-FB-33, FB-34 are unreproduced edge cases in the most sensitive payment function — change with dedicated tests.
-FB-38 low; main trigger closed.
+live sign-up test. *(Round 2, 5 Nov: FB-14, FB-15, FB-24/S-21, FB-26, FB-33, FB-34, FB-36, FB-37, FB-38 fixed and FB-05
+extended — section above.)* Still needs a real phone: FB-14 (sign-in survives restart/update), FB-37 (Google
+sign-in, payment return on Android), SDK 58 build on device (EAS). FB-05 Turnstile needs the owner's Cloudflare keys.
