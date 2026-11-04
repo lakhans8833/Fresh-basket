@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Clock, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { getSettings } from "@/lib/settings";
-import { supportWhatsApp, displayWhatsApp } from "@/components/info/support-contacts";
+import { supportWhatsApp } from "@/components/info/support-contacts";
 import { getSession } from "@/lib/auth";
 import { InfoPage } from "@/components/info/info-page";
 import { ContactForm } from "@/components/info/contact-form";
@@ -13,9 +13,9 @@ export default async function ContactPage({ searchParams }: { searchParams: Prom
   const [s, session, sp] = await Promise.all([getSettings(), getSession(), searchParams]);
   const p = session?.profile;
   const details = [
-    s.supportPhone && { icon: Phone, label: "Call", value: s.supportPhone, href: `tel:${s.supportPhone.replace(/[^\d+]/g, "")}` },
+    // No phone number on the site (owner's choice): no Call row, and WhatsApp without the number.
     // 10-digit Indian mobiles need the 91 country code for wa.me links.
-    supportWhatsApp(s) && { icon: MessageCircle, label: "WhatsApp", value: displayWhatsApp(supportWhatsApp(s)!), href: `https://wa.me/${supportWhatsApp(s)}`, external: true },
+    supportWhatsApp(s) && { icon: MessageCircle, label: "WhatsApp", value: "Chat with us", href: `https://wa.me/${supportWhatsApp(s)}`, external: true },
     s.supportEmail && { icon: Mail, label: "Email", value: s.supportEmail, href: `mailto:${s.supportEmail}` },
     s.address && { icon: MapPin, label: "Address", value: s.address },
     s.supportHours && { icon: Clock, label: "Hours", value: s.supportHours },

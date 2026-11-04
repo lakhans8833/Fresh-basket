@@ -121,7 +121,6 @@ export function legalGaps(s: StoreSettings): string[] {
 /** Customer-support details still empty in Admin → Settings (shown to staff as a setup notice; never invented). */
 export function supportGaps(s: StoreSettings): string[] {
   const gaps: string[] = [];
-  if (!s.supportPhone) gaps.push("Phone");
   if (!resolveWhatsAppNumber(s.whatsapp)) gaps.push("WhatsApp number");
   if (!s.supportEmail) gaps.push("Email");
   if (!s.supportHours) gaps.push("Support hours");

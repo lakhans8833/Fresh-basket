@@ -16,7 +16,7 @@ export function displayWhatsApp(wa: string) {
 
 /** True when at least one support detail is filled in (otherwise pages keep their plain /contact link). */
 export function hasSupportContacts(settings: SupportSettings) {
-  return Boolean(settings.supportPhone || supportWhatsApp(settings) || settings.supportEmail || settings.supportHours);
+  return Boolean(supportWhatsApp(settings) || settings.supportEmail || settings.supportHours);
 }
 import { cn } from "../ui/cn";
 
@@ -30,8 +30,8 @@ export function SupportContacts({
   const wa = supportWhatsApp(settings);
   const waText = orderNumber ? `?text=${encodeURIComponent(`Hi, I need help with order ${orderNumber}.`)}` : "";
   const actions = [
-    settings.supportPhone && { key: "call", icon: Phone, label: "Call", value: settings.supportPhone, href: `tel:${settings.supportPhone.replace(/[^\d+]/g, "")}` },
-    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: displayWhatsApp(wa), href: `https://wa.me/${wa}${waText}`, external: true },
+    // No phone number on the site (owner's choice): no Call row, and WhatsApp without the number.
+    wa && { key: "wa", icon: MessageCircle, label: "WhatsApp", value: "Chat with us", href: `https://wa.me/${wa}${waText}`, external: true },
     settings.supportEmail && {
       key: "email", icon: Mail, label: "Email", value: settings.supportEmail,
       href: `mailto:${settings.supportEmail}${orderNumber ? `?subject=${encodeURIComponent(`Order ${orderNumber}`)}` : ""}`,

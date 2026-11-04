@@ -70,9 +70,9 @@ export default function ProfileTab() {
           <LinkRow icon={<FileText size={19} color={colors.leaf600} />} label="Terms of service" onPress={() => openSite("/terms")} last />
         </Card>
 
-        {settings?.supportPhone || settings?.supportEmail ? (
+        {settings?.supportEmail ? (
           <Text style={[type.small, { textAlign: "center" }]}>
-            Need help? {[settings.supportPhone, settings.supportEmail].filter(Boolean).join(" · ")}
+            Need help? {settings.supportEmail}
           </Text>
         ) : null}
 
