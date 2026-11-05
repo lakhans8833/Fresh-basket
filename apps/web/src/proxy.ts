@@ -35,9 +35,15 @@ function withCors(req: NextRequest, res: NextResponse) {
 // from this site's own cached /api/catalog/slugs; every failure means "can't tell" → the page renders.
 let slugOrigin = "";
 const knownSlug = createSlugCache(async () => {
-  const res = await fetch(new URL("/api/catalog/slugs", slugOrigin), { signal: AbortSignal.timeout(2_000), cache: "no-store" });
-  if (!res.ok) throw new Error(`slug list ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(new URL("/api/catalog/slugs", slugOrigin), { signal: AbortSignal.timeout(2_000), cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    // Fail open (pages render as before), but say why — e.g. 401 on a preview behind Vercel Authentication.
+    console.warn("[proxy] slug list unavailable, unknown-slug 404s off:", e instanceof Error ? e.message : "error");
+    throw e;
+  }
 });
 
 export async function proxy(req: NextRequest) {
