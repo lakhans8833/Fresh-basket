@@ -69,4 +69,20 @@ describe("LargeSecureStore", () => {
     expect(kv.get(KEY)).not.toBe(a);
     expect(await store.getItem(KEY)).toBe(SESSION);
   });
+
+  it("two saves at the same time (supabase-js is lockless) never leave data and key from different saves", async () => {
+    const kv = new Map<string, string>();
+    const keys = new Map<string, string>();
+    let first = true;
+    const store = createLargeSecureStore({
+      // The first data write is slow, so without serialising it lands AFTER the second save's key.
+      kv: { getItem: async (k) => kv.get(k) ?? null, setItem: async (k, v) => { if (first) { first = false; await new Promise((r) => setTimeout(r, 30)); } kv.set(k, v); }, removeItem: async (k) => void kv.delete(k) },
+      keys: { get: async (k) => keys.get(k) ?? null, set: async (k, v) => void keys.set(k, v), remove: async (k) => void keys.delete(k) },
+      randomBytes: (n) => new Uint8Array(randomBytes(n)),
+    });
+    const newer = SESSION.replace("refresh-SECRET", "refresh-NEWER");
+    await Promise.all([store.setItem(KEY, SESSION), store.setItem(KEY, newer)]);
+    expect(await store.getItem(KEY)).toBe(newer); // last write wins, still signed in
+  });
 });
+

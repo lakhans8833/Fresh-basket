@@ -7,6 +7,8 @@
  * - A plain value saved by an older app version is returned as is and re-saved encrypted, so nobody is
  *   signed out by the update.
  * - Missing/wrong key or damaged data → null (= signed out) and the leftovers are removed; never a crash.
+ * - Operations on the same key run one after another: supabase-js (lockless) can save twice at once, and
+ *   interleaved writes could otherwise pair one save's key with the other's data (= signed out).
  */
 import aesjs from "aes-js";
 
@@ -67,5 +69,20 @@ export function createLargeSecureStore(deps: { kv: KeyValueStore; keys: SecretSt
     }
   }
 
-  return { getItem, setItem, removeItem: forget };
+  // One queue per key: each operation starts after the previous one on that key has finished.
+  const queues = new Map<string, Promise<unknown>>();
+  function serial<T>(key: string, op: () => Promise<T>): Promise<T> {
+    const run = (queues.get(key) ?? Promise.resolve()).catch(() => undefined).then(op);
+    queues.set(key, run);
+    void run.finally(() => {
+      if (queues.get(key) === run) queues.delete(key);
+    }).catch(() => undefined);
+    return run;
+  }
+
+  return {
+    getItem: (key) => serial(key, () => getItem(key)),
+    setItem: (key, value) => serial(key, () => setItem(key, value)),
+    removeItem: (key) => serial(key, () => forget(key)),
+  };
 }
