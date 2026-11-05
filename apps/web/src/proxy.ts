@@ -36,8 +36,16 @@ function withCors(req: NextRequest, res: NextResponse) {
 let slugOrigin = "";
 const knownSlug = createSlugCache(async () => {
   try {
-    const res = await fetch(new URL("/api/catalog/slugs", slugOrigin), { signal: AbortSignal.timeout(2_000), cache: "no-store" });
+    // Previews behind Vercel Authentication answer with a login page; Vercel's "Protection Bypass for
+    // Automation" secret (if the owner turned it on) lets this server-to-itself request through.
+    const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+    const res = await fetch(new URL("/api/catalog/slugs", slugOrigin), {
+      signal: AbortSignal.timeout(2_000),
+      cache: "no-store",
+      headers: bypass ? { "x-vercel-protection-bypass": bypass } : undefined,
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.headers.get("content-type")?.includes("application/json")) throw new Error(`HTTP ${res.status} but not JSON (a login/protection page?)`);
     return await res.json();
   } catch (e) {
     // Fail open (pages render as before), but say why — e.g. 401 on a preview behind Vercel Authentication.
