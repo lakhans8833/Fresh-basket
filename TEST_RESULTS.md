@@ -136,3 +136,14 @@ Same environment; mobile on **Expo SDK 58** after FB-15. Every item's test was w
 FB-14 sign-in survives app restart and the update from the SDK 57 build · FB-37 Google sign-in round trip and the
 Android payment return link · SDK 58 native build (EAS) on Android/iOS · FB-05 with real Cloudflare keys · live
 Razorpay (FB-34 used mocked Razorpay).
+
+## 8. Deep check after round 2 (6 Nov 2026)
+
+| Check | Result |
+| --- | --- |
+| Review: FB-14 store under concurrent saves (supabase-js 2.119 auth is lockless) | **bug found + fixed** (`FB-14 follow-up`): two saves at once could pair one save's key with the other's data → signed out. Test written first (failed: `null`), per-key queue added → mobile 10/10 |
+| Full `npm test` on a freshly restarted container | first run: `payment-integrity` 2 failed — a fixed 200 ms sleep in the test (only 3 of 6 mocked gateway calls had started); code untouched on this branch, file passed 3/3 alone. Test now waits for all six → **52 + 299 PASS** |
+| Branch preview (Vercel, read-only GETs) | `/api/catalog/slugs` 200 JSON · `/auth/callback?token_hash=…` → confirm page (200, no-store, noindex, no sign-in on GET) · unknown slug still **200** on the preview: runtime log `slug list unavailable … "<!DOCTYPE "… is not valid JSON` = the preview's Vercel Authentication page. Fail-open as designed; production domain is public. Proxy now sends `VERCEL_AUTOMATION_BYPASS_SECRET` if present and logs the cause. **Verify `curl -I https://fresh-basket-veg.vercel.app/product/no-such-veg-xyz` → 404 after merge** |
+| Local `next build` + `next start` after the proxy change | unknown product/category **404**, real ones 200, `/` 200 |
+| expo-router 58 `+native-intent` | returning `""` still skips the link (`if (href) listener(href)` in `link/linking.js`) — FB-37(b) holds on SDK 58 |
+| Production runtime errors (Vercel, last 48 h) | **0** |
