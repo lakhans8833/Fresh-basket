@@ -157,9 +157,11 @@ describe("2. Razorpay preparation is coordinated in the database", () => {
 
   it("no database connection is held while Razorpay answers", async () => {
     const orders = await Promise.all([1, 2, 3, 4, 5, 6].map(async () => (await placeOrder(CUSTOMER, input())).order));
-    gateway.delayMs = 400;
+    gateway.delayMs = 1500;
     const preps = Promise.all(orders.map((o) => preparePayment(o)));
-    await new Promise((r) => setTimeout(r, 200)); // all six are inside the gateway call now
+    // Wait until all six are inside the gateway call (a fixed short sleep was flaky on a busy machine).
+    for (let t = Date.now(); gateway.calls < 6 && Date.now() - t < 5_000; ) await new Promise((r) => setTimeout(r, 10));
+    expect(gateway.calls).toBe(6);
     expect(pool.totalCount - pool.idleCount).toBe(0); // nothing checked out of the pool
     expect(pool.waitingCount).toBe(0);
     const res = await preps;
